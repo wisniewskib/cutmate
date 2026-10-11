@@ -116,3 +116,11 @@ def test_transcribe_window_shifts_times(tmp_path):
     t = transcribe_window(fb, make_wav(tmp_path / "a.wav", dur=3.0), 1.0, 2.2, "pl")
     assert abs(fb.durations[0] - 1.2) < 0.05
     assert t.words[0].start == pytest.approx(1.1)
+
+
+@responses.activate
+def test_generic_http_error_suggests_switching_backend(tmp_path, monkeypatch):
+    monkeypatch.setenv("GROQ_API_KEY", "k")
+    responses.post(GROQ_URL, status=500, body="internal\n error")
+    with pytest.raises(BackendError, match=r"HTTP 500: internal error — or switch backend with /cutmate:setup\."):
+        get_backend("groq").transcribe(make_wav(tmp_path / "a.wav"), "pl")

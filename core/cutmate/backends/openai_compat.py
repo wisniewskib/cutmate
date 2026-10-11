@@ -36,7 +36,7 @@ class OpenAICompatBackend:
             if r.status_code == 429:
                 raise BackendError(f"{self.name}: rate limit or quota hit (429). Wait a minute or switch backend.")
             if not r.ok:
-                raise BackendError(f"{self.name}: HTTP {r.status_code}: {' '.join(r.text.split())[:300]}")
+                raise BackendError(f"{self.name}: HTTP {r.status_code}: {' '.join(r.text.split())[:300]} — or switch backend with /cutmate:setup.")
             try:
                 body = r.json()
                 if not isinstance(body.get("words"), list):

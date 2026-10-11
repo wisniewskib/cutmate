@@ -54,3 +54,11 @@ def test_elevenlabs_file_cleanup(tmp_path, monkeypatch):
     responses.post(URL, json=json.loads((FIX / "elevenlabs.json").read_text(encoding="utf-8")))
     get_backend("elevenlabs").transcribe(make_wav(tmp_path / "a.wav"), "pl")
     assert not list(tmp_path.glob("*.upload.mp3"))
+
+
+@responses.activate
+def test_elevenlabs_generic_http_error_suggests_switching_backend(tmp_path, monkeypatch):
+    monkeypatch.setenv("ELEVENLABS_API_KEY", "k")
+    responses.post(URL, status=500, body="oops")
+    with pytest.raises(BackendError, match=r"HTTP 500: oops — or switch backend with /cutmate:setup\."):
+        get_backend("elevenlabs").transcribe(make_wav(tmp_path / "a.wav"), "pl")
