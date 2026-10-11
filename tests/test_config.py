@@ -51,3 +51,39 @@ def test_load_rejects_bad_json(tmp_path):
 def test_home_env_override(tmp_path, monkeypatch):
     monkeypatch.setenv("CUTMATE_HOME", str(tmp_path))
     assert config.home() == tmp_path
+
+
+def test_load_rejects_non_object_json(tmp_path):
+    p = tmp_path / "config.json"
+    p.write_text(json.dumps([]), encoding="utf-8")
+    with pytest.raises(ConfigError, match="must be a JSON object"):
+        config.load(p)
+
+
+def test_load_rejects_steps_as_string(tmp_path):
+    p = tmp_path / "config.json"
+    p.write_text(json.dumps({"steps": "invalid"}), encoding="utf-8")
+    with pytest.raises(ConfigError, match="steps must be a JSON object"):
+        config.load(p)
+
+
+def test_load_rejects_music_as_list(tmp_path):
+    p = tmp_path / "config.json"
+    p.write_text(json.dumps({"music": [1, 2, 3]}), encoding="utf-8")
+    with pytest.raises(ConfigError, match="music must be a JSON object"):
+        config.load(p)
+
+
+def test_load_rejects_path_as_directory(tmp_path):
+    # Create a directory instead of a file
+    config_dir = tmp_path / "config.json"
+    config_dir.mkdir()
+    with pytest.raises(ConfigError, match="/cutmate:setup"):
+        config.load(config_dir)
+
+
+def test_load_rejects_invalid_language(tmp_path):
+    p = tmp_path / "config.json"
+    p.write_text(json.dumps({"language": "fr"}), encoding="utf-8")
+    with pytest.raises(ConfigError, match="language"):
+        config.load(p)

@@ -34,8 +34,16 @@ def load(path: Path | None = None) -> Config:
         return Config()
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError) as e:
+        raise ConfigError(f"{path}: cannot read config file ({e.__class__.__name__}). Run /cutmate:setup to rewrite it.") from None
     except json.JSONDecodeError as e:
         raise ConfigError(f"{path}: invalid JSON ({e.msg}). Run /cutmate:setup to rewrite it.") from None
+    if not isinstance(data, dict):
+        raise ConfigError(f"{path}: must be a JSON object. Run /cutmate:setup to rewrite it.") from None
+    if "steps" in data and not isinstance(data["steps"], dict):
+        raise ConfigError(f"{path}: steps must be a JSON object, got {type(data['steps']).__name__}")
+    if "music" in data and not isinstance(data["music"], dict):
+        raise ConfigError(f"{path}: music must be a JSON object, got {type(data['music']).__name__}")
     cfg = Config(**{k: v for k, v in data.items() if k in Config.__dataclass_fields__})
     if cfg.transcription not in BACKENDS:
         raise ConfigError(f"{path}: transcription must be one of {', '.join(BACKENDS)}, got {cfg.transcription!r}")
