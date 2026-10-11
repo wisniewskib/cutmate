@@ -1,0 +1,9 @@
+{
+  "name": "cutmate",
+  "version": "0.1.0",
+  "description": "Edit talking-head videos with Claude: transcribe, watch frames, cut, animate with HyperFrames, render.",
+  "author": { "name": "Bartosz Wiśniewski" },
+  "license": "MIT",
+  "keywords": ["video", "editing", "shorts", "hyperframes", "whisper"],
+  "dependencies": ["hyperframes@hyperframes"]
+}

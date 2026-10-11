@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cutmate"
+version = "0.1.0"
+description = "Edit talking-head videos with Claude Code"
+requires-python = ">=3.10"
+dependencies = ["numpy>=1.24", "Pillow>=10.1", "requests>=2.31"]
+
+[project.optional-dependencies]
+faster = ["faster-whisper>=1.2,<2"]
+mlx = ["mlx-whisper>=0.4.3"]
+align = ["torch>=2.2", "transformers>=4.40"]
+dev = ["pytest>=8", "responses>=0.25"]
+
+[project.scripts]
+cutmate = "cutmate.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["core"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-m 'not slow'"
+markers = ["slow: needs downloaded models or recorded samples/"]
