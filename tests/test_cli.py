@@ -1,3 +1,4 @@
+import pytest
 import json
 import os
 import subprocess
@@ -128,3 +129,31 @@ def test_align_import_error_handling(tmp_path, capsys, monkeypatch):
     err = capsys.readouterr().err
     assert "alignment models not installed" in err
     assert "Traceback" not in err
+
+
+def test_nonexistent_folder_is_one_line(tmp_path, capsys):
+    assert main(["transcribe", str(tmp_path / "nope"), "--backend", "groq"]) == 2
+    err = capsys.readouterr().err
+    assert err.startswith("cutmate: not a folder") and "Traceback" not in err
+
+
+def test_oserror_is_one_line(tmp_path, capsys, monkeypatch):
+    def boom(*a, **k):
+        raise PermissionError("denied\n  on\tthing")
+    monkeypatch.setattr("cutmate.cut.cut_aroll", boom)
+    assert main(["cut", str(tmp_path / "edl.json")]) == 2
+    err = capsys.readouterr().err
+    assert err == "cutmate: denied on thing\n"
+
+
+@pytest.mark.parametrize("argv", [
+    ["finalize", "a.mp4", "b.mp4", "--check", "abc"],
+    ["finalize", "a.mp4", "b.mp4", "--format", "4:3"],
+    ["sheet", "a.mp4", "-o", "s.png", "--step", "0"],
+    ["sheet", "a.mp4", "-o", "s.png", "--cols", "0"],
+])
+def test_bad_args_are_argparse_errors(argv, capsys):
+    with pytest.raises(SystemExit) as e:
+        main(argv)
+    assert e.value.code == 2
+    assert "Traceback" not in capsys.readouterr().err

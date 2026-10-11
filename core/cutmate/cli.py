@@ -4,6 +4,34 @@ from pathlib import Path
 
 from . import config
 from .errors import CutmateError
+from .formats import FORMATS
+
+
+def _positive_float(v: str) -> float:
+    try:
+        x = float(v)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"invalid number: {v!r}") from None
+    if not x > 0:
+        raise argparse.ArgumentTypeError(f"must be > 0: {v}")
+    return x
+
+
+def _min_one_int(v: str) -> int:
+    try:
+        x = int(v)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"invalid integer: {v!r}") from None
+    if x < 1:
+        raise argparse.ArgumentTypeError(f"must be >= 1: {v}")
+    return x
+
+
+def _float_list(v: str) -> list[float]:
+    try:
+        return [float(x) for x in v.split(",") if x.strip()]
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"expected comma-separated seconds, got {v!r}") from None
 
 
 def _utf8_stdio() -> None:
@@ -28,8 +56,8 @@ def _parser() -> argparse.ArgumentParser:
     s.add_argument("-o", "--out", required=True)
     s.add_argument("--start", type=float, default=0.0)
     s.add_argument("--end", type=float)
-    s.add_argument("--step", type=float, default=0.5)
-    s.add_argument("--cols", type=int, default=6)
+    s.add_argument("--step", type=_positive_float, default=0.5)
+    s.add_argument("--cols", type=_min_one_int, default=6)
     c = sub.add_parser("cut", help="cut the A-roll from an EDL")
     c.add_argument("edl")
     a = sub.add_parser("align", help="word timings for the A-roll")
@@ -38,8 +66,8 @@ def _parser() -> argparse.ArgumentParser:
     f = sub.add_parser("finalize", help="loudness fix + spec check of a render")
     f.add_argument("src")
     f.add_argument("dst")
-    f.add_argument("--format", default="9:16")
-    f.add_argument("--check", default="")
+    f.add_argument("--format", choices=list(FORMATS), default="9:16")
+    f.add_argument("--check", type=_float_list, default=[])
     q = sub.add_parser("qa", help="QA of a finished video")
     q.add_argument("out")
     q.add_argument("--no-asr", action="store_true")
@@ -81,8 +109,7 @@ def _dispatch(args) -> int:
             raise CutmateError("alignment models not installed. Run /cutmate:setup.")
     elif args.cmd == "finalize":
         from .finalize import finalize
-        check = [float(x) for x in args.check.split(",") if x]
-        return 0 if finalize(Path(args.src), Path(args.dst), args.format, check=check)["ok"] else 1
+        return 0 if finalize(Path(args.src), Path(args.dst), args.format, check=args.check)["ok"] else 1
     elif args.cmd == "qa":
         from .backends import get_backend
         from .qa import run_qa
@@ -96,8 +123,8 @@ def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
         return _dispatch(args)
-    except CutmateError as e:
-        print(f"cutmate: {e}", file=sys.stderr)
+    except (CutmateError, OSError) as e:
+        print(f"cutmate: {' '.join(str(e).split())}", file=sys.stderr)
         return 2
 
 
