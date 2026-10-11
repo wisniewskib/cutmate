@@ -31,6 +31,8 @@ def _report(name: str, t: Transcript, sil: list) -> None:
 def run_transcribe(rec: Path, backend, language: str, prompt: str | None = None, force: bool = False) -> list[Path]:
     require_ffmpeg()
     rec = Path(rec).resolve()
+    if not rec.is_dir():
+        raise CutmateError(f"not a folder: {rec}")
     clips = find_clips(rec)
     if not clips:
         raise CutmateError(f"no video files in {rec} (looked for {' '.join(sorted(VIDEO_EXTS))})")
@@ -55,4 +57,6 @@ def run_transcribe(rec: Path, backend, language: str, prompt: str | None = None,
         os.replace(tj_tmp, tj)
         _report(clip.name, t, sil)
         done.append(d)
+    if not done:
+        raise CutmateError(f"no clip with an audio track in {rec}")
     return done

@@ -83,3 +83,19 @@ def test_clip_without_audio_is_skipped(tmp_path, capsys):
     dirs = run_transcribe(rec, FakeBackend(), "pl")
     assert [d.name for d in dirs] == ["take1.mp4"]
     assert "WARN broll.mp4: no audio track, skipped" in capsys.readouterr().out
+
+
+def test_nonexistent_or_file_path_is_cutmate_error(tmp_path):
+    with pytest.raises(CutmateError, match="not a folder"):
+        run_transcribe(tmp_path / "nope", FakeBackend(), "pl")
+    f = tmp_path / "a.mp4"
+    f.write_bytes(b"x")
+    with pytest.raises(CutmateError, match="not a folder"):
+        run_transcribe(f, FakeBackend(), "pl")
+
+
+def test_all_clips_without_audio_raises(tmp_path):
+    rec = tmp_path / "rec"
+    make_clip(rec / "broll.mp4", audio=False)
+    with pytest.raises(CutmateError, match="no clip with an audio track"):
+        run_transcribe(rec, FakeBackend(), "pl")
