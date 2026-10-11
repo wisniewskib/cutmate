@@ -109,3 +109,51 @@ def test_faster_transcribe_runtime_error(monkeypatch, tmp_path):
 def test_local_real_model_pl():
     t = LocalBackend.auto().transcribe(SAMPLES / "pl_5s.wav", "pl")
     assert len(t.words) >= 5 and all(w.end >= w.start for w in t.words)
+
+
+def test_faster_lazy_cuda_failure_at_transcribe_falls_back_to_cpu(monkeypatch, tmp_path, capsys):
+    """Model loads on cuda, but cuDNN is missing at first transcribe (generator consumed) → one WARN, CPU retry."""
+    built = []
+
+    class FakeWhisperModel:
+        def __init__(self, model, device="cpu", compute_type="int8"):
+            self.device = device
+            built.append(device)
+
+        def transcribe(self, *args, **kwargs):
+            if self.device == "cuda":
+                def gen():
+                    raise RuntimeError("libcudnn_ops.so.9 not found")
+                    yield
+                return gen(), SimpleNamespace()
+            W = lambda w, s, e, p: SimpleNamespace(word=w, start=s, end=e, probability=p)
+            return iter([SimpleNamespace(words=[W(" hi", 0.0, 0.5, 0.9)])]), SimpleNamespace()
+
+    monkeypatch.setitem(sys.modules, "faster_whisper", SimpleNamespace(WhisperModel=FakeWhisperModel))
+    monkeypatch.setattr(local, "pick_device", lambda: ("cuda", "float16"))
+    b = LocalBackend("faster", "large-v3")
+    wav = tmp_path / "t.wav"
+    wav.touch()
+    assert [w.word for w in b.transcribe(wav, "en").words] == ["hi"]
+    out = capsys.readouterr().out
+    assert out.count("WARN local: GPU transcription failed") == 1
+    assert built == ["cuda", "cpu"]
+    # cached on CPU: no further rebuilds or warnings
+    b.transcribe(wav, "en")
+    assert built == ["cuda", "cpu"] and "WARN" not in capsys.readouterr().out
+
+
+def test_faster_cuda_and_cpu_both_fail_raises(monkeypatch, tmp_path):
+    class FakeWhisperModel:
+        def __init__(self, model, device="cpu", compute_type="int8"):
+            pass
+
+        def transcribe(self, *a, **k):
+            raise RuntimeError("still broken")
+
+    monkeypatch.setitem(sys.modules, "faster_whisper", SimpleNamespace(WhisperModel=FakeWhisperModel))
+    monkeypatch.setattr(local, "pick_device", lambda: ("cuda", "float16"))
+    wav = tmp_path / "t.wav"
+    wav.touch()
+    with pytest.raises(BackendError, match="local transcription failed: still broken"):
+        LocalBackend("faster", "large-v3").transcribe(wav, "en")

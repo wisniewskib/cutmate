@@ -32,6 +32,7 @@ class LocalBackend:
     def __init__(self, engine: str, model: str):
         self.engine, self.model = engine, model
         self._faster = None
+        self._device = None
 
     @classmethod
     def auto(cls) -> "LocalBackend":
@@ -54,28 +55,46 @@ class LocalBackend:
             except Exception as e:
                 raise BackendError(f"local transcription failed: {e}") from None
         if self._faster is None:
-            try:
-                from faster_whisper import WhisperModel
-            except ImportError:
-                raise BackendError("faster-whisper is not installed. Run /cutmate:setup.") from None
-            device, compute = pick_device()
-            try:
-                self._faster = WhisperModel(self.model, device=device, compute_type=compute)
-            except Exception as e:
-                if device == "cuda":
-                    print(f"WARN local: GPU load failed ({type(e).__name__}), falling back to CPU")
-                    try:
-                        self._faster = WhisperModel(self.model, device="cpu", compute_type="int8")
-                    except Exception as e2:
-                        raise BackendError(f"local model load failed: {e2}") from None
-                else:
-                    raise BackendError(f"local model load failed: {e}") from None
+            self._faster = self._load()
         try:
-            segments, _info = self._faster.transcribe(str(wav), word_timestamps=True, language=language,
-                                                      initial_prompt=prompt, condition_on_previous_text=False,
-                                                      temperature=0)
-            return Transcript(language, words_from_faster(segments), self.name)
-        except BackendError:
-            raise
+            return self._run_faster(wav, language, prompt)
         except Exception as e:
-            raise BackendError(f"local transcription failed: {e}") from None
+            if self._device != "cuda":
+                raise BackendError(f"local transcription failed: {e}") from None
+            # cuDNN/cuBLAS load lazily at the first transcribe, so GPU failures surface here, not at model load
+            print(f"WARN local: GPU transcription failed ({type(e).__name__}), falling back to CPU")
+            self._faster, self._device = self._build("cpu", "int8"), "cpu"
+            try:
+                return self._run_faster(wav, language, prompt)
+            except Exception as e2:
+                raise BackendError(f"local transcription failed: {e2}") from None
+
+    def _build(self, device: str, compute: str):
+        from faster_whisper import WhisperModel
+        return WhisperModel(self.model, device=device, compute_type=compute)
+
+    def _load(self):
+        try:
+            import faster_whisper  # noqa: F401
+        except ImportError:
+            raise BackendError("faster-whisper is not installed. Run /cutmate:setup.") from None
+        device, compute = pick_device()
+        try:
+            model = self._build(device, compute)
+        except Exception as e:
+            if device != "cuda":
+                raise BackendError(f"local model load failed: {e}") from None
+            print(f"WARN local: GPU load failed ({type(e).__name__}), falling back to CPU")
+            device = "cpu"
+            try:
+                model = self._build("cpu", "int8")
+            except Exception as e2:
+                raise BackendError(f"local model load failed: {e2}") from None
+        self._device = device
+        return model
+
+    def _run_faster(self, wav: Path, language: str, prompt: str | None) -> Transcript:
+        segments, _info = self._faster.transcribe(str(wav), word_timestamps=True, language=language,
+                                                  initial_prompt=prompt, condition_on_previous_text=False,
+                                                  temperature=0)
+        return Transcript(language, words_from_faster(segments), self.name)  # consumes the lazy generator
