@@ -45,17 +45,37 @@ class LocalBackend:
                 import mlx_whisper
             except ImportError:
                 raise BackendError("mlx-whisper is not installed. Run /cutmate:setup.") from None
-            r = mlx_whisper.transcribe(str(wav), path_or_hf_repo=self.model, word_timestamps=True, language=language,
-                                       initial_prompt=prompt, condition_on_previous_text=False, temperature=0.0)
-            return Transcript(language, words_from_mlx(r), self.name)
+            try:
+                r = mlx_whisper.transcribe(str(wav), path_or_hf_repo=self.model, word_timestamps=True, language=language,
+                                           initial_prompt=prompt, condition_on_previous_text=False, temperature=0.0)
+                return Transcript(language, words_from_mlx(r), self.name)
+            except BackendError:
+                raise
+            except Exception as e:
+                raise BackendError(f"local transcription failed: {e}") from None
         if self._faster is None:
             try:
                 from faster_whisper import WhisperModel
             except ImportError:
                 raise BackendError("faster-whisper is not installed. Run /cutmate:setup.") from None
             device, compute = pick_device()
-            self._faster = WhisperModel(self.model, device=device, compute_type=compute)
-        segments, _info = self._faster.transcribe(str(wav), word_timestamps=True, language=language,
-                                                  initial_prompt=prompt, condition_on_previous_text=False,
-                                                  temperature=0)
-        return Transcript(language, words_from_faster(segments), self.name)
+            try:
+                self._faster = WhisperModel(self.model, device=device, compute_type=compute)
+            except Exception as e:
+                if device == "cuda":
+                    print(f"WARN local: GPU load failed ({type(e).__name__}), falling back to CPU")
+                    try:
+                        self._faster = WhisperModel(self.model, device="cpu", compute_type="int8")
+                    except Exception as e2:
+                        raise BackendError(f"local model load failed: {e2}") from None
+                else:
+                    raise BackendError(f"local model load failed: {e}") from None
+        try:
+            segments, _info = self._faster.transcribe(str(wav), word_timestamps=True, language=language,
+                                                      initial_prompt=prompt, condition_on_previous_text=False,
+                                                      temperature=0)
+            return Transcript(language, words_from_faster(segments), self.name)
+        except BackendError:
+            raise
+        except Exception as e:
+            raise BackendError(f"local transcription failed: {e}") from None

@@ -1,3 +1,4 @@
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -5,6 +6,7 @@ import pytest
 
 from cutmate.backends import local
 from cutmate.backends.local import LocalBackend, words_from_faster, words_from_mlx
+from cutmate.errors import BackendError
 
 SAMPLES = Path(__file__).resolve().parents[1] / "samples"
 
@@ -36,6 +38,70 @@ def test_words_from_faster():
     segs = iter([SimpleNamespace(words=[W(" Hello", 0.0, 0.3, 0.95)]), SimpleNamespace(words=None),
                  SimpleNamespace(words=[W(" world", 0.4, 0.8, 0.7)])])
     assert [w.word for w in words_from_faster(segs)] == ["Hello", "world"]
+
+
+def test_mlx_not_installed(monkeypatch, tmp_path):
+    """mlx_whisper import fails → BackendError with setup hint."""
+    monkeypatch.setitem(sys.modules, "mlx_whisper", None)
+    b = LocalBackend("mlx", "mlx-community/whisper-large-v3-mlx")
+    wav = tmp_path / "test.wav"
+    wav.touch()
+    with pytest.raises(BackendError, match="not installed"):
+        b.transcribe(wav, "en")
+
+
+def test_faster_cuda_fallback_to_cpu(monkeypatch, tmp_path, capsys):
+    """WhisperModel fails on CUDA → fallback to CPU with WARN, cache on success."""
+    # Create a fake WhisperModel that fails on cuda but works on cpu
+    class FakeWhisperModel:
+        def __init__(self, model, device="cpu", compute_type="int8"):
+            if device == "cuda":
+                raise RuntimeError("CUDA out of memory")
+            self.device = device
+            self.model = model
+
+        def transcribe(self, *args, **kwargs):
+            W = lambda w, s, e, p: SimpleNamespace(word=w, start=s, end=e, probability=p)
+            seg1 = SimpleNamespace(words=[W(" hello", 0.0, 0.5, 0.9)])
+            return iter([seg1]), SimpleNamespace()
+
+    monkeypatch.setitem(sys.modules, "faster_whisper", SimpleNamespace(WhisperModel=FakeWhisperModel))
+    monkeypatch.setattr(local, "pick_device", lambda: ("cuda", "float16"))
+
+    b = LocalBackend("faster", "large-v3")
+    wav = tmp_path / "test.wav"
+    wav.touch()
+
+    # First call should fallback and print warning
+    t = b.transcribe(wav, "en")
+    assert len(t.words) == 1
+    assert t.words[0].word == "hello"
+    captured = capsys.readouterr()
+    assert "WARN local: GPU load failed" in captured.out
+    assert "falling back to CPU" in captured.out
+
+    # Verify _faster was cached (loaded on CPU)
+    assert b._faster is not None
+    assert b._faster.device == "cpu"
+
+
+def test_faster_transcribe_runtime_error(monkeypatch, tmp_path):
+    """Transcribe raises RuntimeError → BackendError with context."""
+    class FakeWhisperModel:
+        def __init__(self, model, device="cpu", compute_type="int8"):
+            pass
+
+        def transcribe(self, *args, **kwargs):
+            raise RuntimeError("Model corrupted")
+
+    monkeypatch.setitem(sys.modules, "faster_whisper", SimpleNamespace(WhisperModel=FakeWhisperModel))
+
+    b = LocalBackend("faster", "large-v3")
+    wav = tmp_path / "test.wav"
+    wav.touch()
+
+    with pytest.raises(BackendError, match="local transcription failed: Model corrupted"):
+        b.transcribe(wav, "en")
 
 
 @pytest.mark.slow
