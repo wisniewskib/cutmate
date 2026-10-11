@@ -1,0 +1,4 @@
+{"text": " Cześć, to jest test.", "segments": [{"id": 0, "start": 0.0, "end": 1.8, "text": " Cześć, to jest test."}],
+ "words": [{"word": "Cześć,", "start": 0.12, "end": 0.5}, {"word": "to", "start": 0.6, "end": 0.7},
+           {"word": "jest", "start": 0.72, "end": 0.95}, {"word": "test.", "start": 1.0, "end": 1.6}],
+ "x_groq": {"id": "req_1"}}
