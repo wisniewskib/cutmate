@@ -19,7 +19,10 @@ def require_ffmpeg() -> None:
 
 
 def run(cmd: list) -> subprocess.CompletedProcess:
-    return subprocess.run([str(c) for c in cmd], capture_output=True, text=True, encoding="utf-8", errors="replace")
+    try:
+        return subprocess.run([str(c) for c in cmd], capture_output=True, text=True, encoding="utf-8", errors="replace")
+    except FileNotFoundError:
+        raise MediaError(f"{cmd[0]} not found on PATH. Run /cutmate:setup.") from None
 
 
 def _tail(s: str, n: int = 300) -> str:
@@ -50,6 +53,8 @@ def extract_wav(src: Path, dst: Path, sr: int = 16000) -> Path:
 
 def silences(wav: Path, noise_db: float = -40, min_dur: float = 0.12) -> list[list[float]]:
     r = run(["ffmpeg", "-nostdin", "-i", wav, "-af", f"silencedetect=n={noise_db}dB:d={min_dur}", "-f", "null", "-"])
+    if r.returncode:
+        raise MediaError(f"cannot analyze silences in {wav}: {_tail(r.stderr)}")
     st = [float(x) for x in re.findall(r"silence_start: (-?[0-9.]+)", r.stderr)]
     en = [float(x) for x in re.findall(r"silence_end: ([0-9.]+)", r.stderr)]
     if len(st) > len(en):  # silence runs to the end of the file
@@ -64,18 +69,32 @@ def integrated_lufs(src: Path, start: float | None = None, dur: float | None = N
     if dur is not None:
         cmd += ["-t", f"{dur:.3f}"]
     cmd += ["-i", src, "-vn", "-af", "ebur128=framelog=quiet", "-f", "null", "-"]
-    vals = re.findall(r"I:\s+(-?[0-9.]+) LUFS", run(cmd).stderr)
+    r = run(cmd)
+    if r.returncode:
+        raise MediaError(f"cannot measure LUFS of {src}: {_tail(r.stderr)}")
+    vals = re.findall(r"I:\s+(-?[0-9.]+) LUFS", r.stderr)
     v = float(vals[-1]) if vals else -70.0
     return max(v, -70.0)
 
 
 def loudnorm_measure(src: Path, prefix: str = "") -> dict:
+    import math
     af = (f"{prefix}," if prefix else "") + f"{LOUDNORM}:print_format=json"
-    r = run(["ffmpeg", "-nostdin", "-i", src, "-af", af, "-f", "null", "-"])
+    r = run(["ffmpeg", "-nostdin", "-i", src, "-vn", "-af", af, "-f", "null", "-"])
+    if r.returncode:
+        raise MediaError(f"loudness measurement failed for {src}: {_tail(r.stderr)}")
     m = re.search(r"\{[^{}]*\"input_i\"[^{}]*\}", r.stderr)
     if not m:
         raise MediaError(f"loudness measurement failed for {src}: {_tail(r.stderr)}")
-    return json.loads(m.group(0))
+    result = json.loads(m.group(0))
+    input_i = result.get("input_i")
+    # Check if input_i is not finite (handles "-inf", None, NaN, inf)
+    try:
+        if input_i is None or not math.isfinite(float(input_i)):
+            raise MediaError(f"no measurable audio in {src}")
+    except (ValueError, TypeError):
+        raise MediaError(f"no measurable audio in {src}") from None
+    return result
 
 
 def loudnorm_filter(m: dict, prefix: str = "") -> str:
@@ -85,8 +104,11 @@ def loudnorm_filter(m: dict, prefix: str = "") -> str:
 
 
 def read_pcm(src: Path, sr: int) -> np.ndarray:
-    r = subprocess.run(["ffmpeg", "-nostdin", "-v", "error", "-i", str(src), "-ac", "1", "-ar", str(sr), "-f", "f32le", "-"],
-                       capture_output=True)
+    try:
+        r = subprocess.run(["ffmpeg", "-nostdin", "-v", "error", "-i", str(src), "-ac", "1", "-ar", str(sr), "-f", "f32le", "-"],
+                           capture_output=True)
+    except FileNotFoundError:
+        raise MediaError("ffmpeg not found on PATH. Run /cutmate:setup.") from None
     if r.returncode:
         raise MediaError(f"cannot decode audio of {src}: {_tail(r.stderr.decode('utf-8', 'replace'))}")
     return np.frombuffer(r.stdout, dtype=np.float32).copy()
@@ -100,13 +122,23 @@ def probe_video(src: Path) -> dict:
     p = json.loads(r.stdout)
     v = next((s for s in p["streams"] if s["codec_type"] == "video"), {})
     a = next((s for s in p["streams"] if s["codec_type"] == "audio"), {})
+    if not v:
+        raise MediaError(f"no video stream in {src}")
+    duration_val = p.get("format", {}).get("duration")
+    if duration_val is None or duration_val == "N/A":
+        raise MediaError(f"cannot read duration of {src}")
+    try:
+        duration_float = float(duration_val)
+    except (ValueError, TypeError):
+        raise MediaError(f"invalid duration in {src}: {duration_val}") from None
     return dict(width=v.get("width"), height=v.get("height"), fps=v.get("r_frame_rate"),
-                vcodec=v.get("codec_name"), acodec=a.get("codec_name"), duration=float(p["format"]["duration"]))
+                vcodec=v.get("codec_name"), acodec=a.get("codec_name"), duration=duration_float)
 
 
 def extract_frame(src: Path, t: float, dst: Path) -> Path:
     dst = Path(dst)
+    dst.parent.mkdir(parents=True, exist_ok=True)
     r = run(["ffmpeg", "-nostdin", "-v", "error", "-y", "-ss", f"{t:.3f}", "-i", src, "-frames:v", "1", dst])
-    if r.returncode:
+    if r.returncode or not dst.exists():
         raise MediaError(f"cannot extract frame at {t:.2f}s from {src}: {_tail(r.stderr)}")
     return dst
