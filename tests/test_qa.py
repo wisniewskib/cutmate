@@ -39,15 +39,25 @@ def test_quiet_segments():
 
 
 def test_has_repeat():
-    assert has_repeat(["na", "na", "githubie"])
-    assert has_repeat(["a", "każdy", "su…", "a", "każdy"])
-    assert has_repeat(["podmienia", "klucze", "eee", "podmienia", "klucze"])
-    assert has_repeat(["podmienia", "klucze", "podmienia"])
-    assert not has_repeat(["to", "jest", "test"])
+    # Positive cases from brief
+    assert has_repeat(["na", "na", "githubie"])  # Rule a: adjacent identical
+    assert has_repeat(["a", "każdy", "su…", "a", "każdy"])  # Rule b: ellipsis
+    assert has_repeat(["podmienia", "klucze", "eee", "podmienia", "klucze"])  # Rule c: bigram repeat
+    assert has_repeat(["podmienia", "klucze", "podmienia"])  # Rule d: X Y X (X=5+ chars)
+
+    # Negative cases: ordinary sentences
+    assert not has_repeat(["to", "jest", "test"])  # Original brief case
+    assert not has_repeat("to jest bardzo ważne i to jest ważne".split())
+    assert not has_repeat("I think that is what that means".split())
+    assert not has_repeat("to jest tak jak jest".split())
+    assert not has_repeat("będzie dobrze będziemy razem".split())
+
+    # Additional positive cases
+    assert has_repeat(["githu", "githubie"])  # Rule e: prefix of next word
 
 
 def test_run_qa_missing_files(tmp_path):
-    """Test that missing required files raise CutmateError."""
+    """Test that missing required files raise CutmateError with correct hints."""
     out_dir = tmp_path / "out"
     out_dir.mkdir()
     (out_dir / "work").mkdir()
@@ -56,9 +66,9 @@ def test_run_qa_missing_files(tmp_path):
     with pytest.raises(CutmateError, match="final.mp4.*run `cutmate finalize` first"):
         run_qa(out_dir, None, "pl", asr=False)
 
-    # Create final.mp4, test missing aroll.mp4
+    # Create final.mp4, test missing aroll.mp4 (produced by cut)
     (out_dir / "final.mp4").touch()
-    with pytest.raises(CutmateError, match="aroll.mp4.*run `cutmate finalize` first"):
+    with pytest.raises(CutmateError, match="aroll.mp4.*run `cutmate cut` first"):
         run_qa(out_dir, None, "pl", asr=False)
 
     # Create aroll.mp4, test missing aligned_words.json
@@ -66,7 +76,23 @@ def test_run_qa_missing_files(tmp_path):
     with pytest.raises(CutmateError, match="aligned_words.json.*run `cutmate align` first"):
         run_qa(out_dir, None, "pl", asr=False)
 
-    # Create aligned_words.json, test missing edl_timed.json
+    # Create aligned_words.json, test missing edl_timed.json (produced by cut)
     (out_dir / "work" / "aligned_words.json").write_text("[]")
-    with pytest.raises(CutmateError, match="edl_timed.json.*run `cutmate align` first"):
+    with pytest.raises(CutmateError, match="edl_timed.json.*run `cutmate cut` first"):
         run_qa(out_dir, None, "pl", asr=False)
+
+
+def test_run_qa_backend_required(tmp_path):
+    """Test that asr=True without backend raises CutmateError."""
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    (out_dir / "work").mkdir()
+
+    # Create dummy files
+    (out_dir / "final.mp4").touch()
+    (out_dir / "aroll.mp4").touch()
+    (out_dir / "work" / "aligned_words.json").write_text("[]")
+    (out_dir / "work" / "edl_timed.json").write_text("[]")
+
+    with pytest.raises(CutmateError, match="a transcription backend is required"):
+        run_qa(out_dir, None, "pl", asr=True)

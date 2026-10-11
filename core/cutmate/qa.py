@@ -35,7 +35,7 @@ def mix_scan(mix: np.ndarray, voice: np.ndarray) -> tuple[float, list[tuple[floa
     for i, j in zip(loud, list(loud[1:]) + [None]):
         start = i if start is None else start
         if j is None or j != i + 1:
-            runs.append((start * 0.1, (i + 1) * 0.1 + 0.4, float(over[start:i + 1].max())))
+            runs.append((start * 0.1, i * 0.1 + 0.4, float(over[start:i + 1].max())))
             start = None
     return med, runs
 
@@ -54,11 +54,44 @@ def quiet_segments(voice: np.ndarray, words: list[dict], timed: list[dict], med:
 
 
 def has_repeat(words: list[str]) -> bool:
+    """Detect false starts, repeated words, and stumbles in speech.
+
+    Rules (any one triggers True):
+    a) Two adjacent identical non-empty words
+    b) "…" or "..." appears in text
+    c) Bigram (w[i], w[i+1]) reappears with ≤2 words between
+    d) Word of ≥5 chars reappears exactly 2 positions later (X Y X)
+    e) Word of ≥3 chars is strict prefix of immediately following word (false start)
+    """
     ws = [w.lower().strip(",.?!") for w in words]
     txt = " ".join(ws)
-    if any(x and x == y for x, y in zip(ws, ws[1:])) or "…" in txt or "..." in txt:
+
+    # Rule b: Ellipsis markers
+    if "…" in txt or "..." in txt:
         return True
-    return bool(re.search(r"\b(\w{4,})\w*(?: \w+){1,3} \1", txt))
+
+    # Rule a: Adjacent identical non-empty words
+    if any(x and x == y for x, y in zip(ws, ws[1:])):
+        return True
+
+    # Rule c: Bigram repeats with ≤2 words between
+    for i in range(len(ws) - 1):
+        bigram = (ws[i], ws[i + 1])
+        for j in range(i + 2, min(i + 5, len(ws) - 1)):  # j from i+2 to i+4 inclusive
+            if j < len(ws) - 1 and (ws[j], ws[j + 1]) == bigram:
+                return True
+
+    # Rule d: Word of ≥5 chars reappears exactly 2 positions later (X Y X)
+    for i in range(len(ws) - 2):
+        if len(ws[i]) >= 5 and ws[i] == ws[i + 2]:
+            return True
+
+    # Rule e: Word of ≥3 chars is strict prefix of next word (false start)
+    for i in range(len(ws) - 1):
+        if len(ws[i]) >= 3 and ws[i + 1].startswith(ws[i]) and ws[i] != ws[i + 1]:
+            return True
+
+    return False
 
 
 def _repeats_local(backend, wav: Path, language: str) -> list[tuple[float, str]]:
@@ -86,12 +119,16 @@ def _repeats_api(backend, wav: Path, language: str) -> list[tuple[float, str]]:
 def run_qa(out_dir: Path, backend, language: str, asr: bool = True) -> list[str]:
     out = Path(out_dir)
 
+    # Check for backend requirement before reading files
+    if asr and backend is None:
+        raise CutmateError("a transcription backend is required for the repeat check")
+
     # Check for required files
     required_files = [
         (out / "final.mp4", "run `cutmate finalize` first"),
-        (out / "aroll.mp4", "run `cutmate finalize` first"),
+        (out / "aroll.mp4", "run `cutmate cut` first"),
         (out / "work" / "aligned_words.json", "run `cutmate align` first"),
-        (out / "work" / "edl_timed.json", "run `cutmate align` first"),
+        (out / "work" / "edl_timed.json", "run `cutmate cut` first"),
     ]
 
     for file_path, step in required_files:
