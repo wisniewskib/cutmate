@@ -25,6 +25,12 @@ def test_find_clips_filters_and_sorts(tmp_path):
     assert [p.name for p in find_clips(tmp_path)] == ["a.mp4", "b.MOV"]
 
 
+def test_find_clips_skips_apledouble(tmp_path):
+    for n in ("._b.MOV", "a.mp4", ".hidden.mov"):
+        (tmp_path / n).write_bytes(b"x")
+    assert [p.name for p in find_clips(tmp_path)] == ["a.mp4"]
+
+
 def test_empty_folder_raises(tmp_path):
     with pytest.raises(CutmateError, match="no video files"):
         run_transcribe(tmp_path, FakeBackend(), "pl")
@@ -43,14 +49,30 @@ def test_writes_outputs_and_reports(tmp_path, capsys):
     assert "===== take1.mp4" in out and "SUSPECT" in out and "długieeee" in out
 
 
-def test_resume_skips_done_clips(tmp_path):
+def test_resume_skips_done_clips(tmp_path, capsys):
     rec = tmp_path / "rec"
     make_clip(rec / "take1.mp4")
     fb = FakeBackend()
     run_transcribe(rec, fb, "pl")
+    d = rec / "out" / "work" / "take1.mp4"
+    dirs = run_transcribe(rec, fb, "pl")
+    assert fb.calls == 1
+    assert dirs == [d]
+    assert "skip take1.mp4: already transcribed" in capsys.readouterr().out
+    run_transcribe(rec, fb, "pl", force=True)
+    assert fb.calls == 2
+
+
+def test_resume_retranscribes_incomplete(tmp_path):
+    rec = tmp_path / "rec"
+    make_clip(rec / "take1.mp4")
+    fb = FakeBackend()
     run_transcribe(rec, fb, "pl")
     assert fb.calls == 1
-    run_transcribe(rec, fb, "pl", force=True)
+    d = rec / "out" / "work" / "take1.mp4"
+    # Simulate incomplete write: only transcript.json, no silences.json
+    (d / "silences.json").unlink()
+    run_transcribe(rec, fb, "pl")
     assert fb.calls == 2
 
 

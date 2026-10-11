@@ -4,6 +4,7 @@ Model word starts run ~0.25–0.5 s early after pauses: cut on silences.json bou
 SUSPECT words (> 1 s) usually hide a stumble + retake; probe that window (backends.transcribe_window).
 """
 import json
+import os
 from pathlib import Path
 
 from .errors import CutmateError
@@ -14,7 +15,7 @@ VIDEO_EXTS = {".mov", ".mp4", ".m4v", ".mkv", ".webm"}
 
 
 def find_clips(rec: Path) -> list[Path]:
-    return sorted((p for p in Path(rec).iterdir() if p.is_file() and p.suffix.lower() in VIDEO_EXTS),
+    return sorted((p for p in Path(rec).iterdir() if p.is_file() and not p.name.startswith(".") and p.suffix.lower() in VIDEO_EXTS),
                   key=lambda p: p.name.lower())
 
 
@@ -37,7 +38,8 @@ def run_transcribe(rec: Path, backend, language: str, prompt: str | None = None,
     for clip in clips:
         d = rec / "out" / "work" / clip.name
         tj = d / "transcript.json"
-        if tj.exists() and not force:
+        sj = d / "silences.json"
+        if tj.exists() and sj.exists() and not force:
             print(f"skip {clip.name}: already transcribed (use --force to redo)")
             done.append(d)
             continue
@@ -47,8 +49,10 @@ def run_transcribe(rec: Path, backend, language: str, prompt: str | None = None,
         wav = extract_wav(clip, d / f"{clip.stem}.wav")
         t = backend.transcribe(wav, language, prompt)
         sil = silences(wav)
-        tj.write_text(json.dumps(t.to_json(), ensure_ascii=False, indent=1), encoding="utf-8")
-        (d / "silences.json").write_text(json.dumps(sil), encoding="utf-8")
+        sj.write_text(json.dumps(sil), encoding="utf-8")
+        tj_tmp = tj.parent / f"{tj.name}.tmp"
+        tj_tmp.write_text(json.dumps(t.to_json(), ensure_ascii=False, indent=1), encoding="utf-8")
+        os.replace(tj_tmp, tj)
         _report(clip.name, t, sil)
         done.append(d)
     return done
