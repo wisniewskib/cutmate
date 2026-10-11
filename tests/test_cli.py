@@ -40,34 +40,31 @@ def test_cli_survives_cp1252(tmp_path):
     assert b"Traceback" not in r.stderr and b"no video files" in r.stderr
 
 
-def test_align_checks_required_files(tmp_path):
-    """Test that align checks for EDL, edl_timed.json, and aroll.mp4 before running."""
-    rec = tmp_path / "rec"
-    out_dir = rec / "out"
+def test_align_checks_required_files(tmp_path, capsys):
+    """Test that align validates EDL, edl_timed.json, and aroll.mp4 exist with specific error messages."""
+    out_dir = tmp_path / "out"
     out_dir.mkdir(parents=True)
     edl = out_dir / "edl.json"
     edl.write_text(json.dumps({"format": "9:16", "segments": [
         {"id": "S1", "file": "take1.mp4", "in": 0.0, "out": 1.0, "text": "raz"}]}), encoding="utf-8")
 
-    # Test missing edl_timed.json
+    # Test 1: missing work/edl_timed.json
     assert main(["align", str(edl)]) == 2
-    err_output = (tmp_path / "stderr.txt")  # Capture stderr manually
-    # Just verify that it fails with code 2
+    err = capsys.readouterr().err
+    assert "EDL timed file not found" in err
+    assert "run `cutmate cut` first" in err
+    assert str(out_dir / "work" / "edl_timed.json") in err
 
-    # Create work dir with edl_timed.json but no aroll.mp4
+    # Test 2: missing aroll.mp4
     (out_dir / "work").mkdir(parents=True)
     edl_timed = out_dir / "work" / "edl_timed.json"
     edl_timed.write_text(json.dumps([{"id": "S1", "in": 0.0, "out": 1.0, "text": "raz"}]), encoding="utf-8")
 
     assert main(["align", str(edl)]) == 2
-
-    # Create aroll.mp4 (dummy file)
-    aroll = out_dir / "aroll.mp4"
-    aroll.write_text("dummy", encoding="utf-8")
-
-    # Now it should try to load the model and fail with ImportError -> CutmateError
-    # This tests that the ImportError handling is in place
-    assert main(["align", str(edl)]) == 2
+    err = capsys.readouterr().err
+    assert "A-roll file not found" in err
+    assert "run `cutmate cut` first" in err
+    assert str(out_dir / "aroll.mp4") in err
 
 
 def test_align_missing_edl_error(tmp_path, capsys):
@@ -82,33 +79,41 @@ def test_align_missing_edl_error(tmp_path, capsys):
     assert "cutmate: " in err
 
 
-def test_align_import_error_handling(tmp_path, capsys, monkeypatch):
-    """Test that align converts ImportError to CutmateError when torch/transformers are missing."""
-    rec = tmp_path / "rec"
-    make_clip(rec / "take1.mp4")
-    out_dir = rec / "out"
+def test_qa_no_asr_missing_video(tmp_path, capsys):
+    """Test that qa --no-asr with missing final.mp4 reports error and backend=None doesn't crash."""
+    out_dir = tmp_path / "out"
     out_dir.mkdir()
 
-    # Create EDL
+    assert main(["qa", str(out_dir), "--no-asr"]) == 2
+    err = capsys.readouterr().err
+    assert "cutmate:" in err
+
+
+def test_align_import_error_handling(tmp_path, capsys, monkeypatch):
+    """Test that align converts ImportError to CutmateError when alignment models are missing."""
+    out_dir = tmp_path / "out"
+    out_dir.mkdir(parents=True)
+
+    # Create dummy edl.json
     edl = out_dir / "edl.json"
     edl.write_text(json.dumps({"format": "9:16", "segments": [
         {"id": "S1", "file": "take1.mp4", "in": 0.0, "out": 1.0, "text": "raz"}]}), encoding="utf-8")
 
-    # Run cut first to generate edl_timed.json and aroll.mp4
-    main(["cut", str(edl)])
+    # Create dummy work/edl_timed.json and aroll.mp4
+    (out_dir / "work").mkdir(parents=True)
+    edl_timed = out_dir / "work" / "edl_timed.json"
+    edl_timed.write_text(json.dumps([{"id": "S1", "in": 0.0, "out": 1.0, "text": "raz"}]), encoding="utf-8")
+    aroll = out_dir / "aroll.mp4"
+    aroll.write_text("dummy", encoding="utf-8")
 
-    # Now mock torch import to fail
-    import builtins
-    original_import = builtins.__import__
+    # Monkeypatch run_align to raise ImportError
+    import cutmate.align
+    def mock_run_align(edl_path, language):
+        raise ImportError("No module named 'torch'")
 
-    def mock_import(name, *args, **kwargs):
-        if name == "torch" or name == "transformers":
-            raise ImportError(f"No module named '{name}'")
-        return original_import(name, *args, **kwargs)
+    monkeypatch.setattr("cutmate.align.run_align", mock_run_align)
 
-    monkeypatch.setattr("builtins.__import__", mock_import)
-
-    # Now align should fail with the ImportError -> CutmateError
+    # align should convert ImportError to CutmateError
     assert main(["align", str(edl)]) == 2
     err = capsys.readouterr().err
     assert "alignment models not installed" in err
