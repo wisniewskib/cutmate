@@ -74,8 +74,8 @@ def run_align(edl_path: Path, language: str) -> list[dict]:
     blank = proc.tokenizer.pad_token_id
     audio = read_pcm(out / "aroll.mp4", SR)
     words_out: list[dict] = []
-    for i, seg in enumerate(timed):
-        sid = seg.get("id", f"#{i}")
+    for seg in timed:
+        sid = seg["id"]
         disp = (seg.get("text") or "").split()
         if not disp:
             continue

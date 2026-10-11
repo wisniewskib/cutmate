@@ -1,10 +1,11 @@
 import json
+import subprocess
 
 import pytest
 
-from cutmate import media
+from cutmate import cut, media
 from cutmate.cut import cut_aroll, load_edl
-from cutmate.errors import EDLError
+from cutmate.errors import EDLError, MediaError
 from conftest import make_clip
 
 
@@ -93,3 +94,41 @@ def test_edl_invalid_json(tmp_path):
 def test_edl_missing_file(tmp_path):
     with pytest.raises(EDLError, match="not found"):
         load_edl(tmp_path / "nope.json")
+
+
+def test_segments_without_id_get_ids(tmp_path):
+    rec = tmp_path / "rec"
+    make_clip(rec / "take1.mp4")
+    segs = [{k: v for k, v in s.items() if k != "id"} for s in SEGS]
+    timed = cut_aroll(write_edl(rec, segs))
+    assert [s["id"] for s in timed] == ["S1", "S2"]
+    saved = json.loads((rec / "out" / "work" / "edl_timed.json").read_text(encoding="utf-8"))
+    assert [s["id"] for s in saved] == ["S1", "S2"]
+
+
+def test_null_text_is_ok(tmp_path):
+    rec = tmp_path / "rec"
+    make_clip(rec / "take1.mp4")
+    segs = [dict(SEGS[0], text=None), {k: v for k, v in SEGS[1].items() if k != "text"}]
+    assert len(cut_aroll(write_edl(rec, segs))) == 2
+
+
+def test_failed_cut_removes_stale_timed_json(tmp_path, monkeypatch):
+    rec = tmp_path / "rec"
+    make_clip(rec / "take1.mp4")
+    edl = write_edl(rec, SEGS)
+    cut_aroll(edl)
+    timed = rec / "out" / "work" / "edl_timed.json"
+    assert timed.exists()
+    real_run = cut.run
+
+    def failing(cmd):
+        if any(str(c).endswith("aroll.tmp.mp4") for c in cmd):
+            return subprocess.CompletedProcess(cmd, 1, "", "boom")
+        return real_run(cmd)
+
+    monkeypatch.setattr(cut, "run", failing)
+    with pytest.raises(MediaError, match="loudness normalisation failed"):
+        cut_aroll(edl)
+    assert not timed.exists()
+    assert not (rec / "out" / "aroll.tmp.mp4").exists()

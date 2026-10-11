@@ -2,6 +2,7 @@
 (no A/V drift), every segment levelled to the median segment loudness (±8 dB), 15/30 ms audio fades per cut,
 gentle compressor, two-pass loudnorm to -14 LUFS."""
 import json
+import os
 from pathlib import Path
 
 from .errors import EDLError, MediaError
@@ -39,7 +40,7 @@ def load_edl(edl_path: Path) -> dict:
     for k, s in enumerate(segs):
         if not isinstance(s, dict):
             raise EDLError(f"segment #{k}: must be a JSON object")
-        sid = s.get("id", f"#{k}")
+        sid = s.setdefault("id", f"S{k + 1}")
         for key in ("in", "out"):
             if key not in s:
                 raise EDLError(f"segment {sid}: missing \"{key}\"")
@@ -70,6 +71,7 @@ def cut_aroll(edl_path: Path) -> list[dict]:
     edl_path = Path(edl_path).resolve()
     edl = load_edl(edl_path)
     out = edl_path.parent
+    (out / "work" / "edl_timed.json").unlink(missing_ok=True)  # stale result must never outlive a failed cut
     work, segdir = out / "work", out / "work" / "segs"
     segdir.mkdir(parents=True, exist_ok=True)
     fps = int(edl.get("fps", 30))
@@ -95,7 +97,7 @@ def cut_aroll(edl_path: Path) -> list[dict]:
                  "-c:v", "libx264", "-preset", "medium", "-crf", "16", "-r", str(fps), "-pix_fmt", "yuv420p",
                  "-c:a", "pcm_s16le", part])
         if r.returncode:
-            raise MediaError(f"segment {s.get('id', k)}: ffmpeg failed: {_tail(r.stderr)}")
+            raise MediaError(f"segment {s['id']}: ffmpeg failed: {_tail(r.stderr)}")
         parts.append(part)
 
     # relative names: the concat demuxer resolves them next to list.txt (no quoting issues with any path)
@@ -105,10 +107,13 @@ def cut_aroll(edl_path: Path) -> list[dict]:
     if r.returncode:
         raise MediaError(f"joining segments failed: {_tail(r.stderr)}")
     af = loudnorm_filter(loudnorm_measure(raw, prefix=COMP), prefix=COMP)
+    tmp = out / "aroll.tmp.mp4"
     r = run(["ffmpeg", "-nostdin", "-y", "-i", raw, "-c:v", "copy", "-af", af, "-c:a", "aac", "-b:a", "256k",
-             "-movflags", "+faststart", out / "aroll.mp4"])
+             "-movflags", "+faststart", tmp])
     if r.returncode:
+        tmp.unlink(missing_ok=True)
         raise MediaError(f"loudness normalisation failed: {_tail(r.stderr)}")
+    os.replace(tmp, out / "aroll.mp4")
 
     t, timed = 0.0, []
     for s, p in zip(segs, parts):
@@ -118,5 +123,5 @@ def cut_aroll(edl_path: Path) -> list[dict]:
     (work / "edl_timed.json").write_text(json.dumps(timed, ensure_ascii=False, indent=1), encoding="utf-8")
     print(f"aroll.mp4: {t:.2f}s, {len(segs)} segments, {integrated_lufs(out / 'aroll.mp4'):.1f} LUFS")
     for s in timed:
-        print(f"  {s.get('id', ''):4} {s['start']:6.2f}–{s['end']:6.2f}  gain {s['gain_db']:+.1f} dB  {s.get('text', '')[:60]}")
+        print(f"  {s['id']:4} {s['start']:6.2f}–{s['end']:6.2f}  gain {s['gain_db']:+.1f} dB  {(s.get('text') or '')[:60]}")
     return timed

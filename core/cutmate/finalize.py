@@ -1,5 +1,6 @@
 """Step 8 — after `hyperframes render`: bring the FULL mix to -14 LUFS (the mixer leaves ~1 dB headroom) without
 re-encoding video, verify delivery specs, extract check frames for Claude to look at."""
+import os
 from pathlib import Path
 
 from .errors import MediaError
@@ -10,13 +11,16 @@ from .media import (extract_frame, integrated_lufs, loudnorm_filter, loudnorm_me
 def finalize(src: Path, dst: Path, fmt: str = "9:16", fps: int = 30, check=()) -> dict:
     require_ffmpeg()
     src, dst = Path(src), Path(dst)
+    w, h = size_of(fmt)  # validate before spending time encoding
     af = loudnorm_filter(loudnorm_measure(src))
+    tmp = dst.with_name(dst.stem + ".tmp" + dst.suffix)
     r = run(["ffmpeg", "-nostdin", "-v", "error", "-y", "-i", src, "-c:v", "copy", "-af", af, "-c:a", "aac",
-             "-b:a", "256k", "-movflags", "+faststart", dst])
+             "-b:a", "256k", "-movflags", "+faststart", tmp])
     if r.returncode:
+        tmp.unlink(missing_ok=True)
         raise MediaError(f"finalize failed: {' '.join(r.stderr.split())[-400:]}")
+    os.replace(tmp, dst)
     info = probe_video(dst)
-    w, h = size_of(fmt)
     info["lufs"] = integrated_lufs(dst)
     info["ok"] = (info["width"], info["height"], info["fps"], info["vcodec"], info["acodec"]) == (w, h, f"{fps}/1", "h264", "aac")
     info["frames"] = [extract_frame(dst, t, dst.parent / (f"check_{t:.2f}".replace(".", "_") + ".png")) for t in check]
