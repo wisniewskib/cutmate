@@ -1,0 +1,39 @@
+import subprocess
+from pathlib import Path
+
+import pytest
+
+
+def _expr(gaps, amp, freq=440):
+    cond = "+".join(f"between(t,{a},{b})" for a, b in gaps) or "0"
+    return f"if({cond},0,{amp}*sin(2*PI*{freq}*t))"
+
+
+def make_clip(path, dur=3.0, size="1080x1920", gaps=((1.0, 1.5),), audio=True, amp=0.3):
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    cmd = ["ffmpeg", "-nostdin", "-v", "error", "-y", "-f", "lavfi", "-i", f"testsrc2=size={size}:rate=30:duration={dur}"]
+    if audio:
+        cmd += ["-f", "lavfi", "-i", f"aevalsrc='{_expr(gaps, amp)}':s=48000:d={dur}", "-c:a", "aac"]
+    cmd += ["-c:v", "libx264", "-pix_fmt", "yuv420p", "-t", str(dur), str(path)]
+    subprocess.run(cmd, check=True)
+    return path
+
+
+def make_wav(path, dur=2.0, gaps=(), amp=0.3):
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.run(["ffmpeg", "-nostdin", "-v", "error", "-y", "-f", "lavfi", "-i",
+                    f"aevalsrc='{_expr(gaps, amp)}':s=16000:d={dur}", "-ac", "1", str(path)], check=True)
+    return path
+
+
+@pytest.fixture(autouse=True)
+def isolated_cutmate_home(tmp_path, monkeypatch):
+    """Never read the developer's real ~/.cutmate/config.json in tests."""
+    monkeypatch.setenv("CUTMATE_HOME", str(tmp_path / "cutmate-home"))
+
+
+@pytest.fixture
+def clip(tmp_path):
+    return make_clip(tmp_path / "rec" / "take1.mp4")
