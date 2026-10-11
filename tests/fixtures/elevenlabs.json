@@ -1,0 +1,7 @@
+{"language_code": "pol", "language_probability": 0.99, "text": "Cześć (śmiech) wszystkim",
+ "words": [
+  {"text": "Cześć", "type": "word", "start": 0.1, "end": 0.5, "speaker_id": "speaker_0", "logprob": -0.05},
+  {"text": " ", "type": "spacing", "start": 0.5, "end": 0.6, "logprob": 0.0},
+  {"text": "(śmiech)", "type": "audio_event", "start": 0.6, "end": 1.0, "logprob": 0.0},
+  {"text": "wszystkim", "type": "word", "start": 1.0, "end": 1.6, "logprob": -0.7}
+ ], "audio_duration_secs": 1.8, "transcription_id": "t1"}
