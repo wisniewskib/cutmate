@@ -43,7 +43,7 @@ def mix_scan(mix: np.ndarray, voice: np.ndarray) -> tuple[float, list[tuple[floa
 def quiet_segments(voice: np.ndarray, words: list[dict], timed: list[dict], med: float) -> list[tuple[str, float, float]]:
     out = []
     for s in timed:
-        ws = [w for w in words if w["seg"] == s.get("id")]
+        ws = [w for w in words if w["seg"] == s["id"]]
         if not ws:
             continue
         seg = np.concatenate([voice[int(w["start"] * SR):int(w["end"] * SR)] for w in ws])
@@ -136,18 +136,22 @@ def run_qa(out_dir: Path, backend, language: str, asr: bool = True) -> list[str]
             raise CutmateError(f"{file_path.name} is missing; {step}")
 
     lines = []
+
+    def emit(*new: str) -> None:
+        for line in new:
+            print(line)
+        lines.extend(new)
+
     mix, voice = read_pcm(out / "final.mp4", SR), read_pcm(out / "aroll.mp4", SR)
     med, runs = mix_scan(mix, voice)
-    lines.append(f"== mix: voice median {med:.1f} dB")
-    lines += [f"  LOUD {s:5.1f}–{e:5.1f}s  SFX/music {o:+.1f} dB over the voice" for s, e, o in runs]
+    emit(f"== mix: voice median {med:.1f} dB")
+    emit(*[f"  LOUD {s:5.1f}–{e:5.1f}s  SFX/music {o:+.1f} dB over the voice" for s, e, o in runs])
     words = json.loads((out / "work" / "aligned_words.json").read_text(encoding="utf-8"))
     timed = json.loads((out / "work" / "edl_timed.json").read_text(encoding="utf-8"))
-    lines += [f"  QUIET {sid} {st:.1f}s speech {d:+.1f} dB" for sid, st, d in quiet_segments(voice, words, timed, med)]
+    emit(*[f"  QUIET {sid} {st:.1f}s speech {d:+.1f} dB" for sid, st, d in quiet_segments(voice, words, timed, med)])
     if asr:
         wav = extract_wav(out / "aroll.mp4", out / "work" / "qa_aroll.wav")
         hits = _repeats_local(backend, wav, language) if backend.name == "local" else _repeats_api(backend, wav, language)
-        lines.append("== repeats" + (" (1.2 s windows)" if backend.name == "local" else " (full pass)"))
-        lines += [f"  {t:5.1f}s  {txt}" for t, txt in hits]
-    for line in lines:
-        print(line)
+        emit("== repeats" + (" (1.2 s windows)" if backend.name == "local" else " (full pass)"))
+        emit(*[f"  {t:5.1f}s  {txt}" for t, txt in hits])
     return lines
