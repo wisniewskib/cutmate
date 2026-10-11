@@ -45,6 +45,15 @@ def test_align_checks_required_files(tmp_path, capsys):
     out_dir = tmp_path / "out"
     out_dir.mkdir(parents=True)
     edl = out_dir / "edl.json"
+    edl_nonexistent = out_dir / "nonexistent.json"
+
+    # Test 0: missing EDL file itself
+    assert main(["align", str(edl_nonexistent)]) == 2
+    err = capsys.readouterr().err
+    assert "EDL file not found" in err
+    assert str(edl_nonexistent) in err
+
+    # Create EDL for remaining tests
     edl.write_text(json.dumps({"format": "9:16", "segments": [
         {"id": "S1", "file": "take1.mp4", "in": 0.0, "out": 1.0, "text": "raz"}]}), encoding="utf-8")
 
@@ -87,6 +96,7 @@ def test_qa_no_asr_missing_video(tmp_path, capsys):
     assert main(["qa", str(out_dir), "--no-asr"]) == 2
     err = capsys.readouterr().err
     assert "cutmate:" in err
+    assert "cutmate finalize" in err
 
 
 def test_align_import_error_handling(tmp_path, capsys, monkeypatch):
