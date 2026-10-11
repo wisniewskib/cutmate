@@ -35,6 +35,7 @@ def test_groq_word_timestamps(tmp_path, monkeypatch):
     body = req.body
     for part in (b'name="timestamp_granularities[]"', b"verbose_json", b"whisper-large-v3", b'name="language"', b"Claude, HyperFrames"):
         assert part in body
+    assert not list(tmp_path.glob("*.upload.mp3"))
 
 
 @responses.activate
@@ -68,12 +69,29 @@ def test_response_without_words(tmp_path, monkeypatch):
         get_backend("openai").transcribe(make_wav(tmp_path / "a.wav"), "en")
 
 
+@responses.activate
+def test_malformed_json_response(tmp_path, monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    responses.post(OPENAI_URL, body="<html>oops</html>", status=200)
+    with pytest.raises(BackendError, match="unexpected response format"):
+        get_backend("openai").transcribe(make_wav(tmp_path / "a.wav"), "en")
+
+
+@responses.activate
+def test_malformed_words_missing_keys(tmp_path, monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    responses.post(OPENAI_URL, json={"words": [{"word": "x"}]})
+    with pytest.raises(BackendError, match="unexpected response format"):
+        get_backend("openai").transcribe(make_wav(tmp_path / "a.wav"), "en")
+
+
 def test_file_too_large(tmp_path, monkeypatch):
     monkeypatch.setenv("GROQ_API_KEY", "gsk_test")
     b = get_backend("groq")
     b.limit_bytes = 100
     with pytest.raises(BackendError, match="too large"):
         b.transcribe(make_wav(tmp_path / "a.wav"), "pl")
+    assert not list(tmp_path.glob("*.upload.mp3"))
 
 
 def test_unknown_backend():

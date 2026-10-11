@@ -25,20 +25,26 @@ class OpenAICompatBackend:
         if prompt:
             data.append(("prompt", prompt))
         try:
-            with open(up, "rb") as f:
-                r = requests.post(self.url, headers={"Authorization": f"Bearer {key}"}, data=data,
-                                  files={"file": (up.name, f, "audio/mpeg")}, timeout=900)
-        except requests.RequestException as e:
-            raise BackendError(f"{self.name}: request failed ({e.__class__.__name__}). Check your connection.") from None
-        if r.status_code == 401:
-            raise BackendError(f"{self.name}: API key rejected (401). Check {self.key_env}.")
-        if r.status_code == 429:
-            raise BackendError(f"{self.name}: rate limit or quota hit (429). Wait a minute or switch backend.")
-        if not r.ok:
-            raise BackendError(f"{self.name}: HTTP {r.status_code}: {r.text[:300]}")
-        body = r.json()
-        if not isinstance(body.get("words"), list):
-            raise BackendError(f"{self.name}: response has no word timestamps (model {self.model}). "
-                               f"Switch backend with /cutmate:setup.")
-        words = [Word(w["word"].strip(), float(w["start"]), float(w["end"])) for w in body["words"] if w["word"].strip()]
-        return Transcript(language, sorted(words, key=lambda w: w.start), self.name)
+            try:
+                with open(up, "rb") as f:
+                    r = requests.post(self.url, headers={"Authorization": f"Bearer {key}"}, data=data,
+                                      files={"file": (up.name, f, "audio/mpeg")}, timeout=900)
+            except requests.RequestException as e:
+                raise BackendError(f"{self.name}: request failed ({e.__class__.__name__}). Check your connection.") from None
+            if r.status_code == 401:
+                raise BackendError(f"{self.name}: API key rejected (401). Check {self.key_env}.")
+            if r.status_code == 429:
+                raise BackendError(f"{self.name}: rate limit or quota hit (429). Wait a minute or switch backend.")
+            if not r.ok:
+                raise BackendError(f"{self.name}: HTTP {r.status_code}: {' '.join(r.text.split())[:300]}")
+            try:
+                body = r.json()
+                if not isinstance(body.get("words"), list):
+                    raise BackendError(f"{self.name}: response has no word timestamps (model {self.model}). "
+                                       f"Switch backend with /cutmate:setup.")
+                words = [Word(w["word"].strip(), float(w["start"]), float(w["end"])) for w in body["words"] if w["word"].strip()]
+            except (ValueError, KeyError, TypeError, AttributeError):
+                raise BackendError(f"{self.name}: unexpected response format from the API") from None
+            return Transcript(language, sorted(words, key=lambda w: w.start), self.name)
+        finally:
+            up.unlink(missing_ok=True)

@@ -12,6 +12,7 @@ def encode_for_upload(wav: Path, limit_bytes: int, backend: str) -> Path:
         raise MediaError(f"cannot encode {wav} for upload: {r.stderr.strip()[-300:]}")
     size = dst.stat().st_size
     if size > limit_bytes:
+        dst.unlink(missing_ok=True)
         raise BackendError(f"{backend}: audio is too large to upload ({size / 1e6:.1f} MB > {limit_bytes / 1e6:.0f} MB). "
                            f"Use the local backend or split the recording.")
     return dst
