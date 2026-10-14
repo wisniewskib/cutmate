@@ -7,15 +7,16 @@ description: Edit a talking-head short (9:16) from raw phone takes with cutmate 
 
 Talk to the user in their language (config `language`). Never modify source clips. Everything goes to `<folder>/out/`.
 
-Set the CLI once per session: `CM="$(command -v cutmate || echo ~/.cutmate/venv/bin/cutmate)"`; if it doesn't run, tell
+Set the CLI once per session: `CM="$(command -v cutmate || ls ~/.cutmate/venv/bin/cutmate ~/.cutmate/venv/Scripts/cutmate.exe 2>/dev/null | head -1)"`; if it doesn't run, tell
 the user to run `/cutmate:setup` and stop. Read the config with `cat ~/.cutmate/config.json` (backend, language, theme,
 steps.factcheck / qa / thumbnail, music). Read the theme rules: `${CLAUDE_PLUGIN_ROOT}/themes/<theme>/frame.md` (or
 `~/.cutmate/themes/<theme>/frame.md`) BEFORE writing plan.json. If the user uses a custom theme and it was never
 checked, run `$CM theme-check --theme <theme> --language <lang>` once (renders every component and reports problems).
 
 **Resume:** if `out/` already has files, continue from the first missing one:
-`work/*/transcript.json` → `takes.md` → `edl.json` → `aroll.mp4` → `work/aligned_words.json` → `plan.json` →
-`composition/index.html` → `final.mp4`.
+`work/*/transcript.json` → `sheets/*.png` → `takes.md` → `edl.json` → `aroll.mp4` → `work/aligned_words.json` →
+`plan.json` → `composition/index.html` → `final.mp4` → `thumbnail.png` (if `steps.thumbnail`) → `EDIT_NOTES.md`.
+Resuming at `takes.md` means (re)making and READING the sheets first.
 
 ## 1. Transcribe and look
 
@@ -30,13 +31,24 @@ checked, run `$CM theme-check --theme <theme> --language <lang>` once (renders e
 The transcript lies: whisper drops false starts and merges a stumble + retake into one long word. For EVERY segment you
 might use:
 
-- Probe every `SUSPECT` word and every speech region the transcript doesn't explain:
-  `$CM probe <folder>/out/work/<clip>/<stem>.wav --start A --end B --prompt "Yyy, eee, hmm."` (≈1 s windows).
+- Probe every `SUSPECT` word and every unexplained speech region. Unexplained speech = a non-silent span (a gap
+  between entries in `silences.json`) longer than ~0.3 s with no words in the transcript. Probe in ≈1 s windows:
+  `$CM probe <folder>/out/work/<clip>/<stem>.wav --start A --end B --prompt "Yyy, eee, hmm."`
+  (language `en`: `--prompt "Um, uh, er, hmm."`).
 - RMS-scan the segment: `$CM rms <wav> --start A --end B --bin 0.05` — two speech blobs inside one "word", a blob
   with no word, or a short spike after a word (mouth click) are retakes / stumbles / smacks.
-- Never use a segment where the sheet shows looking away or a framing jump; cut around it.
-- For each line said more than once, compare ALL takes. Write `out/takes.md`: every repeated line, every take
-  (clip + times), the chosen one marked, and one-line reason (delivery / energy / fluency / no stumble / eye contact).
+- Never use a segment where the sheet shows looking away or a framing jump; cut around it. Framing jumps can last
+  < 0.5 s: before finalising each segment make a dense sheet of it
+  (`$CM sheet <clip> --start A --end B --step 0.1 -o <folder>/out/sheets/<clip>-<A>.png`) and READ it.
+- For each line said more than once, compare ALL takes.
+
+Write `out/takes.md` with two parts:
+1. Repeated lines: every take (clip + times), the chosen one marked, and a one-line reason (delivery / energy /
+   fluency / no stumble / eye contact).
+2. **Checks — one entry for EVERY segment used in the EDL (repeated or not):** each SUSPECT window probed and what
+   came back; the RMS range scanned and the findings; the look-away / framing-jump time ranges excluded (from the sheets).
+
+Do not write `edl.json` until every planned segment has a checks entry.
 
 Write `out/edl.json`:
 ```json
@@ -54,14 +66,15 @@ Write `out/edl.json`:
 
 List every checkable claim (numbers, prices, dates, versions, names, "first / only / free"). Verify each with
 WebSearch AND by opening the source page (official docs, pricing, changelog, repo; studies for health; law texts for law).
-Write `out/factcheck.md`, one line per claim: timestamp, quote, verdict ✅ OK / ⚠️ NIEPEWNE / ❌ BŁĄD, the true version,
-link. If anything is ❌ or ⚠️: STOP and ask the user (this is the only pause): another take that says it right / cut
+Write `out/factcheck.md`, one line per claim: timestamp, quote, verdict (✅ / ⚠️ / ❌ plus the word in the user's
+language, e.g. OK / NIEPEWNE / BŁĄD), the true version, link. If anything is ❌ or ⚠️: STOP and ask the user (this is the only pause): another take that says it right / cut
 the line / re-record / keep it with an on-screen correction. If all ✅: say it in one line and continue.
 (`build` warns about any counter / non-illustrative bars number that no ✅ line confirms.)
 
 ## 4. Cut and align
 
-`$CM cut <folder>/out/edl.json` then `$CM align <folder>/out/edl.json`. Read `work/aligned_words.json`; any
+`$CM cut <folder>/out/edl.json`, then sheet `out/aroll.mp4` around every cut point (±0.5 s, `--step 0.1`) and READ
+it — a framing jump or half-cut word at a join means fix the EDL and cut again. Then `$CM align <folder>/out/edl.json`. Read `work/aligned_words.json`; any
 `(estimated)` words mean a segment's text doesn't match its audio — fix the EDL text.
 
 ## 5. Plan the graphics
@@ -83,22 +96,24 @@ Follow `frame.md`. Write `out/plan.json`:
   `counter.to` is a number. Budgets (warnings): at most 2 graphics with `hit`, 1 `title`, no overlapping graphics.
 - B-roll: files in `<folder>/broll/`; for a web page the speaker talks about: `$CM shot <url> -o <folder>/broll/<name>.png`
   and READ the PNG (cookie banners, login walls → pick another page or crop).
-- Music: config `music.source` = `folder` → automatic (first audio file in the folder); `heygen` →
-  `npx hyperframes media-use resolve --type bgm --intent "<mood>" --project <folder>/out/composition`
-  only if the user is signed in (never sign in for them), then put the file path in `plan.music.src`; `none` → no music.
+- Music: config `music.source` = `folder` → automatic (first audio file in config `music.folder`); `heygen` → check
+  sign-in with `npx --yes hyperframes@0.8.157 media-use resolve --doctor`; if not signed in, use no music and note it
+  in EDIT_NOTES (never sign in for them, no extra pause); if signed in:
+  `npx --yes hyperframes@0.8.157 media-use resolve --type bgm --intent "<mood>" --project <folder>/out/composition`
+  and put the file's ABSOLUTE path in `plan.music.src`; `none` → no music.
 
 ## 6. Build and look
 
 `$CM build <folder>/out` — fix every `cutmate:` error (it names the bad anchor and lists the segment's words) and think
 about every `WARN`. The last line prints `checkpoints: t1,t2,...`. Then, from the project dir (no path argument):
-`cd <folder>/out/composition && npx --yes hyperframes@0.8.157 snapshot --at <checkpoints> --no-end --describe false -o ../snapshots`
+`( cd <folder>/out/composition && npx --yes hyperframes@0.8.157 snapshot --at <checkpoints> --no-end --describe false -o ../snapshots )`
 and READ every frame: overlaps, text wrapping, safe zones, captions readable, split panel shows the media. Fix
-`plan.json` and rebuild until clean. Stop any running `hyperframes preview` before rebuilding.
+`plan.json` and rebuild until clean.
 
 ## 7. Render and QA
 
 `$CM render <folder>/out` (check → render → finalize; ~1–2 min; writes `out/final.mp4`). READ every `check_*.png` it
-writes and describe each in one line. If `steps.qa`: `$CM qa <folder>/out` and handle every hit: listen/probe, fix the
+writes and describe each in one line. If `steps.qa`: `$CM qa <folder>/out` and handle every hit: probe/rms, fix the
 EDL (then cut → align → build → render; graphics move with their words automatically) or explain why it's fine.
 
 ## 8. Thumbnail (if `steps.thumbnail`)
