@@ -29,8 +29,9 @@ def make_out(tmp_path, plan, words=WORDS):
 
 def test_norm():
     assert norm("Claude'a.") == "claude'a"
-    assert norm("„Krótko,”") == "krótko"
-    assert norm("”x”") == "x"
+    assert norm("„Krótko,\u201d") == "krótko"
+    assert norm("\u201dx\u201d") == "x"
+    assert norm("\u201cx\u201d") == "x"
     assert norm("75%") == "75%"
 
 
@@ -158,9 +159,11 @@ def test_plan_file_errors(tmp_path):
 @pytest.mark.parametrize("bad_input,msg", [
     ({"aligned_words": "invalid"}, "invalid JSON"),
     ({"aligned_words": [{"seg": "S1"}]}, "missing seg/word/start/end"),
+    ({"aligned_words": [{"seg": "S1", "word": "x", "start": "bad", "end": 1.0}]}, "must be numbers"),
     ({"graphics": "not a list"}, "must be a list"),
     ({"captions": "not a dict"}, "must be a dict"),
     ({"captions": {"max_words": "not_int"}}, "must be an int"),
+    ({"captions": {"key": "not_a_list"}}, "must be a list"),
 ])
 def test_malformed_inputs(tmp_path, bad_input, msg):
     out = tmp_path / "rec" / "out"

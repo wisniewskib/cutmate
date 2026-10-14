@@ -18,7 +18,7 @@ REQUIRED = {"title": ("at", "text"), "counter": ("at", "to", "label"), "list": (
 TIMING_KEYS = ("type", "at", "from", "until", "hit", "sfx")
 CORNERS = ("tl", "tr", "bl", "br")
 HOLD = 2.5
-_PUNCT = ".,!?;:…\"'„”()[]–—-"
+_PUNCT = ".,!?;:…\"'„\u201c\u201d()[]–—-"
 
 
 @dataclass
@@ -202,6 +202,8 @@ def load_plan(out_dir: Path, factcheck: bool = False) -> Plan:
     for j, w in enumerate(words):
         if not isinstance(w, dict) or not all(k in w for k in ("seg", "word", "start", "end")):
             raise PlanError(f"{words_p}: entry {j} missing seg/word/start/end")
+        if not isinstance(w.get("start"), (int, float)) or not isinstance(w.get("end"), (int, float)):
+            raise PlanError(f"{words_p}: entry {j} start/end must be numbers")
     end = float(load_timed(out)[-1]["end"])
     graphics_list = raw.get("graphics")
     if graphics_list is not None and not isinstance(graphics_list, list):
@@ -223,6 +225,9 @@ def load_plan(out_dir: Path, factcheck: bool = False) -> Plan:
         max_words = int(cap.get("max_words", 3))
     except (ValueError, TypeError):
         raise PlanError(f"{p}: captions \"max_words\" must be an int")
-    captions = {"key": [str(k).upper() for k in cap.get("key", [])], "max_words": max_words}
+    key_list = cap.get("key")
+    if key_list is not None and not isinstance(key_list, list):
+        raise PlanError(f"{p}: captions \"key\" must be a list")
+    captions = {"key": [str(k).upper() for k in key_list or []], "max_words": max_words}
     music = raw.get("music") if isinstance(raw.get("music"), dict) else None
     return Plan(gs, captions, music, end, warnings)
