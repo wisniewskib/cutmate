@@ -18,7 +18,7 @@ REQUIRED = {"title": ("at", "text"), "counter": ("at", "to", "label"), "list": (
 TIMING_KEYS = ("type", "at", "from", "until", "hit", "sfx")
 CORNERS = ("tl", "tr", "bl", "br")
 HOLD = 2.5
-_PUNCT = ".,!?;:…\"'„""()[]–—-"
+_PUNCT = ".,!?;:…\"'„”()[]–—-"
 
 
 @dataclass
@@ -64,6 +64,8 @@ def resolve_anchor(a, words: list[dict], end: float) -> tuple[float, float]:
         raise PlanError(f"anchor {a!r}: no segment {seg!r} (segments: {names})")
     hits = [w for w in seg_words if norm(w["word"]) == norm(word)]
     if len(hits) < n:
+        hits = [w for w in seg_words if norm(w["word"]) == norm(word + "%")]
+    if len(hits) < n:
         raise PlanError(f"anchor {a!r}: word {word!r} #{n} not in {seg} "
                         f"(words: {' '.join(w['word'] for w in seg_words)})")
     w = hits[n - 1]
@@ -94,7 +96,11 @@ def _graphic(i: int, g, words: list[dict], end: float, rec: Path) -> Graphic:
     if t == "split":
         start = resolve_anchor(g["from"], words, end)[0]
         stop = resolve_anchor(g["to"], words, end)[1]
+        if stop <= start:
+            raise PlanError(f"{where}: \"to\" is before the start")
         params["media"] = _media(g["media"], rec, where)
+        params.pop("to", None)
+        params.pop("from", None)
     elif t == "list":
         if not isinstance(g["items"], list) or not g["items"]:
             raise PlanError(f"{where}: \"items\" must be a non-empty list")
@@ -127,9 +133,13 @@ def _graphic(i: int, g, words: list[dict], end: float, rec: Path) -> Graphic:
         if g.get(k):
             params[k] = _media(g[k], rec, where)
     if "until" in g:
-        stop = resolve_anchor(g["until"], words, end)[1]
+        u = g["until"]
+        if isinstance(u, (int, float)) and not isinstance(u, bool):
+            stop = float(u)
+        else:
+            stop = resolve_anchor(u, words, end)[1]
         if stop <= start:
-            raise PlanError(f"{where}: \"until\" is before \"at\"")
+            raise PlanError(f"{where}: \"until\" is before the start")
     return Graphic(t, round(start, 3), stop, params, bool(g.get("hit", False)), g.get("sfx"), i)
 
 
@@ -164,7 +174,7 @@ def _factcheck(out: Path, gs: list[Graphic]) -> list[str]:
             nums = []
         for n in nums:
             s = _fmt(n)
-            if not any(s in line for line in ok):
+            if not any(re.search(rf"(?<![\d,.]){re.escape(s)}(?![\d])", line) for line in ok):
                 w.append(f"WARN {g.type} at {g.start:.1f}s shows {s}, which no ✅ line in factcheck.md confirms")
     return w
 
@@ -183,9 +193,20 @@ def load_plan(out_dir: Path, factcheck: bool = False) -> Plan:
     words_p = out / "work" / "aligned_words.json"
     if not words_p.exists():
         raise PlanError(f"{words_p} not found — run `cutmate align` first")
-    words = json.loads(words_p.read_text(encoding="utf-8"))
+    try:
+        words = json.loads(words_p.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as e:
+        raise PlanError(f"{words_p}: invalid JSON ({e.msg}, line {e.lineno})") from None
+    if not isinstance(words, list):
+        raise PlanError(f"{words_p}: must be a list")
+    for j, w in enumerate(words):
+        if not isinstance(w, dict) or not all(k in w for k in ("seg", "word", "start", "end")):
+            raise PlanError(f"{words_p}: entry {j} missing seg/word/start/end")
     end = float(load_timed(out)[-1]["end"])
-    gs = sorted((_graphic(i, g, words, end, out.parent) for i, g in enumerate(raw.get("graphics") or [])),
+    graphics_list = raw.get("graphics")
+    if graphics_list is not None and not isinstance(graphics_list, list):
+        raise PlanError(f"{p}: \"graphics\" must be a list")
+    gs = sorted((_graphic(i, g, words, end, out.parent) for i, g in enumerate(graphics_list or [])),
                 key=lambda g: g.start)
     for i, g in enumerate(gs):
         if g.end is None:
@@ -196,6 +217,12 @@ def load_plan(out_dir: Path, factcheck: bool = False) -> Plan:
             raise PlanError(f"graphic #{g.index + 1} ({g.type}) starts at {g.start:.2f}s, too close to the end ({end:.2f}s)")
     warnings = _budget(gs) + (_factcheck(out, gs) if factcheck else [])
     cap = raw.get("captions") or {}
-    captions = {"key": [str(k).upper() for k in cap.get("key", [])], "max_words": int(cap.get("max_words", 3))}
+    if not isinstance(cap, dict):
+        raise PlanError(f"{p}: \"captions\" must be a dict")
+    try:
+        max_words = int(cap.get("max_words", 3))
+    except (ValueError, TypeError):
+        raise PlanError(f"{p}: captions \"max_words\" must be an int")
+    captions = {"key": [str(k).upper() for k in cap.get("key", [])], "max_words": max_words}
     music = raw.get("music") if isinstance(raw.get("music"), dict) else None
     return Plan(gs, captions, music, end, warnings)

@@ -29,7 +29,8 @@ def make_out(tmp_path, plan, words=WORDS):
 
 def test_norm():
     assert norm("Claude'a.") == "claude'a"
-    assert norm('„Krótko,"') == "krótko"
+    assert norm("„Krótko,”") == "krótko"
+    assert norm("”x”") == "x"
     assert norm("75%") == "75%"
 
 
@@ -94,6 +95,38 @@ def test_split_and_media(tmp_path):
     g = load_plan(out).graphics[0]
     assert (g.start, g.end) == (4.00, 5.60)
     assert g.params["media"] == str(out.parent / "broll" / "zrzut ekranu ą.png")
+    assert "to" not in g.params and "from" not in g.params
+
+
+def test_split_order_validation(tmp_path):
+    out = make_out(tmp_path, {"graphics": [
+        {"type": "split", "from": "S2:75%", "to": "S2:minus", "media": "broll/x.png"}]})
+    (out.parent / "broll").mkdir()
+    (out.parent / "broll" / "x.png").write_bytes(b"x")
+    with pytest.raises(PlanError, match="before the start"):
+        load_plan(out)
+
+
+def test_numeric_until_clamp(tmp_path):
+    out = make_out(tmp_path, {"graphics": [
+        {"type": "stamp", "at": "S2:koniec", "text": "KONIEC", "until": 10.5}]})
+    g = load_plan(out).graphics[0]
+    assert g.end == pytest.approx(9.95)
+
+
+def test_anchor_fallback_percent(tmp_path):
+    out = make_out(tmp_path, {"graphics": [
+        {"type": "counter", "at": "S2:75", "to": 75, "label": "x"}]})
+    g = load_plan(out).graphics[0]
+    assert g.start == 4.40
+
+
+def test_factcheck_digit_boundaries(tmp_path):
+    out = make_out(tmp_path, {"graphics": [
+        {"type": "counter", "at": "S2:75%", "to": 5, "label": "x"}]})
+    (out / "factcheck.md").write_text('- „75%" ✅ OK\n', encoding="utf-8")
+    w = load_plan(out, factcheck=True).warnings
+    assert len(w) == 1 and "5" in w[0]
 
 
 @pytest.mark.parametrize("graphic,msg", [
@@ -119,6 +152,36 @@ def test_plan_file_errors(tmp_path):
         load_plan(out)
     (out / "plan.json").unlink()
     with pytest.raises(PlanError, match="not found"):
+        load_plan(out)
+
+
+@pytest.mark.parametrize("bad_input,msg", [
+    ({"aligned_words": "invalid"}, "invalid JSON"),
+    ({"aligned_words": [{"seg": "S1"}]}, "missing seg/word/start/end"),
+    ({"graphics": "not a list"}, "must be a list"),
+    ({"captions": "not a dict"}, "must be a dict"),
+    ({"captions": {"max_words": "not_int"}}, "must be an int"),
+])
+def test_malformed_inputs(tmp_path, bad_input, msg):
+    out = tmp_path / "rec" / "out"
+    (out / "work").mkdir(parents=True)
+    (out / "work" / "edl_timed.json").write_text(json.dumps(TIMED), encoding="utf-8")
+    (out / "plan.json").write_text(json.dumps({}), encoding="utf-8")
+
+    if "aligned_words" in bad_input:
+        if bad_input["aligned_words"] == "invalid":
+            (out / "work" / "aligned_words.json").write_text("{oops", encoding="utf-8")
+        else:
+            (out / "work" / "aligned_words.json").write_text(json.dumps(bad_input["aligned_words"]), encoding="utf-8")
+    else:
+        (out / "work" / "aligned_words.json").write_text(json.dumps(WORDS), encoding="utf-8")
+
+    if "graphics" in bad_input or "captions" in bad_input:
+        plan_content = {}
+        plan_content.update({k: v for k, v in bad_input.items() if k != "aligned_words"})
+        (out / "plan.json").write_text(json.dumps(plan_content), encoding="utf-8")
+
+    with pytest.raises(PlanError, match=msg):
         load_plan(out)
 
 
