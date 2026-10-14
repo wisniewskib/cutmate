@@ -25,6 +25,8 @@ def render(out_dir: Path) -> dict:
     dst = out / "work" / "render.mp4"
     dst.parent.mkdir(parents=True, exist_ok=True)
     dst.unlink(missing_ok=True)
+    for old in out.glob("check_*.png"):
+        old.unlink()
     cmd = hf("render", "--fps", "30", "--quality", "delivery", "--format", "mp4", "-o", "../work/render.mp4")
     code = _stream(cmd, proj)
     if code or not dst.exists():

@@ -30,3 +30,27 @@ def test_carve_missing_script_is_soft(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(music, "_carve_script", lambda: None)
     assert music.carve(tmp_path) is False
     assert "WARN" in capsys.readouterr().out
+
+
+def test_carve_script_picks_newest_version(tmp_path, monkeypatch):
+    base = tmp_path / ".claude" / "plugins" / "cache" / "hyperframes"
+    for v in ("0.8.9", "0.8.157", "0.8.20"):
+        f = base / "hyperframes" / v / "skills" / "hyperframes-audio" / "scripts" / "carve.mjs"
+        f.parent.mkdir(parents=True)
+        f.write_text("")
+    monkeypatch.setenv("HOME", str(tmp_path))
+    assert "/0.8.157/" in music._carve_script()
+
+
+def test_carve_installs_pinned_core(tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr(music, "_carve_script", lambda: "carve.mjs")
+    monkeypatch.setattr(music.shutil, "which", lambda n: n)
+
+    def fake_run(cmd, cwd=None, env=None):
+        import subprocess
+        calls.append(cmd)
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+    monkeypatch.setattr(music, "run", fake_run)
+    assert music.carve(tmp_path) is True
+    assert "@hyperframes/core@0.8.157" in calls[0]

@@ -44,3 +44,29 @@ def test_stale_output_detection(monkeypatch, tmp_path):
     # Should raise CutmateError because the fake Chrome doesn't create a new PNG
     with pytest.raises(CutmateError, match="failed"):
         shot.screenshot("https://example.com", png)
+
+
+@pytest.mark.parametrize("arg,expected", [("example.invalid/x", "https://example.invalid/x"),
+                                          ("http://a.b/c", "http://a.b/c")])
+def test_url_scheme_handling(monkeypatch, tmp_path, arg, expected):
+    seen = {}
+    monkeypatch.setattr(shot, "find_chrome", lambda: "chrome")
+
+    def fake_run(cmd, **kw):
+        seen["url"] = cmd[-1]
+        return subprocess.CompletedProcess(cmd, 0)
+    monkeypatch.setattr(shot.subprocess, "run", fake_run)
+    with pytest.raises(CutmateError):   # nothing written → failure, but the command was built
+        shot.screenshot(arg, tmp_path / "x.png")
+    assert seen["url"] == expected
+
+
+def test_existing_path_becomes_file_url(monkeypatch, tmp_path):
+    page = tmp_path / "p.html"
+    page.write_text("x")
+    seen = {}
+    monkeypatch.setattr(shot, "find_chrome", lambda: "chrome")
+    monkeypatch.setattr(shot.subprocess, "run", lambda cmd, **kw: seen.update(url=cmd[-1]) or subprocess.CompletedProcess(cmd, 0))
+    with pytest.raises(CutmateError):
+        shot.screenshot(str(page), tmp_path / "x.png")
+    assert seen["url"] == page.resolve().as_uri()

@@ -110,3 +110,17 @@ def test_malformed_checkpoints(tmp_path, monkeypatch):
 
     with pytest.raises(CutmateError, match="malformed checkpoints.json"):
         R.render(out)
+
+
+def test_render_clears_old_check_frames(tmp_path, monkeypatch):
+    out = setup_out(tmp_path)
+    (out / "check_9_99.png").write_bytes(b"old")
+    monkeypatch.setattr(R, "run", lambda cmd, cwd=None, env=None: subprocess.CompletedProcess(cmd, 0, "Check passed", ""))
+    monkeypatch.setattr(R, "hf", lambda *a: ["hf", *a])
+
+    def fake_stream(cmd, cwd):
+        make_clip(out / "work" / "render.mp4", dur=2.0, gaps=())
+        return 0
+    monkeypatch.setattr(R, "_stream", fake_stream)
+    R.render(out)
+    assert not (out / "check_9_99.png").exists() and (out / "check_0_50.png").exists()

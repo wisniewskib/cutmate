@@ -106,8 +106,8 @@ Follow `frame.md`. Write `out/plan.json`:
 
 `$CM build <folder>/out` — fix every `cutmate:` error (it names the bad anchor and lists the segment's words) and think
 about every `WARN`. The last line prints `checkpoints: t1,t2,...`. Then, from the project dir (no path argument):
-`( cd <folder>/out/composition && npx --yes hyperframes@0.8.157 snapshot --at <checkpoints> --no-end --describe false -o ../snapshots )`
-and READ every frame: overlaps, text wrapping, safe zones, captions readable, split panel shows the media. Fix
+`( cd <folder>/out/composition && rm -rf ../snapshots && npx --yes hyperframes@0.8.157 snapshot --at <checkpoints> --no-end --describe false -o ../snapshots )`
+(skip the snapshot when build printed no checkpoints) and READ every frame: overlaps, text wrapping, safe zones, captions readable, split panel shows the media. Fix
 `plan.json` and rebuild until clean.
 
 ## 7. Render and QA

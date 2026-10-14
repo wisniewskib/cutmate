@@ -2,6 +2,7 @@
 baked fades; optional HyperFrames voice carve so the bed ducks under speech."""
 import glob
 import os
+import re
 import shutil
 from pathlib import Path
 
@@ -41,7 +42,10 @@ def prepare_music(src: Path, dst: Path, end: float) -> Path:
 
 def _carve_script() -> str | None:
     pattern = os.path.expanduser("~/.claude/plugins/cache/hyperframes/*/*/skills/hyperframes-audio/scripts/carve.mjs")
-    hits = sorted(glob.glob(pattern))
+    def version(p: str) -> tuple:
+        m = re.search(r"(\d+)\.(\d+)\.(\d+)", p.split("/hyperframes/", 1)[-1])
+        return tuple(int(x) for x in m.groups()) if m else (0, 0, 0)
+    hits = sorted(glob.glob(pattern), key=lambda p: (version(p), p))
     return hits[-1] if hits else None
 
 
@@ -52,7 +56,7 @@ def carve(project: Path, strength: float = 0.3) -> bool:
         return False
     project = Path(project)
     if not (project / "node_modules" / "@hyperframes" / "core").exists():
-        r = run([shutil.which("npm"), "i", "-D", "--silent", "@hyperframes/core"], cwd=project)
+        r = run([shutil.which("npm"), "i", "-D", "--silent", "@hyperframes/core@0.8.157"], cwd=project)
         if r.returncode:
             print("WARN music: could not install @hyperframes/core — bed kept at a plain level")
             return False

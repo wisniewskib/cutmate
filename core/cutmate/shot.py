@@ -37,7 +37,8 @@ def screenshot(url: str, dst: Path, width: int = 1000, height: int = 700, dark: 
     # Delete stale output to ensure we detect failed runs
     dst.unlink(missing_ok=True)
     if "://" not in url:
-        url = Path(url).resolve().as_uri()
+        local = Path(url).expanduser()
+        url = local.resolve().as_uri() if local.exists() else "https://" + url
     # Use isolated profile to prevent interference from running Chrome instances
     profile_dir = tempfile.mkdtemp()
     try:
