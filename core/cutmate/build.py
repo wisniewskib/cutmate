@@ -14,6 +14,7 @@ from .cut import load_timed
 from .errors import CutmateError
 from .hf import ensure_project
 from .media import duration
+from .music import carve, pick_source, prepare_music
 from .paths import assets_dir, theme_dir, web_dir
 from .plan import Graphic, load_plan
 
@@ -256,7 +257,7 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
     proj = out / "composition"
     ensure_project(proj)
     A = proj / "assets"
-    for d in (A / "fonts", A / "sfx", A / "media", proj / "compositions"):
+    for d in (A / "fonts", A / "sfx", A / "media", A / "bgm", proj / "compositions"):
         d.mkdir(parents=True, exist_ok=True)
     _copy_if_newer(out / "aroll.mp4", A / "aroll.mp4")
     for f in ("tokens.css", "theme.css"):
@@ -291,11 +292,23 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
     cfg = {"end": end, "pages": caption_pages(words, end, plan.captions["key"], plan.captions["max_words"]),
            "cam": cam, "hits": hits, "splits": splits}
     audio = sfx_tags(cues, end, A)
+    src = pick_source(plan.music, music, out)
+    if src:
+        prepare_music(src, A / "bgm" / "bed.m4a", end)
+        vol = float((plan.music or {}).get("volume", 0.45))
+        audio.append(f'      <audio id="music-bed" src="assets/bgm/bed.m4a" data-start="0" data-duration="{round(end, 3)}" '
+                     f'data-track-index="9" data-volume="{vol}" data-audio-group="music"></audio>')
     _prune(A / "sfx", set(re.findall(r'assets/sfx/([^"]+)"', "".join(audio))))
+    if src:
+        _prune(A / "bgm", {"bed.m4a"})
+    else:
+        _prune(A / "bgm", set())
     vdur = round(min(end, duration(A / "aroll.mp4")), 3)
     (proj / "index.html").write_text(INDEX.format(lang=language, w=W, h=H, end=round(end, 3), vdur=vdur,
                                                   hosts="\n".join(hosts), audio="\n".join(audio), cfg=_js(cfg)),
                                      encoding="utf-8")
+    if src:
+        carve(proj)
     checkpoints = sorted({round(min(g.start + 0.4, g.end - 0.05), 2) for g in plan.graphics})
     (out / "work" / "checkpoints.json").write_text(json.dumps(checkpoints), encoding="utf-8")
     return {"project": proj, "warnings": plan.warnings, "checkpoints": checkpoints}
