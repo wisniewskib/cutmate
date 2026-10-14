@@ -95,6 +95,12 @@ def _parser() -> argparse.ArgumentParser:
     r.add_argument("--start", type=float, required=True)
     r.add_argument("--end", type=float, required=True)
     r.add_argument("--bin", type=_positive_float, default=0.05)
+    sh2 = sub.add_parser("shot", help="screenshot a web page for b-roll")
+    sh2.add_argument("url")
+    sh2.add_argument("-o", "--out", required=True)
+    sh2.add_argument("--width", type=_min_one_int, default=1000)
+    sh2.add_argument("--height", type=_min_one_int, default=700)
+    sh2.add_argument("--light", action="store_true")
     return ap
 
 
@@ -161,6 +167,9 @@ def _dispatch(args) -> int:
         for t, db in bins:
             print(f"{t:7.2f} {db:6.1f} " + "#" * max(0, int((db + 60) / 3)))
         print("blobs: " + " ".join(f"[{a:.2f}-{b:.2f}]" for a, b in blobs(bins)))
+    elif args.cmd == "shot":
+        from .shot import screenshot
+        print(screenshot(args.url, Path(args.out), args.width, args.height, dark=not args.light))
     return 0
 
 
