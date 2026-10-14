@@ -101,6 +101,11 @@ def sfx() -> None:
         out = dst / f"{cue}.mp3"
         subprocess.run(["ffmpeg", "-nostdin", "-v", "error", "-y", "-i", str(raw), "-af", f"volume={gain:.2f}dB",
                         "-ac", "1", "-ar", "48000", "-b:a", "128k", str(out)], check=True)
+        # mp3 encoding/resampling overshoots on transients: re-measure the encoded file and correct once
+        err = peak_db(out) + 3.0
+        if abs(err) > 0.3:
+            subprocess.run(["ffmpeg", "-nostdin", "-v", "error", "-y", "-i", str(raw), "-af",
+                            f"volume={gain - err:.2f}dB", "-ac", "1", "-ar", "48000", "-b:a", "128k", str(out)], check=True)
         d = round(probe_duration(out), 3)
         if d > MAX_DUR.get(cue, 1.5):
             sys.exit(f"{cue}: {pick} is {d}s long — pick a shorter candidate in CUES")
