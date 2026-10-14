@@ -66,6 +66,7 @@ def _parser() -> argparse.ArgumentParser:
     a.add_argument("--language", choices=config.LANGUAGES)
     tc = sub.add_parser("theme-check", help="render every component of a theme and check it")
     tc.add_argument("--theme")
+    tc.add_argument("--language", choices=config.LANGUAGES)
     b = sub.add_parser("build", help="plan.json → HyperFrames project (out/composition)")
     b.add_argument("out")
     b.add_argument("--theme")
@@ -127,7 +128,7 @@ def _dispatch(args) -> int:
             raise CutmateError("alignment models not installed. Run /cutmate:setup.")
     elif args.cmd == "theme-check":
         from .theme_check import theme_check
-        r = theme_check(args.theme or cfg.theme)
+        r = theme_check(args.theme or cfg.theme, language=language)
         print(f"check passed — contact sheet: {r['sheet']}")
     elif args.cmd == "build":
         from .build import build

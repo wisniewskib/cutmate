@@ -10,7 +10,8 @@ if (P.logo) {
   im.src = P.logo;
   tl.fromTo(im, { opacity: 0, scale: 0.6 }, { opacity: 1, scale: 1, duration: 0.3, ease: "back.out(2)" }, Math.max(0, P.at - 0.15));
 }
-const t = U.el("div", "title", P.text, box);
+const n = String(P.text).length;
+const t = U.el("div", "title" + (n > 16 ? " xs" : n > 10 ? " sm" : ""), P.text, box);
 tl.fromTo(t, { opacity: 0, scale: 1.6 }, { opacity: 1, scale: 1, duration: 0.35, ease: "expo.out" }, P.at);
 U.out(band, P.end - 0.2);
 </script>

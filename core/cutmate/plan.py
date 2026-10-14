@@ -104,6 +104,8 @@ def _graphic(i: int, g, words: list[dict], end: float, rec: Path) -> Graphic:
     elif t == "list":
         if not isinstance(g["items"], list) or not g["items"]:
             raise PlanError(f"{where}: \"items\" must be a non-empty list")
+        if len(g["items"]) > 4:
+            raise PlanError(f"{where}: a list has at most 4 items (got {len(g['items'])})")
         items = []
         for j, it in enumerate(g["items"]):
             if not isinstance(it, dict) or "text" not in it or "at" not in it:
@@ -124,6 +126,8 @@ def _graphic(i: int, g, words: list[dict], end: float, rec: Path) -> Graphic:
         params["image"] = _media(g["image"], rec, where)
     if t == "bars":
         rows = g["rows"]
+        if isinstance(rows, list) and len(rows) > 3:
+            raise PlanError(f"{where}: bars have at most 3 rows (got {len(rows)})")
         if not isinstance(rows, list) or not rows or any(
                 not isinstance(r, dict) or "label" not in r or isinstance(r.get("value"), bool)
                 or not isinstance(r.get("value"), (int, float)) for r in rows):

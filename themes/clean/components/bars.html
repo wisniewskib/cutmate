@@ -10,7 +10,7 @@ P.rows.forEach((r, i) => {
   U.el("span", null, String(r.value), l);
   const tr = U.el("div", "track", null, row);
   const f = U.el("span", "fill", null, tr);
-  tl.fromTo(f, { scaleX: 0 }, { scaleX: max > 0 ? r.value / max : 0, duration: 0.5, ease: "power3.out" }, P.at + 0.15 + i * 0.15);
+  tl.fromTo(f, { scaleX: 0 }, { scaleX: max > 0 ? Math.max(0, r.value / max) : 0, duration: 0.5, ease: "power3.out" }, P.at + 0.15 + i * 0.15);
 });
 if (P.note) U.el("div", "note", P.note, b);
 tl.fromTo(b, { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.3, ease: "power3.out" }, P.at);

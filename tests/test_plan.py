@@ -140,6 +140,8 @@ def test_factcheck_digit_boundaries(tmp_path):
     ({"type": "chip", "at": "S2:75%", "text": "x", "until": "S1:mniej"}, "before"),
     ({"type": "bars", "at": "S2:75%", "head": "h", "rows": [{"label": "a"}]}, "rows"),
     ({"type": "list", "items": []}, "items"),
+    ({"type": "list", "items": [{"text": "a", "at": "S1:mniej"}] * 5}, "at most 4 items"),
+    ({"type": "bars", "at": "S2:75%", "head": "h", "rows": [{"label": "a", "value": 1}] * 4}, "at most 3 rows"),
 ])
 def test_validation_errors(tmp_path, graphic, msg):
     with pytest.raises(PlanError, match=msg):
