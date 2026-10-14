@@ -3,6 +3,7 @@ import sys
 from pathlib import Path
 
 from . import config
+from .backends import get_backend
 from .errors import CutmateError
 from .formats import FORMATS
 
@@ -73,6 +74,18 @@ def _parser() -> argparse.ArgumentParser:
     q.add_argument("--no-asr", action="store_true")
     q.add_argument("--backend", choices=config.BACKENDS)
     q.add_argument("--language", choices=config.LANGUAGES)
+    p = sub.add_parser("probe", help="re-transcribe one short window (hidden retakes)")
+    p.add_argument("wav")
+    p.add_argument("--start", type=float, required=True)
+    p.add_argument("--end", type=float, required=True)
+    p.add_argument("--prompt")
+    p.add_argument("--backend", choices=config.BACKENDS)
+    p.add_argument("--language", choices=config.LANGUAGES)
+    r = sub.add_parser("rms", help="RMS scan in short bins (speech blobs)")
+    r.add_argument("wav")
+    r.add_argument("--start", type=float, required=True)
+    r.add_argument("--end", type=float, required=True)
+    r.add_argument("--bin", type=_positive_float, default=0.05)
     return ap
 
 
@@ -80,7 +93,6 @@ def _dispatch(args) -> int:
     cfg = config.load()
     language = getattr(args, "language", None) or cfg.language
     if args.cmd == "transcribe":
-        from .backends import get_backend
         from .transcribe import run_transcribe
         run_transcribe(Path(args.rec), get_backend(args.backend or cfg.transcription), language, args.prompt, args.force)
     elif args.cmd == "sheet":
@@ -111,10 +123,20 @@ def _dispatch(args) -> int:
         from .finalize import finalize
         return 0 if finalize(Path(args.src), Path(args.dst), args.format, check=args.check)["ok"] else 1
     elif args.cmd == "qa":
-        from .backends import get_backend
         from .qa import run_qa
         backend = None if args.no_asr else get_backend(args.backend or cfg.transcription)
         run_qa(Path(args.out), backend, language, asr=not args.no_asr)
+    elif args.cmd == "probe":
+        from .backends import transcribe_window
+        t = transcribe_window(get_backend(args.backend or cfg.transcription), Path(args.wav), args.start, args.end,
+                              language, args.prompt)
+        print(" ".join(f"{w.word}@{w.start:.2f}-{w.end:.2f}" for w in t.words))
+    elif args.cmd == "rms":
+        from .takes import blobs, rms_bins
+        bins = rms_bins(Path(args.wav), args.start, args.end, args.bin)
+        for t, db in bins:
+            print(f"{t:7.2f} {db:6.1f} " + "#" * max(0, int((db + 60) / 3)))
+        print("blobs: " + " ".join(f"[{a:.2f}-{b:.2f}]" for a, b in blobs(bins)))
     return 0
 
 
