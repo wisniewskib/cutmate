@@ -101,6 +101,12 @@ def _parser() -> argparse.ArgumentParser:
     sh2.add_argument("--width", type=_min_one_int, default=1000)
     sh2.add_argument("--height", type=_min_one_int, default=700)
     sh2.add_argument("--light", action="store_true")
+    th2 = sub.add_parser("thumb", help="thumbnail from a frame + title")
+    th2.add_argument("out")
+    th2.add_argument("--at", type=float, required=True)
+    th2.add_argument("--title", required=True)
+    th2.add_argument("--hook", default="")
+    th2.add_argument("--theme")
     return ap
 
 
@@ -170,6 +176,11 @@ def _dispatch(args) -> int:
     elif args.cmd == "shot":
         from .shot import screenshot
         print(screenshot(args.url, Path(args.out), args.width, args.height, dark=not args.light))
+    elif args.cmd == "thumb":
+        from .thumb import thumbnail
+        r = thumbnail(Path(args.out), args.at, args.title, args.hook, args.theme or cfg.theme)
+        print(r["png"])
+        print(r["jpg"])
     return 0
 
 
