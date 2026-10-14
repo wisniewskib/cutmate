@@ -1,0 +1,8 @@
+<script>
+const band = U.el("div", "band");
+const c = U.el("div", "chip", null, band);
+if (P.logo || P.icon) { const im = U.el("img", null, null, c); im.src = P.logo || P.icon; }
+U.el("span", null, P.text, c);
+tl.fromTo(c, { opacity: 0, y: 40, scale: 0.9 }, { opacity: 1, y: 0, scale: 1, duration: 0.3, ease: "back.out(2)" }, P.at);
+U.out(band, P.end - 0.2);
+</script>

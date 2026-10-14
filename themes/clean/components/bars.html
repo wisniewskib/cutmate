@@ -1,0 +1,18 @@
+<script>
+const band = U.el("div", "band");
+const b = U.el("div", "bars", null, band);
+U.el("div", "head", P.head, b);
+const max = Math.max(...P.rows.map((r) => r.value));
+P.rows.forEach((r, i) => {
+  const row = U.el("div", "row", null, b);
+  const l = U.el("div", "lbl", null, row);
+  U.el("span", null, r.label, l);
+  U.el("span", null, String(r.value), l);
+  const tr = U.el("div", "track", null, row);
+  const f = U.el("span", "fill", null, tr);
+  tl.fromTo(f, { scaleX: 0 }, { scaleX: max > 0 ? r.value / max : 0, duration: 0.5, ease: "power3.out" }, P.at + 0.15 + i * 0.15);
+});
+if (P.note) U.el("div", "note", P.note, b);
+tl.fromTo(b, { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.3, ease: "power3.out" }, P.at);
+U.out(band, P.end - 0.2);
+</script>

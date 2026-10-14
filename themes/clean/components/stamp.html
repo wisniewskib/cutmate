@@ -1,0 +1,6 @@
+<script>
+const band = U.el("div", "band");
+const s = U.el("div", "stamp", P.text, band);
+tl.fromTo(s, { opacity: 0, scale: 2.2, rotation: 0 }, { opacity: 1, scale: 1, rotation: -4, duration: 0.2, ease: "power4.in" }, P.at);
+U.out(band, P.end - 0.2);
+</script>

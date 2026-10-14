@@ -11,3 +11,31 @@ html, body { width: 1080px; height: 1920px; overflow: hidden; background: #000; 
       text-shadow: 0 4px 18px rgba(0, 0, 0, 0.7), 0 2px 4px rgba(0, 0, 0, 0.6); opacity: 0; }
 .cw.key, .cw.num { color: var(--accent); }
 .band { position: absolute; left: 60px; right: 60px; top: 230px; height: 490px; display: flex; align-items: center; justify-content: center; }
+.card { background: var(--card); color: var(--ink); border-radius: 40px; padding: 36px 56px; box-shadow: var(--shadow); text-align: center; font-family: var(--font); }
+.card .big { display: block; font-weight: 900; font-size: 190px; line-height: 1; letter-spacing: -4px; }
+.card .label { display: block; font-weight: 800; font-size: 44px; letter-spacing: 0.12em; color: var(--muted); margin-top: 12px; }
+.ttl { display: block; text-align: center; }
+.ttl .kicker { display: block; font: 800 40px var(--font); letter-spacing: 0.2em; color: var(--accent); margin-bottom: 24px; text-transform: uppercase; text-shadow: 0 2px 10px rgba(0, 0, 0, 0.6); }
+.ttl .logo { display: block; height: 120px; margin: 0 auto 24px; }
+.ttl .title { display: block; font: 900 150px/1 var(--font); color: var(--text); text-transform: uppercase; text-shadow: var(--shadow); }
+.stamp { display: block; font: 900 210px/1 var(--font); color: var(--ink); background: var(--card); border-radius: 36px; padding: 10px 48px; box-shadow: var(--shadow); text-transform: uppercase; }
+.chip { display: flex; align-items: center; gap: 24px; background: var(--card); color: var(--ink); border-radius: 999px; padding: 24px 48px; font: 800 64px var(--font); box-shadow: var(--shadow); }
+.chip img { height: 72px; }
+.list { display: flex; flex-direction: column; gap: 22px; width: 100%; }
+.list .head { display: block; font: 800 40px var(--font); letter-spacing: 0.2em; color: var(--accent); text-align: center; text-transform: uppercase; text-shadow: 0 2px 10px rgba(0, 0, 0, 0.6); }
+.list .item { display: block; background: var(--card); color: var(--ink); border-radius: 28px; padding: 22px 36px; font: 800 58px var(--font); opacity: 0; }
+.bars { width: 100%; background: var(--card); border-radius: 40px; padding: 36px 44px; box-shadow: var(--shadow); font-family: var(--font); color: var(--ink); }
+.bars .head { display: block; font-weight: 800; font-size: 40px; letter-spacing: 0.14em; color: var(--muted); margin-bottom: 20px; text-transform: uppercase; }
+.bars .row { display: block; margin: 16px 0; }
+.bars .lbl { display: flex; justify-content: space-between; font-weight: 800; font-size: 44px; }
+.bars .track { display: block; height: 34px; background: rgba(15, 23, 42, 0.08); border-radius: 17px; margin-top: 8px; overflow: hidden; }
+.bars .fill { display: block; height: 100%; width: 100%; background: var(--accent); border-radius: 17px; transform-origin: 0 50%; }
+.bars .note { display: block; font-weight: 500; font-size: 28px; color: var(--muted); margin-top: 14px; letter-spacing: 0.1em; }
+.point { position: absolute; width: 520px; background: var(--card); border-radius: 32px; padding: 16px; box-shadow: var(--shadow); }
+.point .shot { display: block; width: 100%; height: 340px; border-radius: 20px; background-size: cover; background-position: center; }
+.split-wrap { position: absolute; left: 0; right: 0; top: 0; height: 900px; }
+.split-panel { position: absolute; inset: 0; background: #0b0b0f; overflow: hidden; }
+.split-panel .media { position: absolute; left: 40px; right: 40px; top: 40px; bottom: 40px; border-radius: 28px; overflow: hidden; background: #000; }
+.split-panel .media video { width: 100%; height: 100%; object-fit: contain; }
+.split-panel .media .img { position: absolute; inset: 0; background-size: contain; background-position: center; background-repeat: no-repeat; }
+.split-edge { position: absolute; left: 0; right: 0; top: 896px; height: 8px; background: var(--accent); }
