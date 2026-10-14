@@ -58,7 +58,7 @@ def _load_font(th: Path, meta: dict, key: str, size: int) -> ImageFont.FreeTypeF
 
 def thumbnail(out_dir: Path, at: float, title: str, hook: str = "", theme: str = "clean") -> dict:
     out = Path(out_dir)
-    src = out / "final.mp4" if (out / "final.mp4").exists() else out / "aroll.mp4"
+    src = out / "aroll.mp4"  # never final.mp4: it has burned-in captions and graphics
     if not src.exists():
         raise CutmateError(f"{src} not found — run `cutmate cut` first")
 

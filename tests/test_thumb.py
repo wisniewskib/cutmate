@@ -23,7 +23,7 @@ def test_thumbnail_files(tmp_path):
     assert png.size == (1080, 1920)
     assert r["jpg"].stat().st_size < 2_000_000
     top = png.crop((0, 0, 1080, 200)).convert("L")
-    assert sum(top.getdata()) / (1080 * 200) < 120   # darkened top band
+    assert sum(top.get_flattened_data()) / (1080 * 200) < 120   # darkened top band
 
 
 def test_thumbnail_title_too_long(tmp_path):
@@ -54,7 +54,7 @@ def test_thumbnail_accent_color(tmp_path):
     # Crop to title area and check for accent color pixels
     title_area = png.crop((200, 300, 880, 600))
     title_rgb = title_area.convert("RGB")
-    pixels = list(title_rgb.getdata())
+    pixels = list(title_rgb.get_flattened_data())
     accent_hex = "#7dd3fc"
     accent_rgb = tuple(int(accent_hex[i:i+2], 16) for i in (1, 3, 5))
     # Check for pixels close to accent color (tolerance ~40 per channel)
@@ -72,9 +72,20 @@ def test_thumbnail_multiline_accent(tmp_path):
     # Crop to title area
     title_area = png.crop((150, 300, 930, 700))
     title_rgb = title_area.convert("RGB")
-    pixels = list(title_rgb.getdata())
+    pixels = list(title_rgb.get_flattened_data())
     accent_hex = "#7dd3fc"
     accent_rgb = tuple(int(accent_hex[i:i+2], 16) for i in (1, 3, 5))
     # Check for accent color pixels (the word KONKRETY should be in accent)
     accent_pixels = [p for p in pixels if all(abs(p[i] - accent_rgb[i]) < 40 for i in range(3))]
     assert len(accent_pixels) > 100, "Expected accent color pixels in last word"
+
+
+def test_thumbnail_uses_aroll_not_final(tmp_path):
+    out = tmp_path / "out"
+    make_clip(out / "aroll.mp4", dur=3.0, size="1080x1920", gaps=())
+    import subprocess
+    subprocess.run(["ffmpeg", "-nostdin", "-v", "error", "-y", "-f", "lavfi", "-i", "color=c=0xff0000:s=1080x1920:d=3:r=30",
+                    "-pix_fmt", "yuv420p", str(out / "final.mp4")], check=True)
+    r = thumbnail(out, 1.0, "X")
+    px = Image.open(r["png"]).convert("RGB").getpixel((540, 1700))
+    assert not (px[0] > 200 and px[1] < 60 and px[2] < 60)   # not final.mp4's red
