@@ -1,0 +1,33 @@
+"""Render the HyperFrames project: check → render (progress streamed) → finalize (-14 LUFS, spec check, frames)."""
+import json
+import subprocess
+from pathlib import Path
+
+from .errors import CutmateError
+from .finalize import finalize
+from .hf import hf
+from .media import run
+
+
+def _stream(cmd: list[str], cwd: Path) -> int:
+    """Run with output going straight to the terminal so HyperFrames' progress bar is visible."""
+    return subprocess.run(cmd, cwd=str(cwd)).returncode
+
+
+def render(out_dir: Path) -> dict:
+    out = Path(out_dir).resolve()
+    proj = out / "composition"
+    if not (proj / "index.html").exists():
+        raise CutmateError(f"{proj / 'index.html'} not found — run `cutmate build` first")
+    chk = run(hf("check", str(proj)), cwd=proj)
+    if chk.returncode:
+        raise CutmateError("hyperframes check failed: " + " ".join((chk.stdout + chk.stderr).split())[-500:])
+    dst = out / "work" / "render.mp4"
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    cmd = hf("render", "--fps", "30", "--quality", "delivery", "--format", "mp4", "-o", str(dst))
+    code = _stream(cmd, proj)
+    if code or not dst.exists():
+        raise CutmateError(f"hyperframes render failed (exit {code}) — rerun in {proj}: {' '.join(cmd)}")
+    cp = out / "work" / "checkpoints.json"
+    checkpoints = json.loads(cp.read_text(encoding="utf-8")) if cp.exists() else []
+    return finalize(dst, out / "final.mp4", "9:16", check=checkpoints)

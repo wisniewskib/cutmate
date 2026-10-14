@@ -71,6 +71,8 @@ def _parser() -> argparse.ArgumentParser:
     b.add_argument("out")
     b.add_argument("--theme")
     b.add_argument("--language", choices=config.LANGUAGES)
+    rd = sub.add_parser("render", help="check + render + finalize the built project")
+    rd.add_argument("out")
     f = sub.add_parser("finalize", help="loudness fix + spec check of a render")
     f.add_argument("src")
     f.add_argument("dst")
@@ -138,6 +140,9 @@ def _dispatch(args) -> int:
             print(w)
         print(f"project: {r['project']}")
         print("checkpoints: " + ",".join(f"{t:.2f}" for t in r["checkpoints"]))
+    elif args.cmd == "render":
+        from .render import render
+        return 0 if render(Path(args.out))["ok"] else 1
     elif args.cmd == "finalize":
         from .finalize import finalize
         return 0 if finalize(Path(args.src), Path(args.dst), args.format, check=args.check)["ok"] else 1
