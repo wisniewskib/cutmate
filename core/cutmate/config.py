@@ -19,7 +19,7 @@ def home() -> Path:
 class Config:
     transcription: str = "local"
     language: str = "pl"
-    theme: str = "neutral"
+    theme: str = "clean"
     steps: dict = field(default_factory=lambda: dict(DEFAULT_STEPS))
     music: dict = field(default_factory=lambda: dict(DEFAULT_MUSIC))
 

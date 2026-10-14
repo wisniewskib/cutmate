@@ -18,7 +18,7 @@ def test_load_missing_returns_defaults(tmp_path):
     cfg = config.load(tmp_path / "config.json")
     assert cfg.transcription == "local"
     assert cfg.language == "pl"
-    assert cfg.theme == "neutral"
+    assert cfg.theme == "clean"
     assert cfg.steps == {"factcheck": True, "qa": True, "thumbnail": True}
     assert cfg.music == {"source": "none", "folder": None}
 

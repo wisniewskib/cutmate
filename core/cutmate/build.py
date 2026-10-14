@@ -81,13 +81,13 @@ def _js(obj) -> str:
 
 
 def _core(word: str) -> str:
-    return re.sub(r"[^\w%']", "", str(word).upper())
+    return re.sub(r"[^\w%']", "", str(word).replace("\u2019", "'").upper())
 
 
 def caption_pages(words: list[dict], end: float, key: list[str], max_words: int = 3, max_chars: int = 16,
                   pause: float = 0.35) -> list[dict]:
     pages, cur, n = [], [], 0
-    for w in words:
+    for w in (x for x in words if str(x["word"]).strip()):
         if cur:
             prev = cur[-1]
             if (len(cur) >= max_words or n + len(w["word"]) > max_chars or prev["seg"] != w["seg"]
@@ -103,7 +103,7 @@ def caption_pages(words: list[dict], end: float, key: list[str], max_words: int 
     for i, p in enumerate(pages):
         start = max(0.0, p[0]["start"] - 0.04)
         nxt = pages[i + 1][0]["start"] - 0.04 if i + 1 < len(pages) else end
-        stop = min(max(nxt, start + 0.2), max(p[-1]["end"] + 0.8, start + 0.2), end - 0.01)
+        stop = min(nxt, max(p[-1]["end"] + 0.8, start + 0.2), end - 0.01)
         ws = []
         for w in p:
             c = _core(w["word"])
@@ -138,6 +138,24 @@ def hits_for(graphics: list[Graphic], cam: list[list[float]], timed: list[dict],
     return out
 
 
+def _theme_meta(th: Path) -> dict:
+    f = th / "theme.json"
+    try:
+        meta = json.loads(f.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as e:
+        raise CutmateError(f"{f}: cannot read theme ({e})") from None
+    if not isinstance(meta, dict) or not isinstance(meta.get("sfx"), dict) or not (
+            isinstance(meta.get("hit_sfx"), list) and len(meta["hit_sfx"]) == 2):
+        raise CutmateError(f"{f}: theme.json needs an \"sfx\" object and a \"hit_sfx\" [name, volume] pair")
+    return meta
+
+
+def _prune(folder: Path, keep: set) -> None:
+    for f in folder.iterdir():
+        if f.is_file() and f.name not in keep:
+            f.unlink()
+
+
 def _sections(path: Path) -> dict:
     d = dict(_SECTION.findall(path.read_text(encoding="utf-8")))
     if "script" not in d:
@@ -154,7 +172,7 @@ def _ascii_name(path: Path, n: int) -> str:
 def _copy_media(src: str, assets: Path, media_map: dict) -> str:
     if src not in media_map:
         name = _ascii_name(Path(src), len(media_map) + 1)
-        shutil.copy2(src, assets / "media" / name)
+        _copy_if_newer(Path(src), assets / "media" / name)
         media_map[src] = f"assets/media/{name}"
     return media_map[src]
 
@@ -232,7 +250,7 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
     out = Path(out_dir).resolve()
     plan = load_plan(out, factcheck)
     th = theme_dir(theme)
-    meta = json.loads((th / "theme.json").read_text(encoding="utf-8"))
+    meta = _theme_meta(th)
     if not (out / "aroll.mp4").exists():
         raise CutmateError(f"{out / 'aroll.mp4'} not found — run `cutmate cut` first")
     proj = out / "composition"
@@ -261,6 +279,7 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
                      f'data-start="{hs}" data-duration="{round(g.end - hs, 3)}" data-track-index="{2 + i % 2}" '
                      f'data-width="{W}" data-height="{H}"></div>')
         cues += _sfx_cues(g, meta)
+    _prune(A / "media", {Path(v).name for v in media_map.values()})
     for f in (proj / "compositions").glob("gx-*.html"):
         if f.stem not in ids:
             f.unlink()
@@ -272,6 +291,7 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
     cfg = {"end": end, "pages": caption_pages(words, end, plan.captions["key"], plan.captions["max_words"]),
            "cam": cam, "hits": hits, "splits": splits}
     audio = sfx_tags(cues, end, A)
+    _prune(A / "sfx", set(re.findall(r'assets/sfx/([^"]+)"', "".join(audio))))
     vdur = round(min(end, duration(A / "aroll.mp4")), 3)
     (proj / "index.html").write_text(INDEX.format(lang=language, w=W, h=H, end=round(end, 3), vdur=vdur,
                                                   hosts="\n".join(hosts), audio="\n".join(audio), cfg=_js(cfg)),

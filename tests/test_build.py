@@ -73,6 +73,25 @@ def test_caption_pages_rules():
     assert pages[0]["start"] == pytest.approx(0.06)
     assert pages[1]["end"] <= pages[2]["start"]
     assert all(p["end"] < 4.0 for p in pages)
+    assert all(pages[i]["end"] <= pages[i + 1]["start"] for i in range(len(pages) - 1))
+
+
+def test_caption_pages_no_overlap_short_gap():
+    ws = [{"seg": "S1", "word": "No,", "start": 1.00, "end": 1.08},
+          {"seg": "S1", "word": "dobra", "start": 1.12, "end": 1.40}]
+    pages = B.caption_pages(ws, 4.0, [])
+    assert len(pages) == 2 and pages[0]["end"] <= pages[1]["start"]
+
+
+def test_caption_pages_skip_empty_words():
+    ws = [{"seg": "S1", "word": "", "start": 0.0, "end": 0.1}, {"seg": "S1", "word": "  ", "start": 0.1, "end": 0.2},
+          {"seg": "S1", "word": "ok", "start": 0.3, "end": 0.5}]
+    assert [[w[0] for w in p["words"]] for p in B.caption_pages(ws, 4.0, [])] == [["ok"]]
+
+
+def test_caption_key_matches_curly_apostrophe():
+    ws = [{"seg": "S1", "word": "Claude\u2019a", "start": 0.0, "end": 0.3}]
+    assert B.caption_pages(ws, 4.0, ["Claude'a"])[0]["words"][0][2] == "key"
 
 
 def test_cam_and_hits():
@@ -108,6 +127,37 @@ def test_build_writes_project(out, theme):
     ids = re.findall(r'<audio id="([^"]+)"', html)
     assert len(ids) == len(set(ids)) >= 4   # chip pop, counter pop + ping, hit impact
     assert json.loads((out / "work" / "checkpoints.json").read_text()) == r["checkpoints"]
+
+
+def test_markup_placeholder_escaped(out, theme):
+    comp = paths.theme_dir(theme) / "components" / "chip.html"
+    comp.write_text(comp.read_text(encoding="utf-8").replace("{{label}}", "{{text}}"), encoding="utf-8")
+    write_plan(out, {"graphics": [{"type": "chip", "at": "S2:minus", "text": "<b>&"}]})
+    proj = B.build(out, theme=theme)["project"]
+    sub = (proj / "compositions" / "gx-01-chip.html").read_text(encoding="utf-8")
+    assert "&lt;b&gt;&amp;" in sub
+
+
+def test_rebuild_prunes_unused_assets(out, theme):
+    broll = out.parent / "broll"
+    broll.mkdir()
+    shutil.copy(out / "aroll.mp4", broll / "b.mp4")
+    write_plan(out, {"graphics": [{"type": "split", "from": "S2:minus", "to": "S2:Claude'a", "media": "broll/b.mp4"}]})
+    proj = B.build(out, theme=theme)["project"]
+    assert list((proj / "assets" / "media").iterdir()) and list((proj / "assets" / "sfx").iterdir())
+    write_plan(out, {"graphics": []})
+    B.build(out, theme=theme)
+    assert list((proj / "assets" / "media").iterdir()) == []
+    assert list((proj / "assets" / "sfx").iterdir()) == []
+
+
+@pytest.mark.parametrize("content", ["{not json", '{"sfx": {}}', '{"hit_sfx": ["impact", 0.3]}'])
+def test_broken_theme_json_is_one_line_error(out, theme, content):
+    from cutmate.errors import CutmateError
+    write_plan(out, {"graphics": []})
+    (paths.theme_dir(theme) / "theme.json").write_text(content, encoding="utf-8")
+    with pytest.raises(CutmateError, match="theme.json"):
+        B.build(out, theme=theme)
 
 
 def test_text_with_script_tag_is_escaped(out, theme):
