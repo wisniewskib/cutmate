@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from conftest import make_wav
 from cutmate.backends import local
 from cutmate.backends.local import LocalBackend, words_from_faster, words_from_mlx
 from cutmate.errors import BackendError
@@ -45,7 +46,7 @@ def test_mlx_not_installed(monkeypatch, tmp_path):
     monkeypatch.setitem(sys.modules, "mlx_whisper", None)
     b = LocalBackend("mlx", "mlx-community/whisper-large-v3-mlx")
     wav = tmp_path / "test.wav"
-    wav.touch()
+    make_wav(wav)
     with pytest.raises(BackendError, match="not installed"):
         b.transcribe(wav, "en")
 
@@ -70,7 +71,7 @@ def test_faster_cuda_fallback_to_cpu(monkeypatch, tmp_path, capsys):
 
     b = LocalBackend("faster", "large-v3")
     wav = tmp_path / "test.wav"
-    wav.touch()
+    make_wav(wav)
 
     # First call should fallback and print warning
     t = b.transcribe(wav, "en")
@@ -98,7 +99,7 @@ def test_faster_transcribe_runtime_error(monkeypatch, tmp_path):
 
     b = LocalBackend("faster", "large-v3")
     wav = tmp_path / "test.wav"
-    wav.touch()
+    make_wav(wav)
 
     with pytest.raises(BackendError, match="local transcription failed: Model corrupted"):
         b.transcribe(wav, "en")
@@ -133,7 +134,7 @@ def test_faster_lazy_cuda_failure_at_transcribe_falls_back_to_cpu(monkeypatch, t
     monkeypatch.setattr(local, "pick_device", lambda: ("cuda", "float16"))
     b = LocalBackend("faster", "large-v3")
     wav = tmp_path / "t.wav"
-    wav.touch()
+    make_wav(wav)
     assert [w.word for w in b.transcribe(wav, "en").words] == ["hi"]
     out = capsys.readouterr().out
     assert out.count("WARN local: GPU transcription failed") == 1
@@ -154,6 +155,50 @@ def test_faster_cuda_and_cpu_both_fail_raises(monkeypatch, tmp_path):
     monkeypatch.setitem(sys.modules, "faster_whisper", SimpleNamespace(WhisperModel=FakeWhisperModel))
     monkeypatch.setattr(local, "pick_device", lambda: ("cuda", "float16"))
     wav = tmp_path / "t.wav"
-    wav.touch()
+    make_wav(wav)
     with pytest.raises(BackendError, match="local transcription failed: still broken"):
         LocalBackend("faster", "large-v3").transcribe(wav, "en")
+
+
+def test_faster_receives_decoded_audio_not_path(monkeypatch, tmp_path):
+    """faster-whisper's own PyAV decoder breaks on PyAV >= 15 (metadata_errors) — we pass 16 kHz float32 audio."""
+    import numpy as np
+    seen = []
+
+    class FakeWhisperModel:
+        def __init__(self, model, device="cpu", compute_type="int8"):
+            pass
+
+        def transcribe(self, audio, **kwargs):
+            seen.append(audio)
+            return iter([]), SimpleNamespace()
+
+    monkeypatch.setitem(sys.modules, "faster_whisper", SimpleNamespace(WhisperModel=FakeWhisperModel))
+    monkeypatch.setattr(local, "pick_device", lambda: ("cpu", "int8"))
+    LocalBackend("faster", "large-v3").transcribe(make_wav(tmp_path / "a.wav", dur=2.0), "pl")
+    assert isinstance(seen[0], np.ndarray) and seen[0].dtype == np.float32
+    assert abs(len(seen[0]) - 32000) < 400
+
+
+def test_cuda_oom_float16_retries_int8_on_gpu(monkeypatch, tmp_path, capsys):
+    """6 GB cards: large-v3 float16 can OOM; int8_float16 still fits on the GPU — try it before CPU."""
+    built = []
+
+    class FakeWhisperModel:
+        def __init__(self, model, device="cpu", compute_type="int8"):
+            built.append((device, compute_type))
+            if (device, compute_type) == ("cuda", "float16"):
+                raise RuntimeError("CUDA failed with error out of memory")
+            self.device = device
+
+        def transcribe(self, *a, **k):
+            return iter([]), SimpleNamespace()
+
+    monkeypatch.setitem(sys.modules, "faster_whisper", SimpleNamespace(WhisperModel=FakeWhisperModel))
+    monkeypatch.setattr(local, "pick_device", lambda: ("cuda", "float16"))
+    b = LocalBackend("faster", "large-v3")
+    b.transcribe(make_wav(tmp_path / "a.wav"), "pl")
+    assert built == [("cuda", "float16"), ("cuda", "int8_float16")]
+    assert b._device == "cuda"
+    out = capsys.readouterr().out
+    assert "out of memory" in out and "int8_float16" in out
