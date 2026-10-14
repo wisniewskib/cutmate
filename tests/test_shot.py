@@ -1,3 +1,7 @@
+import os
+import platform
+import subprocess
+
 import pytest
 from PIL import Image
 
@@ -19,3 +23,24 @@ def test_no_chrome(monkeypatch, tmp_path):
     monkeypatch.setattr(shot, "find_chrome", lambda: None)
     with pytest.raises(CutmateError, match="broll"):
         shot.screenshot("https://example.com", tmp_path / "x.png")
+
+
+@pytest.mark.skipif(platform.system() == "Windows", reason="executable script not portable on Windows")
+def test_stale_output_detection(monkeypatch, tmp_path):
+    """Verify that a stale PNG is deleted before Chrome runs, so a failed run doesn't pass the size check."""
+    # Create a fake 5 kB PNG at the destination
+    png = tmp_path / "shot.png"
+    png.write_bytes(b"fake png" * 700)  # ~5.6 kB
+    assert png.stat().st_size > 2000
+
+    # Create a tiny executable script that exits 0 without writing anything
+    fake_chrome = tmp_path / "fake-chrome"
+    fake_chrome.write_text("#!/bin/sh\nexit 0\n")
+    fake_chrome.chmod(0o755)
+
+    # Monkeypatch find_chrome to return the fake script
+    monkeypatch.setattr(shot, "find_chrome", lambda: str(fake_chrome))
+
+    # Should raise CutmateError because the fake Chrome doesn't create a new PNG
+    with pytest.raises(CutmateError, match="failed"):
+        shot.screenshot("https://example.com", png)

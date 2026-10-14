@@ -3,6 +3,7 @@ import glob
 import os
 import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 
 from .errors import CutmateError
@@ -33,17 +34,25 @@ def screenshot(url: str, dst: Path, width: int = 1000, height: int = 700, dark: 
         raise CutmateError("Chrome not found — install Google Chrome, or put a screenshot into broll/ yourself")
     dst = Path(dst).resolve()
     dst.parent.mkdir(parents=True, exist_ok=True)
+    # Delete stale output to ensure we detect failed runs
+    dst.unlink(missing_ok=True)
     if "://" not in url:
         url = Path(url).resolve().as_uri()
-    cmd = [chrome, "--headless=new", "--no-sandbox", "--disable-gpu", "--hide-scrollbars",
-           "--force-device-scale-factor=2", f"--window-size={width},{height}", "--virtual-time-budget=4000",
-           f"--screenshot={dst}", url]
-    if dark:
-        cmd.insert(4, "--force-dark-mode")
+    # Use isolated profile to prevent interference from running Chrome instances
+    profile_dir = tempfile.mkdtemp()
     try:
-        subprocess.run(cmd, capture_output=True, timeout=60)
-    except subprocess.TimeoutExpired:
-        raise CutmateError(f"screenshot of {url} timed out after 60 s") from None
-    if not dst.exists() or dst.stat().st_size < 2000:
-        raise CutmateError(f"screenshot of {url} failed — page may need login or block bots; save one into broll/ yourself")
-    return dst
+        cmd = [chrome, "--headless=new", "--no-sandbox", "--disable-gpu", "--hide-scrollbars",
+               f"--user-data-dir={profile_dir}", "--force-device-scale-factor=2",
+               f"--window-size={width},{height}", "--virtual-time-budget=4000",
+               f"--screenshot={dst}", url]
+        if dark:
+            cmd.insert(4, "--force-dark-mode")
+        try:
+            result = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=60)
+        except subprocess.TimeoutExpired:
+            raise CutmateError(f"screenshot of {url} timed out after 60 s") from None
+        if not dst.exists() or dst.stat().st_size < 2000:
+            raise CutmateError(f"screenshot of {url} failed (exit code {result.returncode}) — page may need login or block bots; save one into broll/ yourself")
+        return dst
+    finally:
+        shutil.rmtree(profile_dir, ignore_errors=True)
