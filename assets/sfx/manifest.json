@@ -1,0 +1,32 @@
+{
+  "whoosh": {
+    "file": "whoosh.mp3",
+    "duration": 0.288,
+    "source": "Kenney interface: maximize_001.ogg"
+  },
+  "pop": {
+    "file": "pop.mp3",
+    "duration": 0.144,
+    "source": "Kenney interface: pluck_001.ogg"
+  },
+  "click": {
+    "file": "click.mp3",
+    "duration": 0.144,
+    "source": "Kenney interface: click_001.ogg"
+  },
+  "impact": {
+    "file": "impact.mp3",
+    "duration": 0.696,
+    "source": "Kenney impact: impactPunch_heavy_000.ogg"
+  },
+  "swell": {
+    "file": "swell.mp3",
+    "duration": 0.984,
+    "source": "Kenney scifi: forceField_000.ogg"
+  },
+  "ping": {
+    "file": "ping.mp3",
+    "duration": 0.336,
+    "source": "Kenney interface: confirmation_001.ogg"
+  }
+}

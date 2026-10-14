@@ -23,5 +23,5 @@ where = ["core"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-m 'not slow'"
-markers = ["slow: needs downloaded models or recorded samples/"]
+addopts = "-m 'not slow and not hf'"
+markers = ["slow: needs downloaded models or recorded samples/", "hf: needs npx hyperframes (network + Chrome)"]
