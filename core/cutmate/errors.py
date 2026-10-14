@@ -16,3 +16,7 @@ class BackendError(CutmateError):
 
 class EDLError(CutmateError):
     pass
+
+
+class PlanError(CutmateError):
+    pass
