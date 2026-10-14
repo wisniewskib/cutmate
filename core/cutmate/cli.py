@@ -64,6 +64,10 @@ def _parser() -> argparse.ArgumentParser:
     a = sub.add_parser("align", help="word timings for the A-roll")
     a.add_argument("edl")
     a.add_argument("--language", choices=config.LANGUAGES)
+    b = sub.add_parser("build", help="plan.json → HyperFrames project (out/composition)")
+    b.add_argument("out")
+    b.add_argument("--theme")
+    b.add_argument("--language", choices=config.LANGUAGES)
     f = sub.add_parser("finalize", help="loudness fix + spec check of a render")
     f.add_argument("src")
     f.add_argument("dst")
@@ -119,6 +123,14 @@ def _dispatch(args) -> int:
             run_align(edl_path, language)
         except ImportError:
             raise CutmateError("alignment models not installed. Run /cutmate:setup.")
+    elif args.cmd == "build":
+        from .build import build
+        r = build(Path(args.out), theme=args.theme or cfg.theme, language=language,
+                  factcheck=bool(cfg.steps.get("factcheck")), music=cfg.music)
+        for w in r["warnings"]:
+            print(w)
+        print(f"project: {r['project']}")
+        print("checkpoints: " + ",".join(f"{t:.2f}" for t in r["checkpoints"]))
     elif args.cmd == "finalize":
         from .finalize import finalize
         return 0 if finalize(Path(args.src), Path(args.dst), args.format, check=args.check)["ok"] else 1

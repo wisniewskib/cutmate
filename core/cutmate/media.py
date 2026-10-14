@@ -18,9 +18,10 @@ def require_ffmpeg() -> None:
             raise MediaError(f"{b} not found on PATH. Run /cutmate:setup.")
 
 
-def run(cmd: list) -> subprocess.CompletedProcess:
+def run(cmd: list, cwd=None, env=None) -> subprocess.CompletedProcess:
     try:
-        return subprocess.run([str(c) for c in cmd], capture_output=True, text=True, encoding="utf-8", errors="replace")
+        return subprocess.run([str(c) for c in cmd], capture_output=True, text=True, encoding="utf-8", errors="replace",
+                              cwd=str(cwd) if cwd else None, env=env)
     except FileNotFoundError:
         raise MediaError(f"{cmd[0]} not found on PATH. Run /cutmate:setup.") from None
 

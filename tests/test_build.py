@@ -1,0 +1,170 @@
+import json
+import re
+import shutil
+
+import pytest
+
+from conftest import make_clip
+from cutmate import build as B
+from cutmate import paths
+from cutmate.plan import Graphic
+
+WORDS = [
+    {"seg": "S1", "word": "Mówić", "start": 0.10, "end": 0.40},
+    {"seg": "S1", "word": "krótko,", "start": 0.45, "end": 0.80},
+    {"seg": "S1", "word": "mniej", "start": 0.90, "end": 1.10},
+    {"seg": "S2", "word": "minus", "start": 2.10, "end": 2.30},
+    {"seg": "S2", "word": "75%", "start": 2.35, "end": 2.70},
+    {"seg": "S2", "word": "Claude'a", "start": 2.75, "end": 3.10},
+    {"seg": "S2", "word": "</script>", "start": 3.20, "end": 3.50},
+]
+TIMED = [{"id": "S1", "start": 0.0, "end": 2.0, "text": "a"}, {"id": "S2", "start": 2.0, "end": 4.0, "text": "b"}]
+FAKE_COMPONENT = """<style>ROOT .band .x { color: red; }</style>
+<markup><div class="band"><div class="x">{{label}}</div>{{media_tag}}</div></markup>
+<script>
+tl.fromTo(root.querySelector(".x"), { opacity: 0 }, { opacity: 1, duration: 0.2 }, P.at);
+U.out(root.querySelector(".band"), P.end - 0.2);
+</script>"""
+
+
+@pytest.fixture
+def theme(tmp_path, monkeypatch):
+    """The real clean theme base + fake component files (real components arrive in Task 6)."""
+    src = paths.plugin_root() / "themes" / "clean"
+    dst = tmp_path / "home" / "themes" / "testtheme"
+    shutil.copytree(src, dst, ignore=shutil.ignore_patterns("components"))
+    (dst / "components").mkdir()
+    for t in ("title", "counter", "list", "chip", "stamp", "bars", "point", "split"):
+        (dst / "components" / f"{t}.html").write_text(FAKE_COMPONENT, encoding="utf-8")
+    monkeypatch.setenv("CUTMATE_HOME", str(tmp_path / "home"))
+    return "testtheme"
+
+
+@pytest.fixture
+def out(tmp_path, monkeypatch):
+    rec = tmp_path / "rec ą"
+    o = rec / "out"
+    (o / "work").mkdir(parents=True)
+    make_clip(o / "aroll.mp4", dur=4.0, gaps=())
+    (o / "work" / "aligned_words.json").write_text(json.dumps(WORDS, ensure_ascii=False), encoding="utf-8")
+    (o / "work" / "edl_timed.json").write_text(json.dumps(TIMED), encoding="utf-8")
+
+    def fake_project(proj):
+        proj.mkdir(parents=True, exist_ok=True)
+        (proj / "hyperframes.json").write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(B, "ensure_project", fake_project)
+    return o
+
+
+def write_plan(o, plan):
+    (o / "plan.json").write_text(json.dumps(plan, ensure_ascii=False), encoding="utf-8")
+
+
+def cfg_of(index_html):
+    m = re.search(r"const CFG = (.*?);\n", index_html, re.S)
+    return json.loads(m.group(1).replace("<\\/", "</"))
+
+
+def test_caption_pages_rules():
+    pages = B.caption_pages(WORDS, 4.0, ["CLAUDE'A"])
+    texts = [[w[0] for w in p["words"]] for p in pages]
+    assert texts == [["Mówić", "krótko,"], ["mniej"], ["minus", "75%"], ["Claude'a"], ["</script>"]]
+    assert pages[2]["words"][1][2] == "num" and pages[3]["words"][0][2] == "key"
+    assert pages[0]["start"] == pytest.approx(0.06)
+    assert pages[1]["end"] <= pages[2]["start"]
+    assert all(p["end"] < 4.0 for p in pages)
+
+
+def test_cam_and_hits():
+    cam = B.cam_from_cuts(TIMED)
+    assert cam == [[0.0, 1.0], [2.0, 1.12]]
+    g = Graphic("stamp", 2.35, 3.0, {"text": "X"}, True, None, 0)
+    h = B.hits_for([g], cam, TIMED, 4.0)
+    assert h == [[2.35, 1.12, 0.5]]
+    near_end = Graphic("stamp", 3.75, 3.95, {"text": "X"}, True, None, 0)
+    assert B.hits_for([near_end], cam, TIMED, 4.0) == [[3.75, 1.12, 0]]
+
+
+def test_build_writes_project(out, theme):
+    write_plan(out, {"captions": {"key": ["claude'a"]}, "graphics": [
+        {"type": "counter", "at": "S2:75%", "to": 75, "label": "TOKENÓW", "hit": True},
+        {"type": "chip", "at": "S1:Mówić", "text": "Caveman"}]})
+    r = B.build(out, theme=theme)
+    proj = r["project"]
+    html = (proj / "index.html").read_text(encoding="utf-8")
+    assert '<video id="aroll" src="assets/aroll.mp4"' in html and 'data-has-audio="true"' in html
+    assert 'data-composition-src="compositions/gx-01-chip.html"' in html
+    assert 'data-composition-src="compositions/gx-02-counter.html"' in html
+    sub = (proj / "compositions" / "gx-02-counter.html").read_text(encoding="utf-8")
+    assert '<div id="gx-02-counter" data-composition-id="gx-02-counter"' in sub
+    assert "#gx-02-counter .band .x" in sub and 'window.__timelines["gx-02-counter"]' in sub
+    assert "TOKENÓW" in sub
+    cfg = cfg_of(html)
+    assert cfg["hits"][0][0] == 2.35 and cfg["cam"][1] == [2.0, 1.12]
+    assert len(cfg["pages"]) == 5
+    for f in ("assets/aroll.mp4", "assets/tokens.css", "assets/theme.css", "assets/cutmate.js",
+              "assets/fonts/Inter-Black.ttf"):
+        assert (proj / f).exists(), f
+    ids = re.findall(r'<audio id="([^"]+)"', html)
+    assert len(ids) == len(set(ids)) >= 4   # chip pop, counter pop + ping, hit impact
+    assert json.loads((out / "work" / "checkpoints.json").read_text()) == r["checkpoints"]
+
+
+def test_text_with_script_tag_is_escaped(out, theme):
+    write_plan(out, {"graphics": [{"type": "chip", "at": "S2:minus", "text": "</script><b>&"}]})
+    proj = B.build(out, theme=theme)["project"]
+    html = (proj / "index.html").read_text(encoding="utf-8")
+    sub = (proj / "compositions" / "gx-01-chip.html").read_text(encoding="utf-8")
+    assert html.count("</script>") == html.count("<script")
+    assert sub.count("</script>") == sub.count("<script")
+    assert "<\\/script>" in html and "<\\/script>" in sub
+
+
+def test_rebuild_prunes_stale_subcomps(out, theme):
+    write_plan(out, {"graphics": [{"type": "chip", "at": "S1:Mówić", "text": "a"},
+                                  {"type": "stamp", "at": "S2:minus", "text": "B"}]})
+    proj = B.build(out, theme=theme)["project"]
+    write_plan(out, {"graphics": [{"type": "stamp", "at": "S2:minus", "text": "B"}]})
+    B.build(out, theme=theme)
+    assert sorted(p.name for p in (proj / "compositions").glob("gx-*.html")) == ["gx-01-stamp.html"]
+    html = (proj / "index.html").read_text(encoding="utf-8")
+    for src in re.findall(r'data-composition-src="([^"]+)"', html):
+        assert (proj / src).exists()
+
+
+def test_media_with_unicode_name_copied_ascii(out, theme):
+    broll = out.parent / "broll"
+    broll.mkdir()
+    shutil.copy(out / "aroll.mp4", broll / "nagranie ekranu ą.mp4")
+    write_plan(out, {"graphics": [{"type": "split", "from": "S2:minus", "to": "S2:Claude'a",
+                                   "media": "broll/nagranie ekranu ą.mp4"}]})
+    proj = B.build(out, theme=theme)["project"]
+    media = list((proj / "assets" / "media").iterdir())
+    assert len(media) == 1 and media[0].name.isascii() and " " not in media[0].name
+    sub = (proj / "compositions" / "gx-01-split.html").read_text(encoding="utf-8")
+    assert f'src="assets/media/{media[0].name}"' in sub
+    assert 'data-hf-media-start-basis="local"' in sub and "muted" in sub
+    cfg = cfg_of((proj / "index.html").read_text(encoding="utf-8"))
+    assert cfg["splits"] == [[2.1, pytest.approx(2.7)]]
+
+
+def test_hosts_inside_root_duration(out, theme):
+    write_plan(out, {"graphics": [{"type": "stamp", "at": "S2:</script>", "text": "END", "until": 4.0}]})
+    proj = B.build(out, theme=theme)["project"]
+    html = (proj / "index.html").read_text(encoding="utf-8")
+    root_end = float(re.search(r'id="root"[^>]*data-duration="([\d.]+)"', html).group(1))
+    for s, d in re.findall(r'-slot"[^>]*data-start="([\d.]+)" data-duration="([\d.]+)"', html):
+        assert float(s) + float(d) <= root_end + 1e-6
+
+
+@pytest.mark.hf
+def test_hyperframes_check_passes(out, theme, monkeypatch):
+    from cutmate.hf import ensure_project as real_ensure
+    from cutmate.hf import hf
+    from cutmate.media import run
+    monkeypatch.setattr(B, "ensure_project", real_ensure)
+    write_plan(out, {"captions": {"key": ["claude'a"]}, "graphics": [
+        {"type": "stamp", "at": "S2:75%", "text": "NIE", "hit": True}]})
+    proj = B.build(out, theme=theme)["project"]
+    r = run(hf("check", str(proj)), cwd=proj)
+    assert r.returncode == 0, r.stdout[-2000:] + r.stderr[-2000:]
