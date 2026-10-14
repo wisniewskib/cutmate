@@ -1,6 +1,8 @@
+import pytest
 from PIL import Image
 
 from conftest import make_clip
+from cutmate.errors import CutmateError
 from cutmate.thumb import thumbnail, wrap
 
 
@@ -22,3 +24,57 @@ def test_thumbnail_files(tmp_path):
     assert r["jpg"].stat().st_size < 2_000_000
     top = png.crop((0, 0, 1080, 200)).convert("L")
     assert sum(top.getdata()) / (1080 * 200) < 120   # darkened top band
+
+
+def test_thumbnail_title_too_long(tmp_path):
+    out = tmp_path / "out"
+    make_clip(out / "aroll.mp4", dur=3.0, size="1080x1920", gaps=())
+    # This title is too long to fit in 3 lines even at minimum size
+    with pytest.raises(CutmateError, match="title too long"):
+        thumbnail(out, 1.0, "This is a very long title that will not fit in the thumbnail at all even with the minimum font size")
+
+
+def test_thumbnail_hook_capped(tmp_path):
+    out = tmp_path / "out"
+    make_clip(out / "aroll.mp4", dur=3.0, size="1080x1920", gaps=())
+    # Hook with many words should be capped at 2 lines
+    r = thumbnail(out, 1.0, "Test", hook="This is a very long hook question that should be capped at two lines with ellipsis on the second")
+    png = Image.open(r["png"])
+    # Just verify it renders without error
+    assert png.size == (1080, 1920)
+
+
+def test_thumbnail_accent_color(tmp_path):
+    from cutmate import paths
+    out = tmp_path / "out"
+    make_clip(out / "aroll.mp4", dur=3.0, size="1080x1920", gaps=())
+    # Single word title should be entirely in accent color
+    r = thumbnail(out, 1.0, "Word", hook="")
+    png = Image.open(r["png"])
+    # Crop to title area and check for accent color pixels
+    title_area = png.crop((200, 300, 880, 600))
+    title_rgb = title_area.convert("RGB")
+    pixels = list(title_rgb.getdata())
+    accent_hex = "#7dd3fc"
+    accent_rgb = tuple(int(accent_hex[i:i+2], 16) for i in (1, 3, 5))
+    # Check for pixels close to accent color (tolerance ~40 per channel)
+    accent_pixels = [p for p in pixels if all(abs(p[i] - accent_rgb[i]) < 40 for i in range(3))]
+    assert len(accent_pixels) > 100, "Expected accent color pixels in title area"
+
+
+def test_thumbnail_multiline_accent(tmp_path):
+    from cutmate import paths
+    out = tmp_path / "out"
+    make_clip(out / "aroll.mp4", dur=3.0, size="1080x1920", gaps=())
+    # Two-line title: last word should be in accent
+    r = thumbnail(out, 1.0, "Same konkrety", hook="")
+    png = Image.open(r["png"])
+    # Crop to title area
+    title_area = png.crop((150, 300, 930, 700))
+    title_rgb = title_area.convert("RGB")
+    pixels = list(title_rgb.getdata())
+    accent_hex = "#7dd3fc"
+    accent_rgb = tuple(int(accent_hex[i:i+2], 16) for i in (1, 3, 5))
+    # Check for accent color pixels (the word KONKRETY should be in accent)
+    accent_pixels = [p for p in pixels if all(abs(p[i] - accent_rgb[i]) < 40 for i in range(3))]
+    assert len(accent_pixels) > 100, "Expected accent color pixels in last word"

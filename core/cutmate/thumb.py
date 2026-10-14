@@ -6,7 +6,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 from .errors import CutmateError
-from .media import extract_frame
+from .media import extract_frame, duration
 from .paths import theme_dir
 
 W, H = 1080, 1920
@@ -33,13 +33,41 @@ def _cover(im: Image.Image) -> Image.Image:
     return im.crop((x, y, x + W, y + H))
 
 
+def _theme_meta(th: Path) -> dict:
+    f = th / "theme.json"
+    try:
+        meta = json.loads(f.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as e:
+        raise CutmateError(f"{f}: cannot read theme ({e})") from None
+    try:
+        _ = meta["accent"]
+        _ = meta["fonts"]["bold"]
+        _ = meta["fonts"]["black"]
+    except KeyError as e:
+        raise CutmateError(f"{f}: theme.json missing required key {e}") from None
+    return meta
+
+
+def _load_font(th: Path, meta: dict, key: str, size: int) -> ImageFont.FreeTypeFont:
+    try:
+        font_file = meta["fonts"][key]
+        return ImageFont.truetype(str(th / "fonts" / font_file), size)
+    except (KeyError, OSError) as e:
+        raise CutmateError(f"cannot load font {key}: {e}") from None
+
+
 def thumbnail(out_dir: Path, at: float, title: str, hook: str = "", theme: str = "clean") -> dict:
     out = Path(out_dir)
     src = out / "final.mp4" if (out / "final.mp4").exists() else out / "aroll.mp4"
     if not src.exists():
         raise CutmateError(f"{src} not found — run `cutmate cut` first")
+
+    dur = duration(src)
+    at = max(0.0, min(at, dur - 0.05))
+
     th = theme_dir(theme)
-    meta = json.loads((th / "theme.json").read_text(encoding="utf-8"))
+    meta = _theme_meta(th)
+
     with tempfile.TemporaryDirectory() as td:
         frame = Image.open(extract_frame(src, at, Path(td) / "f.png")).convert("RGB")
     img = _cover(frame).convert("RGBA")
@@ -50,20 +78,30 @@ def thumbnail(out_dir: Path, at: float, title: str, hook: str = "", theme: str =
     img = Image.alpha_composite(img, shade)
     draw = ImageDraw.Draw(img)
     y = 260
+
     if hook:
-        hf_ = ImageFont.truetype(str(th / "fonts" / meta["fonts"]["bold"]), 64)
-        for line in wrap(hook, hf_, 920):
+        hf_ = _load_font(th, meta, "bold", 64)
+        hook_lines = wrap(hook, hf_, 920)
+        if len(hook_lines) > 2:
+            hook_lines = hook_lines[:2]
+            hook_lines[-1] = (hook_lines[-1][:20] + "…") if len(hook_lines[-1]) > 20 else hook_lines[-1] + "…"
+        for line in hook_lines:
             draw.text(((W - hf_.getlength(line)) / 2, y), line, font=hf_, fill="white")
             y += 80
         y += 30
+
     words = title.upper()
     size = 170
+    tf = None
     while True:
-        tf = ImageFont.truetype(str(th / "fonts" / meta["fonts"]["black"]), size)
+        tf = _load_font(th, meta, "black", size)
         lines = wrap(words, tf, 960)
-        if len(lines) <= 3 or size <= 90:
+        if len(lines) <= 3:
             break
+        if size <= 90:
+            raise CutmateError("title too long for the thumbnail — shorten it")
         size -= 10
+
     shadow = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     sd = ImageDraw.Draw(shadow)
     ty = y
@@ -75,13 +113,15 @@ def thumbnail(out_dir: Path, at: float, title: str, hook: str = "", theme: str =
     ty = y
     for i, line in enumerate(lines):
         x = (W - tf.getlength(line)) / 2
-        if i == len(lines) - 1 and " " in line:
-            head, last = line.rsplit(" ", 1)
-            draw.text((x, ty), head + " ", font=tf, fill="white")
-            draw.text((x + tf.getlength(head + " "), ty), last, font=tf, fill=meta["accent"])
+        if i == len(lines) - 1:
+            head, _, last = line.rpartition(" ")
+            if head:
+                draw.text((x, ty), head + " ", font=tf, fill="white")
+            draw.text((x + tf.getlength(head + " " if head else ""), ty), last, font=tf, fill=meta["accent"])
         else:
-            draw.text((x, ty), line, font=tf, fill=meta["accent"] if len(lines) == 1 else "white")
+            draw.text((x, ty), line, font=tf, fill="white")
         ty += int(size * 1.05)
+
     png, jpg = out / "thumbnail.png", out / "thumbnail.jpg"
     img.convert("RGB").save(png)
     q = 92
