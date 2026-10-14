@@ -68,7 +68,10 @@ class LocalBackend:
                 raise BackendError(f"local transcription failed: {e}") from None
             # cuDNN/cuBLAS load lazily at the first transcribe, so GPU failures surface here, not at model load
             print(f"WARN local: GPU transcription failed ({_short(e)}), falling back to CPU")
-            self._faster, self._device = self._build("cpu", "int8"), "cpu"
+            try:
+                self._faster, self._device = self._build("cpu", "int8"), "cpu"
+            except Exception as e2:
+                raise BackendError(f"local model load failed: {e2}") from None
             try:
                 return self._run_faster(wav, language, prompt)
             except Exception as e2:

@@ -9,6 +9,7 @@ from pathlib import Path
 import numpy as np
 
 from .backends import transcribe_window
+from .cut import load_timed
 from .errors import CutmateError
 from .media import duration, extract_wav, read_pcm
 
@@ -128,12 +129,14 @@ def run_qa(out_dir: Path, backend, language: str, asr: bool = True) -> list[str]
         (out / "final.mp4", "run `cutmate finalize` first"),
         (out / "aroll.mp4", "run `cutmate cut` first"),
         (out / "work" / "aligned_words.json", "run `cutmate align` first"),
-        (out / "work" / "edl_timed.json", "run `cutmate cut` first"),
     ]
 
     for file_path, step in required_files:
         if not file_path.exists():
             raise CutmateError(f"{file_path.name} is missing; {step}")
+
+    # Check edl_timed.json early before reading audio files
+    timed = load_timed(out)
 
     lines = []
 
@@ -147,7 +150,6 @@ def run_qa(out_dir: Path, backend, language: str, asr: bool = True) -> list[str]
     emit(f"== mix: voice median {med:.1f} dB")
     emit(*[f"  LOUD {s:5.1f}–{e:5.1f}s  SFX/music {o:+.1f} dB over the voice" for s, e, o in runs])
     words = json.loads((out / "work" / "aligned_words.json").read_text(encoding="utf-8"))
-    timed = json.loads((out / "work" / "edl_timed.json").read_text(encoding="utf-8"))
     emit(*[f"  QUIET {sid} {st:.1f}s speech {d:+.1f} dB" for sid, st, d in quiet_segments(voice, words, timed, med)])
     if asr:
         wav = extract_wav(out / "aroll.mp4", out / "work" / "qa_aroll.wav")

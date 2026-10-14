@@ -5,7 +5,7 @@ import json
 import os
 from pathlib import Path
 
-from .errors import EDLError, MediaError
+from .errors import CutmateError, EDLError, MediaError
 from .formats import size_of
 from .media import (duration, has_audio, integrated_lufs, loudnorm_filter, loudnorm_measure, require_ffmpeg, run)
 
@@ -40,7 +40,9 @@ def load_edl(edl_path: Path) -> dict:
     for k, s in enumerate(segs):
         if not isinstance(s, dict):
             raise EDLError(f"segment #{k}: must be a JSON object")
-        sid = s.setdefault("id", f"S{k + 1}")
+        if not s.get("id"):
+            s["id"] = f"S{k + 1}"
+        sid = s["id"]
         for key in ("in", "out"):
             if key not in s:
                 raise EDLError(f"segment {sid}: missing \"{key}\"")
@@ -124,4 +126,15 @@ def cut_aroll(edl_path: Path) -> list[dict]:
     print(f"aroll.mp4: {t:.2f}s, {len(segs)} segments, {integrated_lufs(out / 'aroll.mp4'):.1f} LUFS")
     for s in timed:
         print(f"  {s['id']:4} {s['start']:6.2f}–{s['end']:6.2f}  gain {s['gain_db']:+.1f} dB  {(s.get('text') or '')[:60]}")
+    return timed
+
+
+def load_timed(out_dir: Path) -> list[dict]:
+    """Segments of the cut A-roll with their A-roll times; every segment carries an id."""
+    p = Path(out_dir) / "work" / "edl_timed.json"
+    if not p.exists():
+        raise CutmateError(f"{p} not found — run `cutmate cut` first")
+    timed = json.loads(p.read_text(encoding="utf-8"))
+    if any(not s.get("id") for s in timed):
+        raise CutmateError(f"{p} comes from an older cutmate — run `cutmate cut` again")
     return timed

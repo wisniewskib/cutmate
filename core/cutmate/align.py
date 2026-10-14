@@ -5,6 +5,7 @@ import re
 from pathlib import Path
 
 from .ctc import ctc_spans
+from .cut import load_timed
 from .media import read_pcm
 
 SR = 16000
@@ -67,7 +68,7 @@ def run_align(edl_path: Path, language: str) -> list[dict]:
     out = edl_path.parent
     edl = json.loads(edl_path.read_text(encoding="utf-8"))
     spoken = {**SPOKEN[language], **edl.get("spoken", {})}
-    timed = json.loads((out / "work" / "edl_timed.json").read_text(encoding="utf-8"))
+    timed = load_timed(out)
     proc = Wav2Vec2Processor.from_pretrained(MODELS[language])
     model = Wav2Vec2ForCTC.from_pretrained(MODELS[language]).eval()
     vocab = proc.tokenizer.get_vocab()
