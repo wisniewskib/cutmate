@@ -218,3 +218,51 @@ def test_hyperframes_check_passes(out, theme, monkeypatch):
     proj = B.build(out, theme=theme)["project"]
     r = run(hf("check", str(proj)), cwd=proj)
     assert r.returncode == 0, r.stdout[-2000:] + r.stderr[-2000:]
+
+
+def test_key_matches_inflected_forms():
+    def key_of(word, keys):
+        ws = [{"seg": "S1", "word": word, "start": 0.0, "end": 0.3}]
+        return B.caption_pages(ws, 4.0, keys)[0]["words"][0][2]
+    assert key_of("Cavemana", ["CAVEMAN"]) == "key"
+    assert key_of("Cavemanem,", ["Caveman"]) == "key"
+    assert key_of("Claude’a", ["CLAUDE"]) == "key"
+    assert key_of("Cavemanowski", ["CAVEMAN"]) == ""     # > 3 extra letters
+    assert key_of("Cavemany", ["CAVE"]) == ""            # 4-char key, 4 extra letters
+    assert key_of("nowy", ["NOW"]) == ""                 # key shorter than 4 chars
+
+
+def test_checkpoint_for_list_uses_last_item(out, theme):
+    write_plan(out, {"graphics": [{"type": "list", "items": [
+        {"text": "a", "at": "S1:Mówić"}, {"text": "b", "at": "S1:mniej"}]}]})
+    # list: last item at 0.90 s + 0.4
+    assert B.build(out, theme=theme)["checkpoints"] == [1.3]
+
+
+def test_music_without_carve_halves_volume(out, theme, monkeypatch, capsys):
+    from conftest import make_wav
+    make_wav(out.parent / "bed.wav", dur=2.0)
+    write_plan(out, {"music": {"src": "bed.wav", "volume": 0.4}})
+    monkeypatch.setattr(B, "carve", lambda proj: False)
+    html = (B.build(out, theme=theme)["project"] / "index.html").read_text(encoding="utf-8")
+    assert 'id="music-bed"' in html and 'data-volume="0.2" data-audio-group="music"' in html
+    assert "halved" in capsys.readouterr().out
+
+
+def test_music_with_carve_keeps_volume(out, theme, monkeypatch):
+    from conftest import make_wav
+    make_wav(out.parent / "bed.wav", dur=2.0)
+    write_plan(out, {"music": {"src": "bed.wav", "volume": 0.4}})
+    monkeypatch.setattr(B, "carve", lambda proj: True)
+    html = (B.build(out, theme=theme)["project"] / "index.html").read_text(encoding="utf-8")
+    assert 'data-volume="0.4" data-audio-group="music"' in html
+
+
+def test_relative_music_src_resolves_against_recording_folder(out, theme, monkeypatch):
+    from conftest import make_wav
+    (out.parent / "muzyka").mkdir()
+    make_wav(out.parent / "muzyka" / "bed.wav", dur=2.0)
+    write_plan(out, {"music": {"src": "muzyka/bed.wav", "volume": 0.3}})
+    monkeypatch.setattr(B, "carve", lambda proj: True)
+    r = B.build(out, theme=theme)
+    assert (r["project"] / "assets" / "bgm" / "bed.m4a").exists()

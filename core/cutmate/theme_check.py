@@ -71,9 +71,6 @@ def theme_check(theme: str = "clean", workdir: Path | None = None, language: str
     for old in snaps.glob("frame-*.png"):
         old.unlink()
     cps = list(r["checkpoints"])
-    first, last = (0.2 + i * 0.58 for i in (9, 12))  # list: snapshot once all 4 items are in
-    i = min(range(len(cps)), key=lambda k: abs(cps[k] - (first + 0.4)))
-    cps[i] = round(last + 0.4, 2)
     at = ",".join(f"{t:.2f}" for t in sorted(cps))
     snap = run(hf("snapshot", "--at", at, "--no-end", "--describe", "false", "-o", "snapshots"), cwd=proj)
     shots = sorted(snaps.glob("frame-*.png"))

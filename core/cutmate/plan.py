@@ -42,7 +42,7 @@ class Plan:
 
 
 def norm(word: str) -> str:
-    return str(word).strip().strip(_PUNCT).lower()
+    return str(word).replace("\u2019", "'").strip().strip(_PUNCT).lower()
 
 
 def resolve_anchor(a, words: list[dict], end: float) -> tuple[float, float]:
@@ -233,5 +233,10 @@ def load_plan(out_dir: Path, factcheck: bool = False) -> Plan:
     if key_list is not None and not isinstance(key_list, list):
         raise PlanError(f"{p}: captions \"key\" must be a list")
     captions = {"key": [str(k).upper() for k in key_list or []], "max_words": max_words}
-    music = raw.get("music") if isinstance(raw.get("music"), dict) else None
+    music = raw.get("music")
+    if music is not None:
+        v = music.get("volume") if isinstance(music, dict) else None
+        if (not isinstance(music, dict) or isinstance(v, bool) or not isinstance(v, (int, float)) or not 0 <= v <= 2
+                or ("src" in music and not isinstance(music["src"], str))):
+            raise PlanError(f"{p}: \"music\" must be an object with a numeric \"volume\" (0–2) and an optional string \"src\"")
     return Plan(gs, captions, music, end, warnings)

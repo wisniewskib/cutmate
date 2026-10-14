@@ -85,6 +85,18 @@ def _core(word: str) -> str:
     return re.sub(r"[^\w%']", "", str(word).replace("\u2019", "'").upper())
 
 
+def _is_key(core: str, keys: set) -> bool:
+    """A word is key when its core equals a key, or starts with a key (>= 4 chars) plus an apostrophe / <= 3 letters."""
+    if core in keys:
+        return True
+    for k in keys:
+        if len(k) >= 4 and core.startswith(k):
+            rest = core[len(k):]
+            if rest.startswith("'") or (len(rest) <= 3 and rest.isalpha()):
+                return True
+    return False
+
+
 def caption_pages(words: list[dict], end: float, key: list[str], max_words: int = 3, max_chars: int = 16,
                   pause: float = 0.35) -> list[dict]:
     pages, cur, n = [], [], 0
@@ -108,7 +120,7 @@ def caption_pages(words: list[dict], end: float, key: list[str], max_words: int 
         ws = []
         for w in p:
             c = _core(w["word"])
-            cls = "key" if c in keys else "num" if re.search(r"\d", w["word"]) else ""
+            cls = "key" if _is_key(c, keys) else "num" if re.search(r"\d", w["word"]) else ""
             ws.append([w["word"], round(max(0.0, w["start"] - 0.04), 3), cls])
         out.append({"start": round(start, 3), "end": round(stop, 3), "words": ws})
     return out
@@ -292,7 +304,8 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
     cfg = {"end": end, "pages": caption_pages(words, end, plan.captions["key"], plan.captions["max_words"]),
            "cam": cam, "hits": hits, "splits": splits}
     audio = sfx_tags(cues, end, A)
-    src = pick_source(plan.music, music, out)
+    src = pick_source(plan.music, music, out.parent)  # relative plan.music.src resolves against the recording folder
+    vol = 0.45
     if src:
         prepare_music(src, A / "bgm" / "bed.m4a", end)
         vol = float((plan.music or {}).get("volume", 0.45))
@@ -307,8 +320,16 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
     (proj / "index.html").write_text(INDEX.format(lang=language, w=W, h=H, end=round(end, 3), vdur=vdur,
                                                   hosts="\n".join(hosts), audio="\n".join(audio), cfg=_js(cfg)),
                                      encoding="utf-8")
-    if src:
-        carve(proj)
-    checkpoints = sorted({round(min(g.start + 0.4, g.end - 0.05), 2) for g in plan.graphics})
+    if src and not carve(proj):
+        half = round(vol * 0.5, 3)
+        idx = proj / "index.html"
+        idx.write_text(idx.read_text(encoding="utf-8").replace(
+            f'data-volume="{vol}" data-audio-group="music"', f'data-volume="{half}" data-audio-group="music"'),
+            encoding="utf-8")
+        print(f"WARN music: no voice carve — bed volume halved to {half}")
+    def checkpoint(g: Graphic) -> float:
+        t = max(it["at"] for it in g.params["items"]) if g.type == "list" else g.start
+        return round(min(t + 0.4, g.end - 0.05), 2)
+    checkpoints = sorted({checkpoint(g) for g in plan.graphics})
     (out / "work" / "checkpoints.json").write_text(json.dumps(checkpoints), encoding="utf-8")
     return {"project": proj, "warnings": plan.warnings, "checkpoints": checkpoints}

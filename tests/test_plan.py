@@ -209,3 +209,20 @@ def test_factcheck_warning(tmp_path):
     assert len(w) == 1 and "75" in w[0] and "factcheck" in w[0]
     (out / "factcheck.md").write_text('- „minus 75%" ✅ OK\n', encoding="utf-8")
     assert load_plan(out, factcheck=True).warnings == []
+
+
+@pytest.mark.parametrize("music", [[], "x", {}, {"volume": "loud"}, {"volume": True}, {"volume": 3},
+                                   {"volume": 0.4, "src": 5}])
+def test_bad_music_rejected(tmp_path, music):
+    out = make_out(tmp_path, {"music": music})
+    with pytest.raises(PlanError, match="music"):
+        load_plan(out)
+
+
+def test_good_music_accepted(tmp_path):
+    out = make_out(tmp_path, {"music": {"volume": 0.45, "src": "a.mp3"}})
+    assert load_plan(out).music == {"volume": 0.45, "src": "a.mp3"}
+
+
+def test_norm_curly_apostrophe():
+    assert norm("Claude’a") == "claude'a"
