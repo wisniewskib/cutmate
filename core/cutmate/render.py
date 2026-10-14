@@ -19,15 +19,19 @@ def render(out_dir: Path) -> dict:
     proj = out / "composition"
     if not (proj / "index.html").exists():
         raise CutmateError(f"{proj / 'index.html'} not found — run `cutmate build` first")
-    chk = run(hf("check", str(proj)), cwd=proj)
+    chk = run(hf("check"), cwd=proj)
     if chk.returncode:
         raise CutmateError("hyperframes check failed: " + " ".join((chk.stdout + chk.stderr).split())[-500:])
     dst = out / "work" / "render.mp4"
     dst.parent.mkdir(parents=True, exist_ok=True)
-    cmd = hf("render", "--fps", "30", "--quality", "delivery", "--format", "mp4", "-o", str(dst))
+    dst.unlink(missing_ok=True)
+    cmd = hf("render", "--fps", "30", "--quality", "delivery", "--format", "mp4", "-o", "../work/render.mp4")
     code = _stream(cmd, proj)
     if code or not dst.exists():
         raise CutmateError(f"hyperframes render failed (exit {code}) — rerun in {proj}: {' '.join(cmd)}")
     cp = out / "work" / "checkpoints.json"
-    checkpoints = json.loads(cp.read_text(encoding="utf-8")) if cp.exists() else []
+    try:
+        checkpoints = json.loads(cp.read_text(encoding="utf-8")) if cp.exists() else []
+    except ValueError:
+        raise CutmateError(f"malformed checkpoints.json in {cp}")
     return finalize(dst, out / "final.mp4", "9:16", check=checkpoints)
