@@ -23,7 +23,11 @@
 
   function camera(tl, cfg) {
     tl.set("#cam", { scale: 1 }, 0);
-    (cfg.cam || []).forEach(([t, s]) => tl.set("#cam", { scale: s }, t));
+    (cfg.cam || []).forEach(([t, s, ox, oy]) => {
+      const v = { scale: s };
+      if (ox != null) v.transformOrigin = (ox * 100).toFixed(1) + "% " + (oy * 100).toFixed(1) + "%";
+      tl.set("#cam", v, t);
+    });
   }
 
   function hits(tl, cfg) {

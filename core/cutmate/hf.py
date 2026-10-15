@@ -20,13 +20,14 @@ def hf(*args) -> list[str]:
     return [npx(), "--yes", f"hyperframes@{HF_VERSION}", *[str(a) for a in args]]
 
 
-def ensure_project(proj: Path) -> None:
+def ensure_project(proj: Path, fmt: str = "9:16") -> None:
     proj = Path(proj)
     if (proj / "hyperframes.json").exists():
         return
     proj.parent.mkdir(parents=True, exist_ok=True)
     env = {**os.environ, "HYPERFRAMES_SKIP_SKILLS": "1"}
-    r = run(hf("init", proj.name, "--non-interactive", "--example=blank", "--resolution=portrait"), cwd=proj.parent, env=env)
+    res = "landscape" if fmt == "16:9" else "portrait"
+    r = run(hf("init", proj.name, "--non-interactive", "--example=blank", f"--resolution={res}"), cwd=proj.parent, env=env)
     if r.returncode or not (proj / "hyperframes.json").exists():
         tail = " ".join((r.stdout + r.stderr).split())[-300:]
         raise CutmateError(f"hyperframes init failed in {proj.parent}: {tail}")

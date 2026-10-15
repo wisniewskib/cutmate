@@ -49,7 +49,7 @@ def out(tmp_path, monkeypatch):
     (o / "work" / "aligned_words.json").write_text(json.dumps(WORDS, ensure_ascii=False), encoding="utf-8")
     (o / "work" / "edl_timed.json").write_text(json.dumps(TIMED), encoding="utf-8")
 
-    def fake_project(proj):
+    def fake_project(proj, fmt="9:16"):
         proj.mkdir(parents=True, exist_ok=True)
         (proj / "hyperframes.json").write_text("{}", encoding="utf-8")
     monkeypatch.setattr(B, "ensure_project", fake_project)
@@ -267,3 +267,41 @@ def test_relative_music_src_resolves_against_recording_folder(out, theme, monkey
     monkeypatch.setattr(B, "carve", lambda proj: True)
     r = B.build(out, theme=theme)
     assert (r["project"] / "assets" / "bgm" / "bed.m4a").exists()
+
+
+@pytest.fixture
+def out169(tmp_path, monkeypatch):
+    rec = tmp_path / "rec169"
+    o = rec / "out"
+    (o / "work").mkdir(parents=True)
+    make_clip(o / "aroll.mp4", dur=4.0, size="1920x1080", gaps=())
+    (o / "work" / "aligned_words.json").write_text(json.dumps(WORDS, ensure_ascii=False), encoding="utf-8")
+    (o / "work" / "edl_timed.json").write_text(json.dumps(TIMED), encoding="utf-8")
+    (o / "edl.json").write_text(json.dumps({"format": "16:9", "segments": []}), encoding="utf-8")
+    monkeypatch.setattr(B, "ensure_project", lambda proj, fmt="9:16": (proj.mkdir(parents=True, exist_ok=True),
+                                                                       (proj / "hyperframes.json").write_text("{}")))
+    return o
+
+
+def test_cam_169_uses_face():
+    cam = B.cam_from_cuts(TIMED, "16:9", {"S2": [0.3, 0.25]})
+    assert cam == [[0.0, 1.0, 0.5, 0.4], [2.0, 1.25, 0.3, 0.25]]
+    g = Graphic("stamp", 2.35, 3.0, {"text": "X"}, True, None, 0)
+    assert B.hits_for([g], cam, TIMED, 4.0) == [[2.35, 1.25, 0.5]]
+
+
+def test_build_169_project(out169, theme):
+    write_plan(out169, {"face": {"S1": [0.45, 0.3]}, "graphics": [{"type": "chip", "at": "S2:minus", "text": "X"}]})
+    proj = B.build(out169, theme=theme)["project"]
+    html = (proj / "index.html").read_text(encoding="utf-8")
+    assert 'class="f169"' in html and 'data-width="1920" data-height="1080"' in html
+    assert 'content="width=1920, height=1080"' in html
+    assert cfg_of(html)["cam"][0] == [0.0, 1.0, 0.45, 0.3]
+    sub = (proj / "compositions" / "gx-01-chip.html").read_text(encoding="utf-8")
+    assert 'data-width="1920" data-height="1080"' in sub
+
+
+def test_build_916_unchanged_markers(out, theme):
+    write_plan(out, {"graphics": [{"type": "chip", "at": "S2:minus", "text": "X"}]})
+    html = (B.build(out, theme=theme)["project"] / "index.html").read_text(encoding="utf-8")
+    assert 'class="f916"' in html and cfg_of(html)["cam"] == [[0.0, 1.0], [2.0, 1.12]]

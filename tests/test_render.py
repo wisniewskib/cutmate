@@ -124,3 +124,23 @@ def test_render_clears_old_check_frames(tmp_path, monkeypatch):
     monkeypatch.setattr(R, "_stream", fake_stream)
     R.render(out)
     assert not (out / "check_9_99.png").exists() and (out / "check_0_50.png").exists()
+
+
+def test_render_uses_project_format(tmp_path, monkeypatch):
+    out = setup_out(tmp_path)
+    (out / "edl.json").write_text('{"format": "16:9", "segments": []}', encoding="utf-8")
+    monkeypatch.setattr(R, "run", lambda cmd, cwd=None, env=None: subprocess.CompletedProcess(cmd, 0, "Check passed", ""))
+    monkeypatch.setattr(R, "hf", lambda *a: ["hf", *a])
+
+    def fake_stream(cmd, cwd):
+        (out / "work" / "render.mp4").write_bytes(b"v")
+        return 0
+    monkeypatch.setattr(R, "_stream", fake_stream)
+    seen = {}
+
+    def fake_finalize(src, dst, fmt, check=()):
+        seen["fmt"] = fmt
+        return {"ok": True}
+    monkeypatch.setattr(R, "finalize", fake_finalize)
+    R.render(out)
+    assert seen["fmt"] == "16:9"

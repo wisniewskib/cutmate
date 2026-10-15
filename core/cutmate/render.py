@@ -5,6 +5,7 @@ from pathlib import Path
 
 from .errors import CutmateError
 from .finalize import finalize
+from .formats import format_of
 from .hf import hf
 from .media import run
 
@@ -36,4 +37,4 @@ def render(out_dir: Path) -> dict:
         checkpoints = json.loads(cp.read_text(encoding="utf-8")) if cp.exists() else []
     except ValueError:
         raise CutmateError(f"malformed checkpoints.json in {cp}")
-    return finalize(dst, out / "final.mp4", "9:16", check=checkpoints)
+    return finalize(dst, out / "final.mp4", format_of(out), check=checkpoints)

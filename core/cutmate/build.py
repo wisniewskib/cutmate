@@ -12,13 +12,13 @@ from pathlib import Path
 
 from .cut import load_timed
 from .errors import CutmateError
+from .formats import size_of
 from .hf import ensure_project
 from .media import duration
 from .music import carve, pick_source, prepare_music
 from .paths import assets_dir, theme_dir, web_dir
 from .plan import Graphic, load_plan
 
-W, H = 1080, 1920
 LEAD = 0.3                    # host starts this much before the graphic's word (entrance lead-in)
 VIDEO_EXTS = {".mp4", ".mov", ".m4v", ".webm", ".mkv"}
 ILLUSTRATIVE = {"pl": "ILUSTRACYJNIE", "en": "ILLUSTRATIVE"}
@@ -48,7 +48,7 @@ SUBCOMP = """<!doctype html>
 """
 
 INDEX = """<!doctype html>
-<html lang="{lang}">
+<html lang="{lang}" class="{fcls}">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width={w}, height={h}" />
@@ -126,15 +126,26 @@ def caption_pages(words: list[dict], end: float, key: list[str], max_words: int 
     return out
 
 
-def cam_from_cuts(timed: list[dict]) -> list[list[float]]:
-    return [[round(float(s["start"]), 3), 1.0 if i % 2 == 0 else 1.12] for i, s in enumerate(timed)]
+FACE_DEFAULT = [0.5, 0.4]
+
+
+def cam_from_cuts(timed: list[dict], fmt: str = "9:16", face: dict | None = None) -> list[list[float]]:
+    """Punch-in on every other cut. 16:9 zooms further and centres on the speaker's face."""
+    if fmt != "16:9":
+        return [[round(float(s["start"]), 3), 1.0 if i % 2 == 0 else 1.12] for i, s in enumerate(timed)]
+    face = face or {}
+    out = []
+    for i, s in enumerate(timed):
+        fx, fy = face.get(str(s["id"]), FACE_DEFAULT)
+        out.append([round(float(s["start"]), 3), 1.0 if i % 2 == 0 else 1.25, round(fx, 3), round(fy, 3)])
+    return out
 
 
 def _scale_at(cam: list[list[float]], t: float) -> float:
     s = 1.0
-    for ct, cs in cam:
-        if ct <= t + 1e-9:
-            s = cs
+    for c in cam:
+        if c[0] <= t + 1e-9:
+            s = c[1]
     return s
 
 
@@ -195,7 +206,8 @@ def _copy_if_newer(src: Path, dst: Path) -> None:
         shutil.copy2(src, dst)
 
 
-def subcomp(cid: str, g: Graphic, host_start: float, theme: Path, assets: Path, media_map: dict, lang: str) -> str:
+def subcomp(cid: str, g: Graphic, host_start: float, theme: Path, assets: Path, media_map: dict, lang: str,
+            size: tuple = (1080, 1920), extra_tags: dict | None = None) -> str:
     sec = _sections(theme / "components" / f"{g.type}.html")
     loc = lambda t: round(max(0.0, t - host_start), 3)  # noqa: E731
     P = {k: v for k, v in g.params.items()}
@@ -218,9 +230,11 @@ def subcomp(cid: str, g: Graphic, host_start: float, theme: Path, assets: Path, 
         else:
             media_tag = f'<div class="img" style="background-image:url(\'{P["media"]}\')"></div>'
             P["kind"] = "image"
-    markup = _PLACEHOLDER.sub(lambda m: media_tag if m.group(1) == "media_tag"
+    tags = {"media_tag": media_tag, **(extra_tags or {})}
+    markup = _PLACEHOLDER.sub(lambda m: tags[m.group(1)] if m.group(1) in tags
                               else _html.escape(str(P.get(m.group(1), ""))), sec.get("markup", ""))
-    return SUBCOMP.format(lang=lang, cid=cid, w=W, h=H, dur=round(g.end - host_start, 3),
+    w, h = size
+    return SUBCOMP.format(lang=lang, cid=cid, w=w, h=h, dur=round(g.end - host_start, 3),
                           style=sec.get("style", "").replace("ROOT", f"#{cid}"), markup=markup,
                           params=_js(P), script=sec["script"])
 
@@ -263,12 +277,14 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
           music: dict | None = None) -> dict:
     out = Path(out_dir).resolve()
     plan = load_plan(out, factcheck)
+    fmt = plan.format
+    W, H = size_of(fmt)
     th = theme_dir(theme)
     meta = _theme_meta(th)
     if not (out / "aroll.mp4").exists():
         raise CutmateError(f"{out / 'aroll.mp4'} not found — run `cutmate cut` first")
     proj = out / "composition"
-    ensure_project(proj)
+    ensure_project(proj, fmt)
     A = proj / "assets"
     for d in (A / "fonts", A / "sfx", A / "media", A / "bgm", proj / "compositions"):
         d.mkdir(parents=True, exist_ok=True)
@@ -287,7 +303,7 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
         cid = f"gx-{i + 1:02d}-{g.type}"
         ids.append(cid)
         hs = round(max(0.0, g.start - LEAD), 3)
-        (proj / "compositions" / f"{cid}.html").write_text(subcomp(cid, g, hs, th, A, media_map, language),
+        (proj / "compositions" / f"{cid}.html").write_text(subcomp(cid, g, hs, th, A, media_map, language, size=(W, H)),
                                                            encoding="utf-8")
         hosts.append(f'      <div id="{cid}-slot" data-composition-id="{cid}" data-composition-src="compositions/{cid}.html" '
                      f'data-start="{hs}" data-duration="{round(g.end - hs, 3)}" data-track-index="{2 + i % 2}" '
@@ -297,7 +313,7 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
     for f in (proj / "compositions").glob("gx-*.html"):
         if f.stem not in ids:
             f.unlink()
-    cam = cam_from_cuts(timed)
+    cam = cam_from_cuts(timed, fmt, plan.face)
     hits = hits_for(plan.graphics, cam, timed, end)
     hit_name, hit_vol = meta["hit_sfx"]
     cues += [(hit_name, h[0], hit_vol) for h in hits]
@@ -318,7 +334,7 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
     else:
         _prune(A / "bgm", set())
     vdur = round(min(end, duration(A / "aroll.mp4")), 3)
-    (proj / "index.html").write_text(INDEX.format(lang=language, w=W, h=H, end=round(end, 3), vdur=vdur,
+    (proj / "index.html").write_text(INDEX.format(lang=language, fcls="f169" if fmt == "16:9" else "f916", w=W, h=H, end=round(end, 3), vdur=vdur,
                                                   hosts="\n".join(hosts), audio="\n".join(audio), cfg=_js(cfg)),
                                      encoding="utf-8")
     if src and not carve(proj):

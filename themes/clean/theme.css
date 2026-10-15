@@ -1,5 +1,7 @@
 * { margin: 0; padding: 0; box-sizing: border-box; }
-html, body { width: 1080px; height: 1920px; overflow: hidden; background: #000; }
+html, body { overflow: hidden; background: #000; }
+html.f916, html.f916 body { width: 1080px; height: 1920px; }
+html.f169, html.f169 body { width: 1920px; height: 1080px; }
 #root { position: relative; width: 100%; height: 100%; overflow: hidden; }
 #split, #cam, #shake { position: absolute; inset: 0; }
 #cam { transform-origin: 50% 46%; }
