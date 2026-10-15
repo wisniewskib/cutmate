@@ -73,6 +73,10 @@ def _parser() -> argparse.ArgumentParser:
     b.add_argument("out")
     b.add_argument("--theme")
     b.add_argument("--language", choices=config.LANGUAGES)
+    pv = sub.add_parser("preview", help="fast 480p preview (cut + chapter plates) and chapters.txt")
+    pv.add_argument("out")
+    pv.add_argument("--theme")
+    pv.add_argument("--language", choices=config.LANGUAGES)
     rd = sub.add_parser("render", help="check + render + finalize the built project")
     rd.add_argument("out")
     f = sub.add_parser("finalize", help="loudness fix + spec check of a render")
@@ -168,6 +172,12 @@ def _dispatch(args) -> int:
             print(w)
         print(f"project: {r['project']}")
         print("checkpoints: " + ",".join(f"{t:.2f}" for t in r["checkpoints"]))
+    elif args.cmd == "preview":
+        from .preview import preview
+        r = preview(Path(args.out), args.theme or cfg.theme, language)
+        print(f"preview: {r['preview']}")
+        if r["chapters"]:
+            print(r["chapters"].read_text(encoding="utf-8"), end="")
     elif args.cmd == "render":
         from .render import render
         return 0 if render(Path(args.out))["ok"] else 1
