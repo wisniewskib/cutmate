@@ -21,3 +21,17 @@ unit: 1080×1920 (9:16), 30 fps
   - `split` — tutorial / "look at this" beats: b-roll panel on top, face slides down. Use a page screenshot (`cutmate shot`) or a file from `broll/`.
 - **Rhythm:** something should change every 3–6 s (cut punch-ins already help). Do not let a graphic wait empty for more than 1.5 s.
 - **SFX** come automatically per component; set `"sfx": false` to mute one, or a name (`whoosh`, `pop`, `click`, `impact`, `swell`, `ping`) to replace it.
+
+## 16:9 (long-form, 1920×1080)
+
+- **The speaker owns the frame.** Graphics are small and live in the top-right corner (x 1340–1860, y 60–420).
+  Burned captions (only when the config says `burn`/`both`) sit at y 880–1000. Lower-third: bottom-left x 80–900, y 820–980.
+- **`split` does not exist in 16:9 — use `pip`:** the b-roll fills the screen and the speaker's face sits in a circle in a
+  bottom corner (`corner` `br` default / `bl`). Use it for "look at this page / tool / recording" beats, `fit: cover` for
+  page screenshots.
+- **`lower-third`** once, when the speaker introduces themselves (`name`, `role?`), ~4 s.
+- **Chapters** (`plan.chapters`): one per topic change; plates appear for chapters 2+ (1.5 s full-screen, the voice
+  continues). Don't start other graphics during a plate. YouTube wants ≥ 3 chapters, each ≥ 10 s, the first at 00:00.
+- **`face`**: for every segment write where the face is (fractions of the frame, read from the contact sheet) — punch-ins
+  (1.25×) and the pip circle centre on it.
+- **Rhythm** is calmer than a short: something should change every 10–20 s (cuts, a graphic, a pip); no hits on chapter plates.

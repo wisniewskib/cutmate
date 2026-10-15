@@ -47,3 +47,31 @@ html.f169, html.f169 body { width: 1920px; height: 1080px; }
 .split-panel .media.fit-cover video { object-fit: cover; object-position: top; }
 .split-panel .media.fit-cover .img { background-size: cover; background-position: top center; }
 .split-edge { position: absolute; left: 0; right: 0; top: 896px; height: 8px; background: var(--accent); }
+/* ---- 16:9: small graphics in the top-right corner, captions low, everything scaled down ---- */
+html.f169 #captions { left: 160px; right: 160px; top: 880px; height: 120px; }
+html.f169 .cw { font-size: 58px; }
+html.f169 .band { left: 1340px; right: 60px; top: 60px; height: 360px; align-items: flex-start; justify-content: flex-end; }
+html.f169 .card { border-radius: 28px; padding: 22px 36px; }
+html.f169 .card .big { font-size: 110px; letter-spacing: -2px; }
+html.f169 .card .label { font-size: 26px; margin-top: 8px; }
+html.f169 .ttl { text-align: right; }
+html.f169 .ttl .kicker { font-size: 24px; margin-bottom: 12px; }
+html.f169 .ttl .logo { height: 72px; margin: 0 0 12px auto; }
+html.f169 .ttl .title { max-width: 520px; margin: 0 0 0 auto; font-size: 84px; }
+html.f169 .ttl .title.sm { font-size: 68px; }
+html.f169 .ttl .title.xs { font-size: 54px; }
+html.f169 .stamp { font-size: 120px; border-radius: 24px; padding: 6px 32px; }
+html.f169 .chip { max-width: 520px; gap: 16px; padding: 16px 32px; font-size: 40px; }
+html.f169 .chip img { height: 44px; }
+html.f169 .chip.sm { font-size: 32px; }
+html.f169 .list { gap: 10px; }
+html.f169 .list .head { font-size: 22px; text-align: right; }
+html.f169 .list .item { border-radius: 16px; padding: 10px 20px; font-size: 30px; }
+html.f169 .list .item.sm { font-size: 26px; }
+html.f169 .bars { border-radius: 28px; padding: 18px 28px; }
+html.f169 .bars .head { font-size: 24px; }
+html.f169 .bars .lbl { font-size: 26px; }
+html.f169 .bars .track { height: 18px; }
+html.f169 .bars .note { font-size: 18px; }
+html.f169 .point { width: 460px; }
+html.f169 .point .shot { height: 260px; }
