@@ -52,6 +52,8 @@ def _parser() -> argparse.ArgumentParser:
     t.add_argument("--backend", choices=config.BACKENDS)
     t.add_argument("--language", choices=config.LANGUAGES)
     t.add_argument("--force", action="store_true")
+    fm = sub.add_parser("formats", help="aspect of every clip in a recording folder (rotation-aware)")
+    fm.add_argument("rec")
     s = sub.add_parser("sheet", help="contact sheet of frames")
     s.add_argument("src")
     s.add_argument("-o", "--out", required=True)
@@ -116,6 +118,20 @@ def _dispatch(args) -> int:
     if args.cmd == "transcribe":
         from .transcribe import run_transcribe
         run_transcribe(Path(args.rec), get_backend(args.backend or cfg.transcription), language, args.prompt, args.force)
+    elif args.cmd == "formats":
+        from .formats import aspect
+        from .media import probe_video
+        from .transcribe import find_clips
+        clips = find_clips(Path(args.rec))
+        if not clips:
+            raise CutmateError(f"no video files in {args.rec}")
+        seen = set()
+        for c in clips:
+            i = probe_video(c)
+            a = aspect(i["width"], i["height"])
+            seen.add(a)
+            print(f"{c.name}: {i['width']}x{i['height']} {a}")
+        print("format: " + (seen.pop() if len(seen) == 1 else "mixed"))
     elif args.cmd == "sheet":
         from .sheet import contact_sheet
         for p in contact_sheet(Path(args.src), Path(args.out), args.start, args.end, args.step, args.cols):

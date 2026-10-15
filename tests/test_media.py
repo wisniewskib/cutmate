@@ -116,3 +116,15 @@ def test_read_pcm_missing_binary(tmp_path):
     # the FileNotFoundError handling is correct (code review).
     x = media.read_pcm(wav, 16000)
     assert x.dtype == np.float32
+
+
+def test_probe_rotation_swaps(tmp_path):
+    import subprocess
+    from conftest import make_clip
+    from cutmate.media import probe_video
+    src = make_clip(tmp_path / "a.mp4", dur=1.0, size="320x180")
+    rot = tmp_path / "r.mp4"
+    subprocess.run(["ffmpeg", "-nostdin", "-v", "error", "-y", "-display_rotation", "90", "-i", str(src),
+                    "-c", "copy", str(rot)], check=True)
+    assert (probe_video(src)["width"], probe_video(src)["height"]) == (320, 180)
+    assert (probe_video(rot)["width"], probe_video(rot)["height"]) == (180, 320)

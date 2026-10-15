@@ -157,3 +157,26 @@ def test_bad_args_are_argparse_errors(argv, capsys):
         main(argv)
     assert e.value.code == 2
     assert "Traceback" not in capsys.readouterr().err
+
+
+def test_formats_cli_landscape(tmp_path, capsys):
+    import subprocess
+    from conftest import make_clip
+    from cutmate.cli import main
+    rec = tmp_path / "rec"
+    src = make_clip(tmp_path / "src.mp4", dur=1.0, size="320x180")
+    rec.mkdir()
+    subprocess.run(["ffmpeg", "-nostdin", "-v", "error", "-y", "-display_rotation", "-90", "-i", str(src),
+                    "-c", "copy", str(rec / "IMG_1.MOV")], check=True)
+    make_clip(rec / "IMG_2.mp4", dur=1.0, size="320x180")
+    assert main(["formats", str(rec)]) == 0
+    out = capsys.readouterr().out
+    assert "IMG_1.MOV: 180x320 9:16" in out and "IMG_2.mp4: 320x180 16:9" in out and "format: mixed" in out
+
+
+def test_formats_cli_single(tmp_path, capsys):
+    from conftest import make_clip
+    from cutmate.cli import main
+    make_clip(tmp_path / "rec" / "a.mp4", dur=1.0, size="320x180")
+    assert main(["formats", str(tmp_path / "rec")]) == 0
+    assert capsys.readouterr().out.strip().endswith("format: 16:9")

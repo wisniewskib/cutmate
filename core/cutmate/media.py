@@ -117,7 +117,8 @@ def read_pcm(src: Path, sr: int) -> np.ndarray:
 
 def probe_video(src: Path) -> dict:
     r = run(["ffprobe", "-v", "error", "-show_entries",
-             "stream=codec_type,codec_name,width,height,r_frame_rate:format=duration", "-of", "json", src])
+             "stream=codec_type,codec_name,width,height,r_frame_rate:stream_side_data=rotation:format=duration",
+             "-of", "json", src])
     if r.returncode:
         raise MediaError(f"cannot probe {src}: {_tail(r.stderr)}")
     p = json.loads(r.stdout)
@@ -132,7 +133,11 @@ def probe_video(src: Path) -> dict:
         duration_float = float(duration_val)
     except (ValueError, TypeError):
         raise MediaError(f"invalid duration in {src}: {duration_val}") from None
-    return dict(width=v.get("width"), height=v.get("height"), fps=v.get("r_frame_rate"),
+    w, h = v.get("width"), v.get("height")
+    rot = next((sd["rotation"] for sd in v.get("side_data_list", []) if "rotation" in sd), 0)
+    if w and h and abs(int(rot)) % 180 == 90:  # phones store landscape as portrait + a rotation flag
+        w, h = h, w
+    return dict(width=w, height=h, fps=v.get("r_frame_rate"),
                 vcodec=v.get("codec_name"), acodec=a.get("codec_name"), duration=duration_float)
 
 
