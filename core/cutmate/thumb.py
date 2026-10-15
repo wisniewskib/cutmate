@@ -6,10 +6,12 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 from .errors import CutmateError
+from .formats import format_of
 from .media import extract_frame, duration
 from .paths import theme_dir
 
-W, H = 1080, 1920
+PORTRAIT = (1080, 1920)
+LANDSCAPE = (1280, 720)
 
 
 def wrap(text: str, font: ImageFont.FreeTypeFont, width: int) -> list[str]:
@@ -26,7 +28,7 @@ def wrap(text: str, font: ImageFont.FreeTypeFont, width: int) -> list[str]:
     return lines
 
 
-def _cover(im: Image.Image) -> Image.Image:
+def _cover(im: Image.Image, W: int, H: int) -> Image.Image:
     s = max(W / im.width, H / im.height)
     im = im.resize((round(im.width * s), round(im.height * s)), Image.LANCZOS)
     x, y = (im.width - W) // 2, (im.height - H) // 2
@@ -56,7 +58,7 @@ def _load_font(th: Path, meta: dict, key: str, size: int) -> ImageFont.FreeTypeF
         raise CutmateError(f"cannot load font {key}: {e}") from None
 
 
-def thumbnail(out_dir: Path, at: float, title: str, hook: str = "", theme: str = "clean") -> dict:
+def thumbnail(out_dir: Path, at: float, title: str, hook: str = "", theme: str = "clean", side: str = "right") -> dict:
     out = Path(out_dir)
     src = out / "aroll.mp4"  # never final.mp4: it has burned-in captions and graphics
     if not src.exists():
@@ -70,7 +72,10 @@ def thumbnail(out_dir: Path, at: float, title: str, hook: str = "", theme: str =
 
     with tempfile.TemporaryDirectory() as td:
         frame = Image.open(extract_frame(src, at, Path(td) / "f.png")).convert("RGB")
-    img = _cover(frame).convert("RGBA")
+    if format_of(out) == "16:9":
+        return _thumb_169(out, frame, title, hook, th, meta, side)
+    W, H = PORTRAIT
+    img = _cover(frame, W, H).convert("RGBA")
     shade = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     d = ImageDraw.Draw(shade)
     for y in range(900):
@@ -122,6 +127,10 @@ def thumbnail(out_dir: Path, at: float, title: str, hook: str = "", theme: str =
             draw.text((x, ty), line, font=tf, fill="white")
         ty += int(size * 1.05)
 
+    return _save(out, img)
+
+
+def _save(out: Path, img: Image.Image) -> dict:
     png, jpg = out / "thumbnail.png", out / "thumbnail.jpg"
     img.convert("RGB").save(png)
     q = 92
@@ -131,3 +140,46 @@ def thumbnail(out_dir: Path, at: float, title: str, hook: str = "", theme: str =
             break
         q -= 8
     return {"png": png, "jpg": jpg}
+
+
+def _thumb_169(out: Path, frame: Image.Image, title: str, hook: str, th: Path, meta: dict, side: str) -> dict:
+    W, H = LANDSCAPE
+    if side not in ("left", "right"):
+        raise CutmateError(f"side must be left or right, got {side!r}")
+    img = _cover(frame, W, H).convert("RGBA")
+    shade = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    d = ImageDraw.Draw(shade)
+    for x in range(760):
+        a = int(210 * (1 - x / 760))
+        xx = x if side == "left" else W - 1 - x
+        d.line([(xx, 0), (xx, H)], fill=(0, 0, 0, a))
+    img = Image.alpha_composite(img, shade)
+    box_w, x0 = 560, (60 if side == "left" else W - 60 - 560)
+    size = 110
+    while True:
+        tf = _load_font(th, meta, "black", size)
+        lines = wrap(title.upper(), tf, box_w)
+        if len(lines) <= 3:
+            break
+        if size <= 60:
+            raise CutmateError("title too long for the thumbnail — shorten it")
+        size -= 8
+    hf_ = _load_font(th, meta, "bold", 40)
+    hook_lines = wrap(hook, hf_, box_w)[:2] if hook else []
+    block = len(hook_lines) * 52 + (20 if hook_lines else 0) + len(lines) * int(size * 1.05)
+    y = (H - block) // 2
+    draw = ImageDraw.Draw(img)
+    for line in hook_lines:
+        draw.text((x0, y), line, font=hf_, fill="white")
+        y += 52
+    y += 20 if hook_lines else 0
+    for i, line in enumerate(lines):
+        if i == len(lines) - 1:
+            head, _, last = line.rpartition(" ")
+            if head:
+                draw.text((x0, y), head + " ", font=tf, fill="white")
+            draw.text((x0 + tf.getlength(head + " " if head else ""), y), last, font=tf, fill=meta["accent"])
+        else:
+            draw.text((x0, y), line, font=tf, fill="white")
+        y += int(size * 1.05)
+    return _save(out, img)

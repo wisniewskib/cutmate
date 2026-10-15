@@ -113,6 +113,7 @@ def _parser() -> argparse.ArgumentParser:
     th2.add_argument("--title", required=True)
     th2.add_argument("--hook", default="")
     th2.add_argument("--theme")
+    th2.add_argument("--side", choices=["left", "right"], default="right")
     return ap
 
 
@@ -204,7 +205,7 @@ def _dispatch(args) -> int:
         print(screenshot(args.url, Path(args.out), args.width, args.height, dark=not args.light))
     elif args.cmd == "thumb":
         from .thumb import thumbnail
-        r = thumbnail(Path(args.out), args.at, args.title, args.hook, args.theme or cfg.theme)
+        r = thumbnail(Path(args.out), args.at, args.title, args.hook, args.theme or cfg.theme, side=args.side)
         print(r["png"])
         print(r["jpg"])
     return 0

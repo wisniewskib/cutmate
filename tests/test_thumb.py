@@ -89,3 +89,25 @@ def test_thumbnail_uses_aroll_not_final(tmp_path):
     r = thumbnail(out, 1.0, "X")
     px = Image.open(r["png"]).convert("RGB").getpixel((540, 1700))
     assert not (px[0] > 200 and px[1] < 60 and px[2] < 60)   # not final.mp4's red
+
+
+def _out169(tmp_path):
+    out = tmp_path / "out"
+    make_clip(out / "aroll.mp4", dur=3.0, size="1920x1080", gaps=())
+    (out / "edl.json").write_text('{"format": "16:9", "segments": []}', encoding="utf-8")
+    return out
+
+
+@pytest.mark.parametrize("side", ["left", "right"])
+def test_thumbnail_169(tmp_path, side):
+    out = _out169(tmp_path)
+    png = Image.open(thumbnail(out, 1.0, "Jak Claude montuje", hook="Bez timeline'u?", side=side)["png"]).convert("L")
+    assert png.size == (1280, 720)
+    left = sum(png.crop((0, 0, 400, 720)).get_flattened_data()) / (400 * 720)
+    right = sum(png.crop((880, 0, 1280, 720)).get_flattened_data()) / (400 * 720)
+    assert (left < right) if side == "left" else (right < left)   # shaded side is darker
+
+
+def test_thumbnail_169_bad_side(tmp_path):
+    with pytest.raises(CutmateError, match="side"):
+        thumbnail(_out169(tmp_path), 1.0, "X", side="top")
