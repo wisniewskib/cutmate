@@ -87,3 +87,23 @@ def test_load_rejects_invalid_language(tmp_path):
     p.write_text(json.dumps({"language": "fr"}), encoding="utf-8")
     with pytest.raises(ConfigError, match="language"):
         config.load(p)
+
+
+def test_captions_defaults_and_merge(tmp_path):
+    from cutmate import config
+    assert config.load(tmp_path / "none.json").captions == {"9:16": "burn", "16:9": "srt"}
+    p = tmp_path / "c.json"
+    p.write_text('{"captions": {"16:9": "both"}}', encoding="utf-8")
+    assert config.load(p).captions == {"9:16": "burn", "16:9": "both"}
+
+
+@pytest.mark.parametrize("bad, msg", [('{"captions": "srt"}', "captions must be a JSON object"),
+                                      ('{"captions": {"16:9": "subs"}}', "burn, srt, both, none"),
+                                      ('{"captions": {"4:3": "srt"}}', "4:3")])
+def test_captions_invalid(tmp_path, bad, msg):
+    from cutmate import config
+    from cutmate.errors import ConfigError
+    p = tmp_path / "c.json"
+    p.write_text(bad, encoding="utf-8")
+    with pytest.raises(ConfigError, match=msg):
+        config.load(p)
