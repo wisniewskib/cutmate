@@ -5,11 +5,12 @@ Times resolve against out/work/aligned_words.json, so re-cutting moves every gra
 """
 import json
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from .cut import load_timed
 from .errors import PlanError
+from .formats import format_of
 
 TYPES = ("title", "counter", "list", "chip", "stamp", "bars", "point", "split")
 REQUIRED = {"title": ("at", "text"), "counter": ("at", "to", "label"), "list": ("items",), "chip": ("at", "text"),
@@ -18,6 +19,9 @@ REQUIRED = {"title": ("at", "text"), "counter": ("at", "to", "label"), "list": (
 TIMING_KEYS = ("type", "at", "from", "until", "hit", "sfx")
 CORNERS = ("tl", "tr", "bl", "br")
 HOLD = 2.5
+PLATE = 1.5                       # chapter plate length (s)
+ONLY = {"split": "9:16"}          # component → the only format it exists in
+HINT = {"split": "in 16:9 use pip"}
 _PUNCT = ".,!?;:…\"'„\u201c\u201d()[]–—-"
 
 
@@ -39,6 +43,9 @@ class Plan:
     music: dict | None
     end: float
     warnings: list
+    chapters: list = field(default_factory=list)
+    face: dict = field(default_factory=dict)
+    format: str = "9:16"
 
 
 def norm(word: str) -> str:
@@ -80,7 +87,7 @@ def _media(rel, rec: Path, where: str) -> str:
     return str(p)
 
 
-def _graphic(i: int, g, words: list[dict], end: float, rec: Path) -> Graphic:
+def _graphic(i: int, g, words: list[dict], end: float, rec: Path, fmt: str = "9:16") -> Graphic:
     where = f"graphic #{i + 1}"
     if not isinstance(g, dict) or "type" not in g:
         raise PlanError(f"{where}: must be an object with a \"type\"")
@@ -88,6 +95,8 @@ def _graphic(i: int, g, words: list[dict], end: float, rec: Path) -> Graphic:
     if t not in TYPES:
         raise PlanError(f"{where}: unknown type {t!r} (use {', '.join(TYPES)})")
     where = f"graphic #{i + 1} ({t})"
+    if t in ONLY and ONLY[t] != fmt:
+        raise PlanError(f"{where}: {t} is not available in {fmt} ({HINT[t]})")
     for k in REQUIRED[t]:
         if k not in g:
             raise PlanError(f"{where}: missing \"{k}\"")
@@ -149,6 +158,59 @@ def _graphic(i: int, g, words: list[dict], end: float, rec: Path) -> Graphic:
     return Graphic(t, round(start, 3), stop, params, bool(g.get("hit", False)), g.get("sfx"), i)
 
 
+def _chapters(raw: dict, words: list[dict], end: float) -> list[dict]:
+    ch = raw.get("chapters")
+    if ch is None:
+        return []
+    if not isinstance(ch, list) or not ch:
+        raise PlanError('"chapters" must be a non-empty list of {"at", "title"}')
+    out = []
+    for j, c in enumerate(ch):
+        if not isinstance(c, dict) or "at" not in c or not str(c.get("title", "")).strip():
+            raise PlanError(f'chapter {j + 1}: needs "at" and "title"')
+        title = str(c["title"]).strip()
+        if len(title) > 40:
+            raise PlanError(f"chapter {j + 1}: title longer than 40 characters ({len(title)})")
+        out.append({"start": round(resolve_anchor(c["at"], words, end)[0], 3), "title": title, "num": j + 1})
+    if any(b["start"] <= a["start"] for a, b in zip(out, out[1:])):
+        raise PlanError("chapters must be in order (each one starts after the previous one)")
+    return out
+
+
+def _chapter_warnings(chs: list[dict], gs: list[Graphic], end: float) -> list[str]:
+    w = []
+    if chs and len(chs) < 3:
+        w.append(f"WARN {len(chs)} chapters — YouTube needs at least 3 to show chapter markers")
+    bounds = [0.0] + [c["start"] for c in chs[1:]] + [end]  # the first chapter always starts at 00:00
+    for c, a, b in zip(chs, bounds, bounds[1:]):
+        if b - a < 10:
+            w.append(f"WARN chapter {c['num']} ({c['title']}) lasts {b - a:.1f}s — YouTube needs at least 10 s")
+    for c in chs[1:]:
+        for g in gs:
+            if c["start"] - 0.05 < g.start < c["start"] + PLATE:
+                w.append(f"WARN {g.type} at {g.start:.1f}s starts under the chapter {c['num']} plate "
+                         f"({c['start']:.1f}–{c['start'] + PLATE:.1f}s)")
+    return w
+
+
+def _face(raw: dict, words: list[dict]) -> dict:
+    f = raw.get("face")
+    if f is None:
+        return {}
+    if not isinstance(f, dict):
+        raise PlanError('"face" must be an object like {"S1": [0.42, 0.3]}')
+    segs = {str(w["seg"]) for w in words}
+    out = {}
+    for k, v in f.items():
+        if k not in segs:
+            raise PlanError(f"face: no segment {k!r} (segments: {', '.join(sorted(segs))})")
+        if not (isinstance(v, list) and len(v) == 2 and all(
+                isinstance(x, (int, float)) and not isinstance(x, bool) and 0 <= x <= 1 for x in v)):
+            raise PlanError(f"face {k}: must be [x, y] with fractions 0–1 of the frame")
+        out[k] = [float(v[0]), float(v[1])]
+    return out
+
+
 def _budget(gs: list[Graphic]) -> list[str]:
     w = []
     hits = [g for g in gs if g.hit]
@@ -196,6 +258,7 @@ def load_plan(out_dir: Path, factcheck: bool = False) -> Plan:
         raise PlanError(f"{p}: invalid JSON ({e.msg}, line {e.lineno})") from None
     if not isinstance(raw, dict):
         raise PlanError(f"{p}: must be a JSON object")
+    fmt = format_of(out)
     words_p = out / "work" / "aligned_words.json"
     if not words_p.exists():
         raise PlanError(f"{words_p} not found — run `cutmate align` first")
@@ -214,7 +277,7 @@ def load_plan(out_dir: Path, factcheck: bool = False) -> Plan:
     graphics_list = raw.get("graphics")
     if graphics_list is not None and not isinstance(graphics_list, list):
         raise PlanError(f"{p}: \"graphics\" must be a list")
-    gs = sorted((_graphic(i, g, words, end, out.parent) for i, g in enumerate(graphics_list or [])),
+    gs = sorted((_graphic(i, g, words, end, out.parent, fmt) for i, g in enumerate(graphics_list or [])),
                 key=lambda g: g.start)
     for i, g in enumerate(gs):
         if g.end is None:
@@ -223,7 +286,9 @@ def load_plan(out_dir: Path, factcheck: bool = False) -> Plan:
         g.end = round(max(min(g.end, end - 0.05), min(g.start + 0.3, end - 0.05)), 3)
         if g.end <= g.start:
             raise PlanError(f"graphic #{g.index + 1} ({g.type}) starts at {g.start:.2f}s, too close to the end ({end:.2f}s)")
-    warnings = _budget(gs) + (_factcheck(out, gs) if factcheck else [])
+    chapters = _chapters(raw, words, end)
+    face = _face(raw, words)
+    warnings = _budget(gs) + _chapter_warnings(chapters, gs, end) + (_factcheck(out, gs) if factcheck else [])
     cap = raw.get("captions") or {}
     if not isinstance(cap, dict):
         raise PlanError(f"{p}: \"captions\" must be a dict")
@@ -241,4 +306,4 @@ def load_plan(out_dir: Path, factcheck: bool = False) -> Plan:
         if (not isinstance(music, dict) or isinstance(v, bool) or not isinstance(v, (int, float)) or not 0 <= v <= 2
                 or ("src" in music and not isinstance(music["src"], str))):
             raise PlanError(f"{p}: \"music\" must be an object with a numeric \"volume\" (0–2) and an optional string \"src\"")
-    return Plan(gs, captions, music, end, warnings)
+    return Plan(gs, captions, music, end, warnings, chapters, face, fmt)

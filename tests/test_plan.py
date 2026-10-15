@@ -239,3 +239,65 @@ def test_good_music_accepted(tmp_path):
 
 def test_norm_curly_apostrophe():
     assert norm("Claude’a") == "claude'a"
+
+
+def make_out169(tmp_path, plan, words=WORDS):
+    out = make_out(tmp_path, plan, words)
+    (out / "edl.json").write_text(json.dumps({"format": "16:9", "segments": []}), encoding="utf-8")
+    return out
+
+
+def test_split_rejected_in_169(tmp_path):
+    out = make_out169(tmp_path, {"graphics": [
+        {"type": "split", "from": "S2:minus", "to": "S2:Claude'a", "media": "broll/x.png"}]})
+    (out.parent / "broll").mkdir()
+    (out.parent / "broll" / "x.png").write_bytes(b"x")
+    with pytest.raises(PlanError, match="not available in 16:9"):
+        load_plan(out)
+
+
+def test_chapters_parsed_and_numbered(tmp_path):
+    out = make_out169(tmp_path, {"chapters": [{"at": "S1:Mówić", "title": " Intro "},
+                                              {"at": "S2:minus", "title": "Drugi „rozdział”"}]})
+    p = load_plan(out)
+    assert p.format == "16:9"
+    assert p.chapters == [{"start": 0.1, "title": "Intro", "num": 1}, {"start": 4.0, "title": "Drugi „rozdział”", "num": 2}]
+
+
+def test_chapters_warnings(tmp_path):
+    out = make_out169(tmp_path, {"chapters": [{"at": "S1:Mówić", "title": "A"}, {"at": "S2:minus", "title": "B"}],
+                                 "graphics": [{"type": "chip", "at": "S2:75%", "text": "X"}]})
+    w = " | ".join(load_plan(out).warnings)
+    assert "2 chapters" in w and "at least 3" in w
+    assert "chapter 1 (A) lasts 4.0s" in w and "chapter 2 (B) lasts 6.0s" in w
+    assert "chip at 4.4s starts under the chapter 2 plate" in w
+
+
+@pytest.mark.parametrize("chapters, msg", [
+    ([], "non-empty list"),
+    ([{"at": "S1:Mówić"}], "needs \"at\" and \"title\""),
+    ([{"at": "S1:Mówić", "title": "x" * 41}], "longer than 40"),
+    ([{"at": "S2:minus", "title": "a"}, {"at": "S1:Mówić", "title": "b"}], "in order"),
+])
+def test_chapters_invalid(tmp_path, chapters, msg):
+    out = make_out169(tmp_path, {"chapters": chapters})
+    with pytest.raises(PlanError, match=msg):
+        load_plan(out)
+
+
+def test_face(tmp_path):
+    out = make_out169(tmp_path, {"face": {"S1": [0.4, 0.3]}})
+    assert load_plan(out).face == {"S1": [0.4, 0.3]}
+
+
+@pytest.mark.parametrize("face, msg", [({"S9": [0.5, 0.5]}, "no segment 'S9'"), ({"S1": [1.2, 0.5]}, "fractions 0–1"),
+                                       ({"S1": [0.5]}, "fractions 0–1"), ([0.5, 0.5], "must be an object")])
+def test_face_invalid(tmp_path, face, msg):
+    out = make_out169(tmp_path, {"face": face})
+    with pytest.raises(PlanError, match=msg):
+        load_plan(out)
+
+
+def test_916_defaults(tmp_path):
+    p = load_plan(make_out(tmp_path, {}))
+    assert (p.format, p.chapters, p.face) == ("9:16", [], {})
