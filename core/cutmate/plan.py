@@ -12,16 +12,18 @@ from .cut import load_timed
 from .errors import PlanError
 from .formats import format_of
 
-TYPES = ("title", "counter", "list", "chip", "stamp", "bars", "point", "split")
+TYPES = ("title", "counter", "list", "chip", "stamp", "bars", "point", "split", "pip", "lower-third")
 REQUIRED = {"title": ("at", "text"), "counter": ("at", "to", "label"), "list": ("items",), "chip": ("at", "text"),
             "stamp": ("at", "text"), "bars": ("at", "head", "rows"), "point": ("at", "image", "corner"),
-            "split": ("from", "to", "media")}
+            "split": ("from", "to", "media"), "pip": ("from", "to", "media"), "lower-third": ("at", "name")}
 TIMING_KEYS = ("type", "at", "from", "until", "hit", "sfx")
 CORNERS = ("tl", "tr", "bl", "br")
 HOLD = 2.5
 PLATE = 1.5                       # chapter plate length (s)
-ONLY = {"split": "9:16"}          # component → the only format it exists in
-HINT = {"split": "in 16:9 use pip"}
+ONLY = {"split": "9:16", "pip": "16:9", "lower-third": "16:9"}  # component → the only format it exists in
+HINT = {"split": "in 16:9 use pip", "pip": "in 9:16 use split", "lower-third": "use chip or title in 9:16"}
+HOLDS = {"lower-third": 4.0}      # default hold per type (s); others use HOLD
+PIP_CORNERS = ("br", "bl")
 _PUNCT = ".,!?;:…\"'„\u201c\u201d()[]–—-"
 
 
@@ -102,14 +104,21 @@ def _graphic(i: int, g, words: list[dict], end: float, rec: Path, fmt: str = "9:
             raise PlanError(f"{where}: missing \"{k}\"")
     params = {k: v for k, v in g.items() if k not in TIMING_KEYS}
     stop = None
-    if t == "split":
+    if t in ("split", "pip"):
         start = resolve_anchor(g["from"], words, end)[0]
         stop = resolve_anchor(g["to"], words, end)[1]
         if stop <= start:
             raise PlanError(f"{where}: \"to\" is before the start")
         params["media"] = _media(g["media"], rec, where)
-        if g.get("fit", "contain") not in ("contain", "cover"):
+        fit = g.get("fit", "cover" if t == "pip" else "contain")
+        if fit not in ("contain", "cover"):
             raise PlanError(f"{where}: fit must be contain or cover")
+        params["fit"] = fit
+        if t == "pip":
+            corner = g.get("corner", "br")
+            if corner not in PIP_CORNERS:
+                raise PlanError(f"{where}: corner must be br or bl")
+            params["corner"] = corner
         params.pop("to", None)
         params.pop("from", None)
     elif t == "list":
@@ -282,7 +291,7 @@ def load_plan(out_dir: Path, factcheck: bool = False) -> Plan:
     for i, g in enumerate(gs):
         if g.end is None:
             nxt = gs[i + 1].start - 0.05 if i + 1 < len(gs) else end
-            g.end = min(g.start + HOLD, nxt)
+            g.end = min(g.start + HOLDS.get(g.type, HOLD), nxt)
         g.end = round(max(min(g.end, end - 0.05), min(g.start + 0.3, end - 0.05)), 3)
         if g.end <= g.start:
             raise PlanError(f"graphic #{g.index + 1} ({g.type}) starts at {g.start:.2f}s, too close to the end ({end:.2f}s)")

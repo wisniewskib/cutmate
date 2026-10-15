@@ -17,7 +17,7 @@ from .cut import load_timed
 from .errors import CutmateError
 from .formats import size_of
 from .hf import ensure_project
-from .media import duration
+from .media import duration, run
 from .music import carve, pick_source, prepare_music
 from .paths import assets_dir, theme_dir, web_dir
 from .plan import PLATE, Graphic, load_plan
@@ -210,6 +210,37 @@ def _copy_if_newer(src: Path, dst: Path) -> None:
         shutil.copy2(src, dst)
 
 
+FACE_PX = 360
+
+
+def face_clip(aroll: Path, start: float, end: float, center: list[float], size: tuple[int, int], dst: Path) -> Path:
+    """The pip circle: a muted square crop around the face, cut from the A-roll for [start, end]."""
+    W, H = size
+    side = round(H * 0.6) // 2 * 2
+    cx = min(max(center[0] * W, side / 2), W - side / 2)
+    cy = min(max(center[1] * H, side / 2), H - side / 2)
+    r = run(["ffmpeg", "-nostdin", "-v", "error", "-y", "-ss", f"{start:.3f}", "-t", f"{end - start:.3f}", "-i", aroll,
+             "-vf", f"crop={side}:{side}:{int(cx - side / 2)}:{int(cy - side / 2)},scale={FACE_PX}:{FACE_PX}",
+             "-an", "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-g", "30", "-pix_fmt", "yuv420p", dst])
+    if r.returncode or not Path(dst).exists():
+        raise CutmateError(f"cannot cut the pip face clip: {' '.join(r.stderr.split())[-300:]}")
+    return Path(dst)
+
+
+def _seg_at(timed: list[dict], t: float) -> str:
+    return next((str(s["id"]) for s in timed if s["start"] <= t + 1e-9 < s["end"]), str(timed[-1]["id"]))
+
+
+def _media_tag(cid: str, g: Graphic, P: dict) -> str:
+    if Path(g.params["media"]).suffix.lower() in VIDEO_EXTS:
+        vdur = round(min(P["end"] - P["at"], duration(Path(g.params["media"]))), 3)
+        P["kind"] = "video"
+        return (f'<video id="{cid}-v" class="clip" data-hf-media-start-basis="local" data-start="{P["at"]}" '
+                f'data-duration="{vdur}" src="{P["media"]}" muted playsinline></video>')
+    P["kind"] = "image"
+    return f'<div class="img" style="background-image:url(\'{P["media"]}\')"></div>'
+
+
 def subcomp(cid: str, g: Graphic, host_start: float, theme: Path, assets: Path, media_map: dict, lang: str,
             size: tuple = (1080, 1920), extra_tags: dict | None = None) -> str:
     sec = _sections(theme / "components" / f"{g.type}.html")
@@ -224,16 +255,9 @@ def subcomp(cid: str, g: Graphic, host_start: float, theme: Path, assets: Path, 
         if k in P:
             P[k] = _copy_media(g.params[k], assets, media_map)
     media_tag = ""
-    if g.type == "split":
+    if g.type in ("split", "pip"):
         P["fit"] = g.params.get("fit", "contain")
-        if Path(g.params["media"]).suffix.lower() in VIDEO_EXTS:
-            vdur = round(min(P["end"] - P["at"], duration(Path(g.params["media"]))), 3)
-            media_tag = (f'<video id="{cid}-v" class="clip" data-hf-media-start-basis="local" data-start="{P["at"]}" '
-                         f'data-duration="{vdur}" src="{P["media"]}" muted playsinline></video>')
-            P["kind"] = "video"
-        else:
-            media_tag = f'<div class="img" style="background-image:url(\'{P["media"]}\')"></div>'
-            P["kind"] = "image"
+        media_tag = _media_tag(cid, g, P)
     tags = {"media_tag": media_tag, **(extra_tags or {})}
     markup = _PLACEHOLDER.sub(lambda m: tags[m.group(1)] if m.group(1) in tags
                               else _html.escape(str(P.get(m.group(1), ""))), sec.get("markup", ""))
@@ -315,17 +339,29 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
     end = plan.end
     media_map, hosts, cues, ids = {}, [], [], []
     items = sorted(plan.graphics + chapter_plates(plan, end, language), key=lambda g: g.start)
+    face_names = set()
     for i, g in enumerate(items):
         cid = f"gx-{i + 1:02d}-{g.type}"
         ids.append(cid)
         hs = round(max(0.0, g.start - LEAD), 3)
-        (proj / "compositions" / f"{cid}.html").write_text(subcomp(cid, g, hs, th, A, media_map, language, size=(W, H)),
-                                                           encoding="utf-8")
+        extra = None
+        if g.type == "pip":
+            fx, fy = plan.face.get(_seg_at(timed, g.start), FACE_DEFAULT)
+            name = f"pipface-{int(g.start * 1000)}-{int(g.end * 1000)}-{fx:.2f}-{fy:.2f}.mp4"
+            dst = A / "media" / name
+            if not dst.exists() or dst.stat().st_mtime < (A / "aroll.mp4").stat().st_mtime:
+                face_clip(A / "aroll.mp4", g.start, g.end, [fx, fy], (W, H), dst)
+            face_names.add(name)
+            loc_at = round(g.start - hs, 3)
+            extra = {"face_tag": f'<video id="{cid}-f" class="clip" data-hf-media-start-basis="local" data-start="{loc_at}" '
+                                 f'data-duration="{round(g.end - g.start, 3)}" src="assets/media/{name}" muted playsinline></video>'}
+        (proj / "compositions" / f"{cid}.html").write_text(
+            subcomp(cid, g, hs, th, A, media_map, language, size=(W, H), extra_tags=extra), encoding="utf-8")
         hosts.append(f'      <div id="{cid}-slot" data-composition-id="{cid}" data-composition-src="compositions/{cid}.html" '
                      f'data-start="{hs}" data-duration="{round(g.end - hs, 3)}" data-track-index="{2 + i % 2}" '
                      f'data-width="{W}" data-height="{H}"></div>')
         cues += _sfx_cues(g, meta)
-    _prune(A / "media", {Path(v).name for v in media_map.values()})
+    _prune(A / "media", {Path(v).name for v in media_map.values()} | face_names)
     for f in (proj / "compositions").glob("gx-*.html"):
         if f.stem not in ids:
             f.unlink()

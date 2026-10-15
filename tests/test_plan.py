@@ -301,3 +301,33 @@ def test_face_invalid(tmp_path, face, msg):
 def test_916_defaults(tmp_path):
     p = load_plan(make_out(tmp_path, {}))
     assert (p.format, p.chapters, p.face) == ("9:16", [], {})
+
+
+def test_pip_and_lower_third_169(tmp_path):
+    out = make_out169(tmp_path, {"graphics": [
+        {"type": "lower-third", "at": "S1:Mówić", "name": "Anna", "role": "AI"},
+        {"type": "pip", "from": "S2:minus", "to": "S2:Claude'a", "media": "broll/x.png"}]})
+    (out.parent / "broll").mkdir()
+    (out.parent / "broll" / "x.png").write_bytes(b"x")
+    lt, pip = load_plan(out).graphics
+    assert (lt.start, lt.end) == (0.1, 3.95)                   # lower-third holds 4 s, clamped before the pip
+    assert pip.params["corner"] == "br" and pip.params["fit"] == "cover" and (pip.start, pip.end) == (4.0, 5.6)
+
+
+@pytest.mark.parametrize("g, msg", [
+    ({"type": "pip", "from": "S2:minus", "to": "S2:Claude'a", "media": "broll/x.png", "corner": "tr"}, "corner must be br or bl"),
+    ({"type": "pip", "from": "S2:minus", "to": "S2:Claude'a", "media": "broll/x.png", "fit": "fill"}, "fit must be"),
+    ({"type": "lower-third", "at": "S1:Mówić"}, "missing \"name\""),
+])
+def test_pip_lower_third_invalid(tmp_path, g, msg):
+    out = make_out169(tmp_path, {"graphics": [g]})
+    (out.parent / "broll").mkdir()
+    (out.parent / "broll" / "x.png").write_bytes(b"x")
+    with pytest.raises(PlanError, match=msg):
+        load_plan(out)
+
+
+def test_pip_rejected_in_916(tmp_path):
+    out = make_out(tmp_path, {"graphics": [{"type": "lower-third", "at": "S1:Mówić", "name": "B"}]})
+    with pytest.raises(PlanError, match="not available in 9:16"):
+        load_plan(out)

@@ -20,7 +20,7 @@ WORDS = [
 ]
 TIMED = [{"id": "S1", "start": 0.0, "end": 2.0, "text": "a"}, {"id": "S2", "start": 2.0, "end": 4.0, "text": "b"}]
 FAKE_COMPONENT = """<style>ROOT .band .x { color: red; }</style>
-<markup><div class="band"><div class="x">{{label}}</div>{{media_tag}}</div></markup>
+<markup><div class="band"><div class="x">{{label}}</div>{{media_tag}}{{face_tag}}</div></markup>
 <script>
 tl.fromTo(root.querySelector(".x"), { opacity: 0 }, { opacity: 1, duration: 0.2 }, P.at);
 U.out(root.querySelector(".band"), P.end - 0.2);
@@ -34,7 +34,7 @@ def theme(tmp_path, monkeypatch):
     dst = tmp_path / "home" / "themes" / "testtheme"
     shutil.copytree(src, dst, ignore=shutil.ignore_patterns("components"))
     (dst / "components").mkdir()
-    for t in ("title", "counter", "list", "chip", "stamp", "bars", "point", "split", "chapter"):
+    for t in ("title", "counter", "list", "chip", "stamp", "bars", "point", "split", "chapter", "pip", "lower-third"):
         (dst / "components" / f"{t}.html").write_text(FAKE_COMPONENT, encoding="utf-8")
     monkeypatch.setenv("CUTMATE_HOME", str(tmp_path / "home"))
     return "testtheme"
@@ -349,3 +349,44 @@ def test_chapter_plate_escapes_title(out169, theme):
     write_plan(out169, {"chapters": [{"at": "S1:Mówić", "title": "A"}, {"at": "S2:minus", "title": "</script> & „x”"}]})
     sub = next((B.build(out169, theme=theme)["project"] / "compositions").glob("gx-*-chapter.html")).read_text(encoding="utf-8")
     assert "</script> &" not in sub and "<\\/script>" in sub
+
+
+def _pip_plan(o, media="broll/p.png"):
+    (o.parent / "broll").mkdir(exist_ok=True)
+    if media.endswith(".png"):
+        from PIL import Image
+        Image.new("RGB", (64, 36), "red").save(o.parent / media)
+    write_plan(o, {"face": {"S2": [0.3, 0.3]},
+                   "graphics": [{"type": "pip", "from": "S2:minus", "to": "S2:Claude'a", "media": media}]})
+
+
+def test_pip_face_clip(out169, theme):
+    from cutmate.media import probe_video
+    _pip_plan(out169)
+    proj = B.build(out169, theme=theme)["project"]
+    faces = list((proj / "assets" / "media").glob("pipface-*.mp4"))
+    assert len(faces) == 1
+    info = probe_video(faces[0])
+    assert (info["width"], info["height"]) == (360, 360) and info["acodec"] is None
+    assert info["duration"] == pytest.approx(1.0, abs=0.1)        # 2.1 -> 3.1
+    sub = (proj / "compositions" / "gx-01-pip.html").read_text(encoding="utf-8")
+    assert f'src="assets/media/{faces[0].name}"' in sub and 'class="clip"' in sub and "muted" in sub
+
+
+def test_pip_face_clip_regenerated_after_recut(out169, theme):
+    import os
+    import time
+    _pip_plan(out169)
+    proj = B.build(out169, theme=theme)["project"]
+    face = next((proj / "assets" / "media").glob("pipface-*.mp4"))
+    first = face.stat().st_mtime
+    B.build(out169, theme=theme)                                 # same A-roll -> reused
+    assert face.stat().st_mtime == first
+    time.sleep(0.05)
+    make_clip(out169 / "aroll.mp4", dur=4.0, size="1920x1080", gaps=())   # re-cut
+    os.utime(out169 / "aroll.mp4", (time.time() + 5, time.time() + 5))
+    B.build(out169, theme=theme)
+    assert face.stat().st_mtime > first
+    write_plan(out169, {})
+    B.build(out169, theme=theme)
+    assert not list((proj / "assets" / "media").glob("pipface-*.mp4"))   # pruned

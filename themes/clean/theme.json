@@ -12,6 +12,8 @@
     "bars": [["whoosh", -0.05, 0.3]],
     "point": [["pop", 0.0, 0.3]],
     "split": [["whoosh", -0.05, 0.35]],
+    "pip": [["whoosh", -0.05, 0.3]],
+    "lower-third": [["pop", 0.0, 0.25]],
     "chapter": [["swell", -0.2, 0.3]]
   },
   "hit_sfx": ["impact", 0.3]

@@ -1,0 +1,7 @@
+<markup><div class="lt"><span class="lt-name">{{name}}</span><span class="lt-role">{{role}}</span></div></markup>
+<script>
+const lt = root.querySelector(".lt");
+if (!P.role) root.querySelector(".lt-role").remove();
+tl.fromTo(lt, { opacity: 0, x: -60 }, { opacity: 1, x: 0, duration: 0.35, ease: "power3.out" }, P.at);
+U.out(lt, P.end - 0.2);
+</script>
