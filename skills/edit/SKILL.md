@@ -1,6 +1,6 @@
 ---
 name: edit
-description: Edit a talking-head short (9:16) from raw phone takes with cutmate — transcribe, pick the best takes like a human editor, fact-check, cut to -14 LUFS, word-aligned captions, theme graphics (SVG/GSAP via HyperFrames), sound effects, optional music, render, QA and a thumbnail. Use when the user asks to edit / cut / make a short or reel from a folder of recordings.
+description: Edit a talking-head short (9:16) or a YouTube long-form video (16:9) from raw takes with cutmate — transcribe, pick the best takes like a human editor, fact-check, cut to -14 LUFS, word-aligned captions, theme graphics (SVG/GSAP via HyperFrames), sound effects, optional music, render, QA and a thumbnail. Use when the user asks to edit / cut / make a short, reel or long-form video from a folder of recordings.
 ---
 
 # /cutmate:edit <folder>
@@ -14,8 +14,8 @@ steps.factcheck / qa / thumbnail, music). Read the theme rules: `${CLAUDE_PLUGIN
 checked, run `$CM theme-check --theme <theme> --language <lang>` once (renders every component and reports problems).
 
 **Resume:** if `out/` already has files, continue from the first missing one:
-`work/*/transcript.json` → `sheets/*.png` → `takes.md` → `edl.json` → `aroll.mp4` → `work/aligned_words.json` →
-`plan.json` → `composition/index.html` → `final.mp4` → `thumbnail.png` (if `steps.thumbnail`) → `EDIT_NOTES.md`.
+`work/*/transcript.json` → `sheets/*.png` → `outline.md` (16:9) → `takes.md` → `edl.json` → `aroll.mp4` →
+`work/aligned_words.json` → `plan.json` → `preview.mp4` (16:9) → `composition/index.html` → `final.mp4` → `thumbnail.png` (if `steps.thumbnail`) → `EDIT_NOTES.md`.
 Resuming at `takes.md` means (re)making and READING the sheets first.
 
 ## 1. Transcribe and look
@@ -25,6 +25,32 @@ Resuming at `takes.md` means (re)making and READING the sheets first.
    times; `SUSPECT long word` lines mark windows that hide a stumble or a retake.
 2. For every clip: `$CM sheet <clip> -o <folder>/out/sheets/<clip>.png --step 0.5` and READ the sheet image(s). Note where
    the speaker looks away, reads notes, the framing jumps (stabilisation), or they point at something.
+3. Run `$CM formats <folder>` (`cutmate formats` is rotation-aware; last line `format: 9:16 | 16:9 | mixed`). All `16:9` →
+   long-form branch (section 1b); all `9:16` → short; `mixed` → ask the user once which format to make. Put the format
+   in `edl.json` (`"format": "16:9"`).
+
+## 1b. 16:9 long-form — what changes
+
+Everything else in this skill applies; these are the differences.
+
+- **Outline first:** write `out/outline.md`: the chapters (title ≤ 40 chars, what is said, which clips and time ranges).
+- **Takes per chapter in parallel:** dispatch one subagent per chapter (Agent tool, all in one message) with: the folder,
+  the CLI path, that chapter's clips and ranges, the sheet notes, and the whole of section 2 of this skill verbatim. Each
+  returns its part of `takes.md` (repeated lines + Checks) and its segment list. Merge into one `takes.md` and one
+  `edl.json` (ids S1… in video order). Never skip the Checks — same rule as shorts. Cut mid-sentence only on a pause
+  ≥ 0.25 s. Keep the intro in place (no hook reshuffle unless one line is clearly the strongest opener).
+- **plan.json:** follow the `## 16:9` section of `frame.md`. Add `"chapters": [{"at": "S1:word", "title": "…"}]` (plates
+  for chapters 2+) and `"face": {"S1": [x, y], …}` for EVERY segment (face position from the sheets, fractions 0–1).
+  Components: `pip` (instead of `split`; `from`, `to`, `media`, `corner?` br|bl, `fit?` cover|contain), `lower-third`
+  (`at`, `name`, `role?`) once at the self-introduction, corner graphics as usual. `split` is an error in 16:9.
+- **Checkpoint before the full render (always):** `$CM preview <folder>/out` → send the user `out/preview.mp4` and the
+  `chapters.txt` lines; wait for OK. Changes → EDL / plan → new preview. Only then build, snapshot, render (a 15-minute
+  video renders for ~45–60 min; tell the user).
+- **Outputs:** `final.mp4`, `chapters.txt` (paste into the YouTube description), `captions.srt` when the config's caption
+  mode for 16:9 is `srt`/`both` (upload in YouTube Studio), thumbnail.
+- **Thumbnail:** 1280×720; pick a frame where the face is on one side and put the text on the other:
+  `$CM thumb <folder>/out --at <t> --title "…" --hook "…" --side left|right`.
+- Custom theme: `$CM theme-check --theme <theme> --language <lang> --format 16:9`.
 
 ## 2. Pick takes (the most important step — be an editor, not a transcriber)
 
@@ -127,5 +153,5 @@ question. Keep the title short (it wraps to at most 3 lines) and the hook to 2 l
 ## 9. Notes and hand-off
 
 Write `out/EDIT_NOTES.md`: final structure (segments in order with times), which graphic is where and why, music,
-commands used. Send the user `final.mp4` (and the thumbnail). When they reply with timestamps, batch all changes into
+commands used. Send the user `final.mp4` (and the thumbnail). For 16:9 also hand over `chapters.txt` and, if it was written, `captions.srt`. When they reply with timestamps, batch all changes into
 one rebuild + one render.
