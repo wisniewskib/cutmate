@@ -34,7 +34,7 @@ def theme(tmp_path, monkeypatch):
     dst = tmp_path / "home" / "themes" / "testtheme"
     shutil.copytree(src, dst, ignore=shutil.ignore_patterns("components"))
     (dst / "components").mkdir()
-    for t in ("title", "counter", "list", "chip", "stamp", "bars", "point", "split"):
+    for t in ("title", "counter", "list", "chip", "stamp", "bars", "point", "split", "chapter"):
         (dst / "components" / f"{t}.html").write_text(FAKE_COMPONENT, encoding="utf-8")
     monkeypatch.setenv("CUTMATE_HOME", str(tmp_path / "home"))
     return "testtheme"
@@ -330,3 +330,22 @@ def test_caption_mode_invalid(out, theme):
     write_plan(out, {})
     with pytest.raises(CutmateError, match="caption mode"):
         B.build(out, theme=theme, captions={"9:16": "subs"})
+
+
+def test_chapter_plates(out169, theme):
+    write_plan(out169, {"chapters": [{"at": "S1:Mówić", "title": "Intro"}, {"at": "S2:minus", "title": "Dwa"}]})
+    r = B.build(out169, theme=theme)
+    proj = r["project"]
+    plates = sorted((proj / "compositions").glob("gx-*-chapter.html"))
+    assert len(plates) == 1                               # no plate for chapter 1
+    sub = plates[0].read_text(encoding="utf-8")
+    assert '"label": "ROZDZIAŁ 02"' in sub and '"title": "Dwa"' in sub
+    html = (proj / "index.html").read_text(encoding="utf-8")
+    assert re.search(r'id="gx-01-chapter-slot"[^>]*data-start="1.8" data-duration="1.8"', html)
+    assert 2.5 in r["checkpoints"]                        # 2.1 + 0.4
+
+
+def test_chapter_plate_escapes_title(out169, theme):
+    write_plan(out169, {"chapters": [{"at": "S1:Mówić", "title": "A"}, {"at": "S2:minus", "title": "</script> & „x”"}]})
+    sub = next((B.build(out169, theme=theme)["project"] / "compositions").glob("gx-*-chapter.html")).read_text(encoding="utf-8")
+    assert "</script> &" not in sub and "<\\/script>" in sub

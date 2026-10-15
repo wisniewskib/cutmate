@@ -20,8 +20,9 @@ from .hf import ensure_project
 from .media import duration
 from .music import carve, pick_source, prepare_music
 from .paths import assets_dir, theme_dir, web_dir
-from .plan import Graphic, load_plan
+from .plan import PLATE, Graphic, load_plan
 
+CHAPTER_LABEL = {"pl": "ROZDZIAŁ", "en": "CHAPTER"}
 LEAD = 0.3                    # host starts this much before the graphic's word (entrance lead-in)
 VIDEO_EXTS = {".mp4", ".mov", ".m4v", ".webm", ".mkv"}
 ILLUSTRATIVE = {"pl": "ILUSTRACYJNIE", "en": "ILLUSTRATIVE"}
@@ -276,6 +277,14 @@ def sfx_tags(cues: list[tuple], end: float, assets: Path) -> list[str]:
     return tags
 
 
+def chapter_plates(plan, end: float, lang: str) -> list[Graphic]:
+    """Full-screen plates for chapters 2+ (chapter 1 is the start of the video)."""
+    word = CHAPTER_LABEL.get(lang, CHAPTER_LABEL["en"])
+    return [Graphic("chapter", c["start"], round(min(c["start"] + PLATE, end - 0.05), 3),
+                    {"num": c["num"], "title": c["title"], "label": f"{word} {c['num']:02d}"}, False, None, -1)
+            for c in plan.chapters[1:] if c["start"] < end - 0.35]
+
+
 def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: bool = False,
           music: dict | None = None, captions: dict | None = None) -> dict:
     out = Path(out_dir).resolve()
@@ -305,7 +314,8 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
     timed = load_timed(out)
     end = plan.end
     media_map, hosts, cues, ids = {}, [], [], []
-    for i, g in enumerate(plan.graphics):
+    items = sorted(plan.graphics + chapter_plates(plan, end, language), key=lambda g: g.start)
+    for i, g in enumerate(items):
         cid = f"gx-{i + 1:02d}-{g.type}"
         ids.append(cid)
         hs = round(max(0.0, g.start - LEAD), 3)
@@ -363,6 +373,6 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
     def checkpoint(g: Graphic) -> float:
         t = max(it["at"] for it in g.params["items"]) if g.type == "list" else g.start
         return round(min(t + 0.4, g.end - 0.05), 2)
-    checkpoints = sorted({checkpoint(g) for g in plan.graphics})
+    checkpoints = sorted({checkpoint(g) for g in items})
     (out / "work" / "checkpoints.json").write_text(json.dumps(checkpoints), encoding="utf-8")
     return {"project": proj, "warnings": plan.warnings, "checkpoints": checkpoints}

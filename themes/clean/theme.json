@@ -11,7 +11,8 @@
     "stamp": [["impact", 0.0, 0.4]],
     "bars": [["whoosh", -0.05, 0.3]],
     "point": [["pop", 0.0, 0.3]],
-    "split": [["whoosh", -0.05, 0.35]]
+    "split": [["whoosh", -0.05, 0.35]],
+    "chapter": [["swell", -0.2, 0.3]]
   },
   "hit_sfx": ["impact", 0.3]
 }

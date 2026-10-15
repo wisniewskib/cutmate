@@ -4,10 +4,12 @@ from cutmate import paths
 from cutmate.build import _sections
 from cutmate.plan import TYPES
 
+EXTRA = ("chapter",)
+
 
 def test_every_component_has_a_script_and_no_forbidden_apis():
     d = paths.theme_dir("clean") / "components"
-    for t in TYPES:
+    for t in TYPES + EXTRA:
         sec = _sections(d / f"{t}.html")
         js = sec["script"]
         for bad in ("Date.now", "Math.random", "performance.now", "onUpdate", "setTimeout", ".play("):
