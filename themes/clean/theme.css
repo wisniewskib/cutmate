@@ -73,7 +73,8 @@ html.f169 .bars .head { font-size: 24px; }
 html.f169 .bars .lbl { font-size: 26px; }
 html.f169 .bars .track { height: 18px; }
 html.f169 .bars .note { font-size: 18px; }
-html.f169 .point { width: 460px; }
+/* point.html positions itself inline (9:16 band coords): in 16:9 every corner goes to the top-right graphics box */
+html.f169 .point { width: 460px; top: 60px !important; right: 60px !important; left: auto !important; }
 html.f169 .point .shot { height: 260px; }
 .chapter { position: absolute; inset: 0; background: #0b0b0f; display: flex; flex-direction: column; align-items: center;
            justify-content: center; gap: 28px; opacity: 0; font-family: var(--font); }

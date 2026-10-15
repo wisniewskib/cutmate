@@ -1,7 +1,7 @@
 """Contract test for a theme pack: every component renders in a real HyperFrames build.
 
-Builds a synthetic 24 s short (test-pattern A-roll, synthetic words) with one graphic per component type
-(+ a video split), runs `hyperframes check`, snapshots each graphic and tiles a contact sheet.
+Builds a synthetic 24 s video in the given format (test-pattern A-roll, synthetic words) with one graphic per
+component type of that format (9:16: + a video split; 16:9: + a video pip and a chapter plate), runs `hyperframes check`, snapshots each graphic and tiles a contact sheet.
 """
 import json
 import tempfile
@@ -16,13 +16,48 @@ from .media import run
 
 WORDS_PER_SEG = 20
 
+GRAPHICS_916 = [
+    {"type": "title", "at": "S1:słowo1", "until": "S1:słowo3", "kicker": "Kicker", "text": "Tytuł ąę"},
+    {"type": "counter", "at": "S1:słowo6", "until": "S1:słowo8", "to": 75, "prefix": "-", "suffix": "%", "label": "TOKENÓW", "hit": True},
+    {"type": "list", "head": "Lista", "items": [
+        {"text": "Pierwszy", "at": "S1:słowo9"}, {"text": "Drugi punkt", "at": "S1:10%"},
+        {"text": "Trzeci punkt", "at": "S1:słowo11"}, {"text": "Czwarty bardzo długi punkt", "at": "S1:słowo12"}],
+     "until": "S1:słowo14"},
+    {"type": "chip", "at": "S1:słowo16", "until": "S1:słowo18", "text": "Caveman"},
+    {"type": "stamp", "at": "S2:słowo1", "until": "S2:słowo2", "text": "NIE."},
+    {"type": "bars", "at": "S2:słowo3", "until": "S2:słowo6", "head": "Koszt", "illustrative": True,
+     "rows": [{"label": "Przed", "value": 100}, {"label": "Po", "value": 60}, {"label": "Optymalnie", "value": 25}]},
+    {"type": "point", "at": "S2:słowo7", "until": "S2:słowo8", "image": "broll/page.png", "corner": "tr"},
+    {"type": "split", "from": "S2:słowo11", "to": "S2:słowo13", "media": "broll/page.png"},
+    {"type": "split", "from": "S2:słowo16", "to": "S2:słowo18", "media": "broll/clip.mp4"},
+]
+GRAPHICS_169 = [
+    {"type": "title", "at": "S1:słowo1", "until": "S1:słowo3", "kicker": "Kicker", "text": "Tytuł ąę"},
+    {"type": "counter", "at": "S1:słowo6", "until": "S1:słowo8", "to": 75, "prefix": "-", "suffix": "%", "label": "TOKENÓW", "hit": True},
+    {"type": "list", "head": "Lista", "items": [
+        {"text": "Pierwszy", "at": "S1:słowo9"}, {"text": "Drugi punkt", "at": "S1:10%"},
+        {"text": "Trzeci punkt", "at": "S1:słowo11"}, {"text": "Czwarty bardzo długi punkt", "at": "S1:słowo12"}],
+     "until": "S1:słowo14"},
+    {"type": "chip", "at": "S1:słowo16", "until": "S1:słowo18", "text": "Caveman"},
+    {"type": "lower-third", "at": "S2:słowo3", "until": "S2:słowo4", "name": "Anna Nowak", "role": "AI · wideo"},
+    {"type": "stamp", "at": "S2:słowo6", "until": "S2:słowo7", "text": "NIE."},
+    {"type": "bars", "at": "S2:słowo8", "until": "S2:słowo9", "head": "Koszt", "illustrative": True,
+     "rows": [{"label": "Przed", "value": 100}, {"label": "Po", "value": 60}, {"label": "Optymalnie", "value": 25}]},
+    {"type": "point", "at": "S2:10%", "until": "S2:słowo11", "image": "broll/page.png", "corner": "tr"},
+    {"type": "pip", "from": "S2:słowo12", "to": "S2:słowo14", "media": "broll/page.png"},
+    {"type": "pip", "from": "S2:słowo16", "to": "S2:słowo18", "media": "broll/clip.mp4", "corner": "bl", "fit": "contain"},
+]
+CHAPTERS_169 = [{"at": "S1:0%", "title": "Intro"}, {"at": "S2:0%", "title": "Drugi rozdział ąę"}]
 
-def _synthetic_rec(root: Path) -> Path:
-    rec = root / "theme-check"
+
+def _synthetic_rec(root: Path, fmt: str = "9:16") -> Path:
+    rec = root / f"theme-check-{fmt.replace(':', 'x')}"
     out = rec / "out"
     (out / "work").mkdir(parents=True, exist_ok=True)
     (rec / "broll").mkdir(exist_ok=True)
-    for dst, size, d in ((out / "aroll.mp4", "1080x1920", 24), (rec / "broll" / "clip.mp4", "1280x720", 3)):
+    aroll_size = "1920x1080" if fmt == "16:9" else "1080x1920"
+    (out / "edl.json").write_text(json.dumps({"format": fmt, "segments": []}), encoding="utf-8")
+    for dst, size, d in ((out / "aroll.mp4", aroll_size, 24), (rec / "broll" / "clip.mp4", "1280x720", 3)):
         r = run(["ffmpeg", "-nostdin", "-v", "error", "-y", "-f", "lavfi", "-i", f"testsrc2=size={size}:rate=30:duration={d}",
                  "-f", "lavfi", "-i", f"sine=frequency=220:duration={d}", "-c:v", "libx264", "-pix_fmt", "yuv420p",
                  "-c:a", "aac", "-shortest", str(dst)])
@@ -40,28 +75,17 @@ def _synthetic_rec(root: Path) -> Path:
             words.append({"seg": sid, "word": f"słowo{i}" if i % 5 else f"{i}%", "start": round(t, 2), "end": round(t + 0.4, 2)})
     (out / "work" / "aligned_words.json").write_text(json.dumps(words, ensure_ascii=False), encoding="utf-8")
     (out / "work" / "edl_timed.json").write_text(json.dumps(timed), encoding="utf-8")
-    plan = {"captions": {"key": ["SŁOWO3"]}, "graphics": [
-        {"type": "title", "at": "S1:słowo1", "until": "S1:słowo3", "kicker": "Kicker", "text": "Tytuł ąę"},
-        {"type": "counter", "at": "S1:słowo6", "until": "S1:słowo8", "to": 75, "prefix": "-", "suffix": "%", "label": "TOKENÓW", "hit": True},
-        {"type": "list", "head": "Lista", "items": [
-            {"text": "Pierwszy", "at": "S1:słowo9"}, {"text": "Drugi punkt", "at": "S1:10%"},
-            {"text": "Trzeci punkt", "at": "S1:słowo11"}, {"text": "Czwarty bardzo długi punkt", "at": "S1:słowo12"}],
-         "until": "S1:słowo14"},
-        {"type": "chip", "at": "S1:słowo16", "until": "S1:słowo18", "text": "Caveman"},
-        {"type": "stamp", "at": "S2:słowo1", "until": "S2:słowo2", "text": "NIE."},
-        {"type": "bars", "at": "S2:słowo3", "until": "S2:słowo6", "head": "Koszt", "illustrative": True,
-         "rows": [{"label": "Przed", "value": 100}, {"label": "Po", "value": 60}, {"label": "Optymalnie", "value": 25}]},
-        {"type": "point", "at": "S2:słowo7", "until": "S2:słowo8", "image": "broll/page.png", "corner": "tr"},
-        {"type": "split", "from": "S2:słowo11", "to": "S2:słowo13", "media": "broll/page.png"},
-        {"type": "split", "from": "S2:słowo16", "to": "S2:słowo18", "media": "broll/clip.mp4"},
-    ]}
+    plan = {"captions": {"key": ["SŁOWO3"]}, "graphics": GRAPHICS_169 if fmt == "16:9" else GRAPHICS_916}
+    if fmt == "16:9":
+        plan["chapters"] = CHAPTERS_169
+        plan["face"] = {"S1": [0.5, 0.35], "S2": [0.45, 0.35]}
     (out / "plan.json").write_text(json.dumps(plan, ensure_ascii=False), encoding="utf-8")
     return out
 
 
-def theme_check(theme: str = "clean", workdir: Path | None = None, language: str = "pl") -> dict:
+def theme_check(theme: str = "clean", workdir: Path | None = None, language: str = "pl", fmt: str = "9:16") -> dict:
     root = Path(workdir) if workdir else Path(tempfile.mkdtemp(prefix="cutmate-theme-"))
-    out = _synthetic_rec(root)
+    out = _synthetic_rec(root, fmt)
     r = build(out, theme=theme, language=language)
     proj = r["project"]
     chk = run(hf("check"), cwd=proj)
@@ -76,10 +100,11 @@ def theme_check(theme: str = "clean", workdir: Path | None = None, language: str
     shots = sorted(snaps.glob("frame-*.png"))
     if snap.returncode or len(shots) != len(cps):
         raise CutmateError("snapshot failed: " + " ".join((snap.stdout + snap.stderr).split())[-400:])
-    tiles = [Image.open(p).convert("RGB").resize((270, 480)) for p in shots]
-    sheet = Image.new("RGB", (270 * min(5, len(tiles)), 480 * ((len(tiles) + 4) // 5)), "black")
+    tw, th = (480, 270) if fmt == "16:9" else (270, 480)
+    tiles = [Image.open(p).convert("RGB").resize((tw, th)) for p in shots]
+    sheet = Image.new("RGB", (tw * min(5, len(tiles)), th * ((len(tiles) + 4) // 5)), "black")
     for i, t in enumerate(tiles):
-        sheet.paste(t, ((i % 5) * 270, (i // 5) * 480))
-    sheet_path = out / f"theme-check-{theme}.png"
+        sheet.paste(t, ((i % 5) * tw, (i // 5) * th))
+    sheet_path = out / f"theme-check-{theme}-{fmt.replace(':', 'x')}.png"
     sheet.save(sheet_path)
     return {"project": proj, "sheet": sheet_path, "snapshots": shots}

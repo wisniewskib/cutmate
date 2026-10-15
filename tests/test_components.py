@@ -23,10 +23,14 @@ def test_split_uses_media_tag():
 
 
 @pytest.mark.hf
-def test_theme_check_clean(tmp_path):
+@pytest.mark.parametrize("fmt, n", [("9:16", 9), ("16:9", 11)])
+def test_theme_check_clean(tmp_path, fmt, n):
+    from PIL import Image
     from cutmate.theme_check import theme_check
-    r = theme_check("clean", tmp_path)
-    assert r["sheet"].exists() and len(r["snapshots"]) == len(TYPES) + 1
+    r = theme_check("clean", tmp_path, fmt=fmt)
+    assert r["sheet"].exists() and len(r["snapshots"]) == n
+    w, h = Image.open(r["snapshots"][0]).size
+    assert (w > h) == (fmt == "16:9")
 
 
 def test_theme_css_has_169_layout():
