@@ -97,6 +97,8 @@ def cut_aroll(edl_path: Path) -> list[dict]:
                         f"aformat=sample_rates=48000:channel_layouts=stereo,apad=whole_dur={d:.4f},atrim=duration={d:.4f},"
                         f"volume={gain:.1f}dB,afade=t=in:d=0.015,afade=t=out:st={max(0.0, d - 0.03):.3f}:d=0.03",
                  "-c:v", "libx264", "-preset", "medium", "-crf", "16", "-r", str(fps), "-pix_fmt", "yuv420p",
+                 # 1 s GOP: the browser (hyperframes check / render) seeks the A-roll; long GOPs make each seek crawl
+                 "-g", str(fps),
                  "-c:a", "pcm_s16le", part])
         if r.returncode:
             raise MediaError(f"segment {s['id']}: ffmpeg failed: {_tail(r.stderr)}")

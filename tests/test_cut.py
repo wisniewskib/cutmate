@@ -40,6 +40,18 @@ def test_cut_basic(tmp_path):
     check_aroll(write_edl(rec, SEGS))
 
 
+def test_aroll_keyframe_every_second(tmp_path):
+    """The browser seeks the A-roll for every frame; a long GOP makes hyperframes check/render time out."""
+    rec = tmp_path / "rec"
+    make_clip(rec / "take1.mp4")
+    cut_aroll(write_edl(rec, SEGS))
+    r = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v", "-skip_frame", "nokey", "-show_entries",
+                        "frame=pts_time", "-of", "csv=p=0", str(rec / "out" / "aroll.mp4")], capture_output=True, text=True)
+    keys = [float(x.strip(",")) for x in r.stdout.split() if x.strip(",")]
+    gaps = [b - a for a, b in zip(keys, keys[1:])] + [2.5 - keys[-1]]
+    assert max(gaps) <= 1.05
+
+
 def test_cut_unicode_path(tmp_path):
     rec = tmp_path / "źródła" / "nagranie 1 ąę"
     make_clip(rec / "take1.mp4")
