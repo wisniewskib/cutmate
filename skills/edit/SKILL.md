@@ -25,7 +25,7 @@ Resuming at `takes.md` means (re)making and READING the sheets first.
    times; `SUSPECT long word` lines mark windows that hide a stumble or a retake.
 2. For every clip: `$CM sheet <clip> -o <folder>/out/sheets/<clip>.png --step 0.5` and READ the sheet image(s). Note where
    the speaker looks away, reads notes, the framing jumps (stabilisation), or they point at something.
-3. Run `$CM formats <folder>` (`cutmate formats` is rotation-aware; last line `format: 9:16 | 16:9 | mixed`). All `16:9` →
+3. Run `$CM formats <folder>` (`cutmate formats` is rotation-aware; last line `format: 9:16|16:9|mixed`). All `16:9` →
    long-form branch (section 1b); all `9:16` → short; `mixed` → ask the user once which format to make. Put the format
    in `edl.json` (`"format": "16:9"`).
 
@@ -153,5 +153,7 @@ question. Keep the title short (it wraps to at most 3 lines) and the hook to 2 l
 ## 9. Notes and hand-off
 
 Write `out/EDIT_NOTES.md`: final structure (segments in order with times), which graphic is where and why, music,
-commands used. Send the user `final.mp4` (and the thumbnail). For 16:9 also hand over `chapters.txt` and, if it was written, `captions.srt`. When they reply with timestamps, batch all changes into
+commands used. Send the user `final.mp4` (and the thumbnail).
+16:9: also hand over `chapters.txt` and, if it was written, `captions.srt`.
+When they reply with timestamps, batch all changes into
 one rebuild + one render.
