@@ -163,7 +163,7 @@ def _dispatch(args) -> int:
     elif args.cmd == "build":
         from .build import build
         r = build(Path(args.out), theme=args.theme or cfg.theme, language=language,
-                  factcheck=bool(cfg.steps.get("factcheck")), music=cfg.music)
+                  factcheck=bool(cfg.steps.get("factcheck")), music=cfg.music, captions=cfg.captions)
         for w in r["warnings"]:
             print(w)
         print(f"project: {r['project']}")

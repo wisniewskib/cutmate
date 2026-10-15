@@ -305,3 +305,28 @@ def test_build_916_unchanged_markers(out, theme):
     write_plan(out, {"graphics": [{"type": "chip", "at": "S2:minus", "text": "X"}]})
     html = (B.build(out, theme=theme)["project"] / "index.html").read_text(encoding="utf-8")
     assert 'class="f916"' in html and cfg_of(html)["cam"] == [[0.0, 1.0], [2.0, 1.12]]
+
+
+def test_caption_modes_switch(out169, theme):
+    write_plan(out169, {"chapters": [{"at": "S1:Mówić", "title": "Intro"}, {"at": "S2:minus", "title": "Dwa"}]})
+    B.build(out169, theme=theme)                                   # 16:9 default: srt
+    html = (out169 / "composition" / "index.html").read_text(encoding="utf-8")
+    assert cfg_of(html)["pages"] == []
+    assert (out169 / "captions.srt").read_text(encoding="utf-8").startswith("1\n00:00:00,060")
+    assert (out169 / "chapters.txt").read_text(encoding="utf-8") == "00:00 Intro\n00:02 Dwa\n"
+    B.build(out169, theme=theme, captions={"16:9": "burn"})
+    html = (out169 / "composition" / "index.html").read_text(encoding="utf-8")
+    assert cfg_of(html)["pages"] and not (out169 / "captions.srt").exists()
+    B.build(out169, theme=theme, captions={"16:9": "both"})
+    assert cfg_of((out169 / "composition" / "index.html").read_text(encoding="utf-8"))["pages"]
+    assert (out169 / "captions.srt").exists()
+    write_plan(out169, {})
+    B.build(out169, theme=theme, captions={"16:9": "none"})
+    assert not (out169 / "captions.srt").exists() and not (out169 / "chapters.txt").exists()
+
+
+def test_caption_mode_invalid(out, theme):
+    from cutmate.errors import CutmateError
+    write_plan(out, {})
+    with pytest.raises(CutmateError, match="caption mode"):
+        B.build(out, theme=theme, captions={"9:16": "subs"})

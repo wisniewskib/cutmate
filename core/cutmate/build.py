@@ -10,6 +10,9 @@ import shutil
 import unicodedata
 from pathlib import Path
 
+from .captions import to_srt
+from .chapters import chapters_txt
+from .config import CAPTION_MODES, DEFAULT_CAPTIONS
 from .cut import load_timed
 from .errors import CutmateError
 from .formats import size_of
@@ -274,11 +277,14 @@ def sfx_tags(cues: list[tuple], end: float, assets: Path) -> list[str]:
 
 
 def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: bool = False,
-          music: dict | None = None) -> dict:
+          music: dict | None = None, captions: dict | None = None) -> dict:
     out = Path(out_dir).resolve()
     plan = load_plan(out, factcheck)
     fmt = plan.format
     W, H = size_of(fmt)
+    mode = (captions or {}).get(fmt) or DEFAULT_CAPTIONS[fmt]
+    if mode not in CAPTION_MODES:
+        raise CutmateError(f"unknown caption mode {mode!r} for {fmt} (use {', '.join(CAPTION_MODES)})")
     th = theme_dir(theme)
     meta = _theme_meta(th)
     if not (out / "aroll.mp4").exists():
@@ -318,8 +324,18 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
     hit_name, hit_vol = meta["hit_sfx"]
     cues += [(hit_name, h[0], hit_vol) for h in hits]
     splits = [[g.start, round(max(g.start + 0.45, g.end - 0.4), 3)] for g in plan.graphics if g.type == "split"]
-    cfg = {"end": end, "pages": caption_pages(words, end, plan.captions["key"], plan.captions["max_words"]),
-           "cam": cam, "hits": hits, "splits": splits}
+    pages = caption_pages(words, end, plan.captions["key"], plan.captions["max_words"])
+    cfg = {"end": end, "pages": pages if mode in ("burn", "both") else [], "cam": cam, "hits": hits, "splits": splits}
+    srt = out / "captions.srt"
+    if mode in ("srt", "both"):
+        srt.write_text(to_srt(pages), encoding="utf-8")
+    else:
+        srt.unlink(missing_ok=True)
+    ch = out / "chapters.txt"
+    if plan.chapters:
+        ch.write_text(chapters_txt(plan.chapters, end), encoding="utf-8")
+    else:
+        ch.unlink(missing_ok=True)
     audio = sfx_tags(cues, end, A)
     src = pick_source(plan.music, music, out.parent)  # relative plan.music.src resolves against the recording folder
     vol = 0.45
