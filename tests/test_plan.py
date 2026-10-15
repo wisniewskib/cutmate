@@ -99,6 +99,19 @@ def test_split_and_media(tmp_path):
     assert "to" not in g.params and "from" not in g.params
 
 
+def test_split_fit(tmp_path):
+    out = make_out(tmp_path, {"graphics": [
+        {"type": "split", "from": "S2:minus", "to": "S2:Claude'a", "media": "broll/x.png", "fit": "cover"}]})
+    (out.parent / "broll").mkdir()
+    (out.parent / "broll" / "x.png").write_bytes(b"x")
+    assert load_plan(out).graphics[0].params["fit"] == "cover"
+    p = json.loads((out / "plan.json").read_text(encoding="utf-8"))
+    p["graphics"][0]["fit"] = "stretch"
+    (out / "plan.json").write_text(json.dumps(p), encoding="utf-8")
+    with pytest.raises(PlanError, match="fit must be"):
+        load_plan(out)
+
+
 def test_split_order_validation(tmp_path):
     out = make_out(tmp_path, {"graphics": [
         {"type": "split", "from": "S2:75%", "to": "S2:minus", "media": "broll/x.png"}]})

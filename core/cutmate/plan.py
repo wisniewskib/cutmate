@@ -99,6 +99,8 @@ def _graphic(i: int, g, words: list[dict], end: float, rec: Path) -> Graphic:
         if stop <= start:
             raise PlanError(f"{where}: \"to\" is before the start")
         params["media"] = _media(g["media"], rec, where)
+        if g.get("fit", "contain") not in ("contain", "cover"):
+            raise PlanError(f"{where}: fit must be contain or cover")
         params.pop("to", None)
         params.pop("from", None)
     elif t == "list":

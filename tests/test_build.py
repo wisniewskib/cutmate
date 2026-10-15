@@ -194,6 +194,7 @@ def test_media_with_unicode_name_copied_ascii(out, theme):
     sub = (proj / "compositions" / "gx-01-split.html").read_text(encoding="utf-8")
     assert f'src="assets/media/{media[0].name}"' in sub
     assert 'data-hf-media-start-basis="local"' in sub and "muted" in sub
+    assert '"fit": "contain"' in sub or '"fit":"contain"' in sub
     cfg = cfg_of((proj / "index.html").read_text(encoding="utf-8"))
     assert cfg["splits"] == [[2.1, pytest.approx(2.7)]]
 

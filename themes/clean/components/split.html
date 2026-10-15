@@ -1,4 +1,4 @@
-<markup><div class="split-wrap"><div class="split-panel"><div class="media">{{media_tag}}</div></div><div class="split-edge"></div></div></markup>
+<markup><div class="split-wrap"><div class="split-panel"><div class="media fit-{{fit}}">{{media_tag}}</div></div><div class="split-edge"></div></div></markup>
 <script>
 const w = root.querySelector(".split-wrap");
 tl.fromTo(w, { yPercent: -100 }, { yPercent: 0, duration: 0.45, ease: "power3.out" }, P.at);

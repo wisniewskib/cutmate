@@ -209,6 +209,7 @@ def subcomp(cid: str, g: Graphic, host_start: float, theme: Path, assets: Path, 
             P[k] = _copy_media(g.params[k], assets, media_map)
     media_tag = ""
     if g.type == "split":
+        P["fit"] = g.params.get("fit", "contain")
         if Path(g.params["media"]).suffix.lower() in VIDEO_EXTS:
             vdur = round(min(P["end"] - P["at"], duration(Path(g.params["media"]))), 3)
             media_tag = (f'<video id="{cid}-v" class="clip" data-hf-media-start-basis="local" data-start="{P["at"]}" '
