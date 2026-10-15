@@ -10,7 +10,7 @@ from .chapters import chapters_txt
 from .errors import CutmateError, MediaError
 from .media import run
 from .paths import theme_dir
-from .plan import PLATE, load_plan
+from .plan import PLATE, load_plan, plate_chapters
 from .thumb import _load_font, _theme_meta, wrap
 
 SIZES = {"16:9": (854, 480), "9:16": (480, 854)}
@@ -51,7 +51,7 @@ def preview(out_dir: Path, theme: str = "clean", language: str = "pl") -> dict:
     dst = out / "preview.mp4"
     with tempfile.TemporaryDirectory() as td:
         plates = []
-        for c in plan.chapters[1:]:
+        for c in plate_chapters(plan.chapters, plan.end):
             p = Path(td) / f"ch{c['num']}.png"
             plate_image(f"{word} {c['num']:02d}", c["title"], (W, H), theme).save(p)
             plates.append((p, c["start"], min(c["start"] + PLATE, plan.end)))

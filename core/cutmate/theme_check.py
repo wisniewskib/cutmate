@@ -86,7 +86,7 @@ def _synthetic_rec(root: Path, fmt: str = "9:16") -> Path:
 def theme_check(theme: str = "clean", workdir: Path | None = None, language: str = "pl", fmt: str = "9:16") -> dict:
     root = Path(workdir) if workdir else Path(tempfile.mkdtemp(prefix="cutmate-theme-"))
     out = _synthetic_rec(root, fmt)
-    r = build(out, theme=theme, language=language)
+    r = build(out, theme=theme, language=language, captions={"16:9": "both"})
     proj = r["project"]
     chk = run(hf("check"), cwd=proj)
     if chk.returncode:

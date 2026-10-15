@@ -331,3 +331,10 @@ def test_pip_rejected_in_916(tmp_path):
     out = make_out(tmp_path, {"graphics": [{"type": "lower-third", "at": "S1:Mówić", "name": "B"}]})
     with pytest.raises(PlanError, match="not available in 9:16"):
         load_plan(out)
+
+
+def test_chapter_one_late_warning(tmp_path):
+    out = make_out169(tmp_path, {"chapters": [{"at": "S1:mniej", "title": "A"}, {"at": "S2:minus", "title": "B"}]})
+    assert "WARN chapter 1 starts at 0.9s — it is listed as 00:00" in load_plan(out).warnings
+    out = make_out169(tmp_path / "x", {"chapters": [{"at": "S1:Mówić", "title": "A"}, {"at": "S2:minus", "title": "B"}]})
+    assert not any("chapter 1 starts" in w for w in load_plan(out).warnings)

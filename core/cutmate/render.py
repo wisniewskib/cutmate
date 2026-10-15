@@ -1,6 +1,7 @@
 """Render the HyperFrames project: check → render (progress streamed) → finalize (-14 LUFS, spec check, frames)."""
 import json
 import subprocess
+import sys
 from pathlib import Path
 
 from .errors import CutmateError
@@ -10,9 +11,17 @@ from .hf import hf
 from .media import run
 
 
-def _stream(cmd: list[str], cwd: Path) -> int:
-    """Run with output going straight to the terminal so HyperFrames' progress bar is visible."""
-    return subprocess.run(cmd, cwd=str(cwd)).returncode
+def _stream(cmd: list[str], cwd: Path, log: Path) -> int:
+    """Run the render, copying every output line to the terminal and to `log` (truncated at start)."""
+    with open(log, "w", encoding="utf-8") as lf:
+        p = subprocess.Popen(cmd, cwd=str(cwd), stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                             text=True, encoding="utf-8", errors="replace")
+        for line in p.stdout:
+            sys.stdout.write(line)
+            sys.stdout.flush()
+            lf.write(line)
+            lf.flush()
+        return p.wait()
 
 
 def render(out_dir: Path) -> dict:
@@ -29,7 +38,7 @@ def render(out_dir: Path) -> dict:
     for old in out.glob("check_*.png"):
         old.unlink()
     cmd = hf("render", "--fps", "30", "--quality", "delivery", "--format", "mp4", "-o", "../work/render.mp4")
-    code = _stream(cmd, proj)
+    code = _stream(cmd, proj, out / "work" / "render.log")
     if code or not dst.exists():
         raise CutmateError(f"hyperframes render failed (exit {code}) — rerun in {proj}: {' '.join(cmd)}")
     cp = out / "work" / "checkpoints.json"

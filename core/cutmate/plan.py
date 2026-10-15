@@ -186,8 +186,15 @@ def _chapters(raw: dict, words: list[dict], end: float) -> list[dict]:
     return out
 
 
-def _chapter_warnings(chs: list[dict], gs: list[Graphic], end: float) -> list[str]:
+def plate_chapters(chs: list[dict], end: float) -> list[dict]:
+    """Chapters 2+ that get a full-screen plate (not so close to the end that the plate would be cut off)."""
+    return [c for c in chs[1:] if c["start"] < end - 0.35]
+
+
+def _chapter_warnings(chs: list[dict], gs: list[Graphic], end: float, first_word: float = 0.0) -> list[str]:
     w = []
+    if chs and chs[0]["start"] - first_word > 0.5:
+        w.append(f"WARN chapter 1 starts at {chs[0]['start']:.1f}s — it is listed as 00:00")
     if chs and len(chs) < 3:
         w.append(f"WARN {len(chs)} chapters — YouTube needs at least 3 to show chapter markers")
     bounds = [0.0] + [c["start"] for c in chs[1:]] + [end]  # the first chapter always starts at 00:00
@@ -297,7 +304,7 @@ def load_plan(out_dir: Path, factcheck: bool = False) -> Plan:
             raise PlanError(f"graphic #{g.index + 1} ({g.type}) starts at {g.start:.2f}s, too close to the end ({end:.2f}s)")
     chapters = _chapters(raw, words, end)
     face = _face(raw, words)
-    warnings = _budget(gs) + _chapter_warnings(chapters, gs, end) + (_factcheck(out, gs) if factcheck else [])
+    warnings = _budget(gs) + _chapter_warnings(chapters, gs, end, min((w['start'] for w in words), default=0.0)) + (_factcheck(out, gs) if factcheck else [])
     cap = raw.get("captions") or {}
     if not isinstance(cap, dict):
         raise PlanError(f"{p}: \"captions\" must be a dict")

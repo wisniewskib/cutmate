@@ -23,7 +23,7 @@ Resuming at `takes.md` means (re)making and READING the sheets first.
 1. Collect proper names the user mentions (products, people, tools) → `$CM transcribe <folder> --prompt "Claude, Caveman, GitHub"`.
    Results land in `out/work/<clip file name>/` (`transcript.json`, `silences.json`, `<stem>.wav`). Words come with
    times; `SUSPECT long word` lines mark windows that hide a stumble or a retake.
-2. For every clip: `$CM sheet <clip> -o <folder>/out/sheets/<clip>.png --step 0.5` and READ the sheet image(s). Note where
+2. For every clip: `$CM sheet <clip> -o <folder>/out/sheets/<clip>.png --step 0.5` and READ the sheet image(s) (16:9: overview sheets with `--step 2` — dense `--step 0.1` sheets only around candidate cuts, as §2 says; thumbnail sheet of `final.mp4` with `--step 10`). Note where
    the speaker looks away, reads notes, the framing jumps (stabilisation), or they point at something.
 3. Run `$CM formats <folder>` (`cutmate formats` is rotation-aware; last line `format: 9:16|16:9|mixed`). All `16:9` →
    long-form branch (section 1b); all `9:16` → short; `mixed` → ask the user once which format to make. Put the format
@@ -41,11 +41,12 @@ Everything else in this skill applies; these are the differences.
   ≥ 0.25 s. Keep the intro in place (no hook reshuffle unless one line is clearly the strongest opener).
 - **plan.json:** follow the `## 16:9` section of `frame.md`. Add `"chapters": [{"at": "S1:word", "title": "…"}]` (plates
   for chapters 2+) and `"face": {"S1": [x, y], …}` for EVERY segment (face position from the sheets, fractions 0–1).
+  `point` always sits top-right in 16:9 (its corner is ignored); for pip page screenshots use `$CM shot <url> -o … --width 1600 --height 900`.
   Components: `pip` (instead of `split`; `from`, `to`, `media`, `corner?` br|bl, `fit?` cover|contain), `lower-third`
   (`at`, `name`, `role?`) once at the self-introduction, corner graphics as usual. `split` is an error in 16:9.
 - **Checkpoint before the full render (always):** `$CM preview <folder>/out` → send the user `out/preview.mp4` and the
   `chapters.txt` lines; wait for OK. Changes → EDL / plan → new preview. Only then build, snapshot, render (a 15-minute
-  video renders for ~45–60 min; tell the user).
+  video renders for ~45–60 min — tell the user the ETA and run `$CM render` in the background, see §7).
 - **Outputs:** `final.mp4`, `chapters.txt` (paste into the YouTube description), `captions.srt` when the config's caption
   mode for 16:9 is `srt`/`both` (upload in YouTube Studio), thumbnail.
 - **Thumbnail:** 1280×720; pick a frame where the face is on one side and put the text on the other:
@@ -93,7 +94,7 @@ Write `out/edl.json`:
 List every checkable claim (numbers, prices, dates, versions, names, "first / only / free"). Verify each with
 WebSearch AND by opening the source page (official docs, pricing, changelog, repo; studies for health; law texts for law).
 Write `out/factcheck.md`, one line per claim: timestamp, quote, verdict (✅ / ⚠️ / ❌ plus the word in the user's
-language, e.g. OK / NIEPEWNE / BŁĄD), the true version, link. If anything is ❌ or ⚠️: STOP and ask the user (this is the only pause): another take that says it right / cut
+language, e.g. OK / NIEPEWNE / BŁĄD), the true version, link. If anything is ❌ or ⚠️: STOP and ask the user (this is the only pause besides the 16:9 preview checkpoint): another take that says it right / cut
 the line / re-record / keep it with an on-screen correction. If all ✅: say it in one line and continue.
 (`build` warns about any counter / non-illustrative bars number that no ✅ line confirms.)
 
@@ -138,7 +139,7 @@ about every `WARN`. The last line prints `checkpoints: t1,t2,...`. Then, from th
 
 ## 7. Render and QA
 
-`$CM render <folder>/out` (check → render → finalize; ~1–2 min; writes `out/final.mp4`). READ every `check_*.png` it
+`$CM render <folder>/out` (check → render → finalize; writes `out/final.mp4`). 9:16 takes ~1–2 min. 16:9 takes ~45–60 min per 15 min of video: run it in the background (Bash `run_in_background: true`), follow `out/work/render.log`, and tell the user the ETA. READ every `check_*.png` it
 writes and describe each in one line. If `steps.qa`: `$CM qa <folder>/out` and handle every hit: probe/rms, fix the
 EDL (then cut → align → build → render; graphics move with their words automatically) or explain why it's fine.
 

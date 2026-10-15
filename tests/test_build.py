@@ -1,6 +1,7 @@
 import json
 import re
 import shutil
+from pathlib import Path
 
 import pytest
 
@@ -390,3 +391,23 @@ def test_pip_face_clip_regenerated_after_recut(out169, theme):
     write_plan(out169, {})
     B.build(out169, theme=theme)
     assert not list((proj / "assets" / "media").glob("pipface-*.mp4"))   # pruned
+
+
+def test_face_clip_atomic_on_failure(tmp_path, monkeypatch):
+    import subprocess
+    from cutmate.errors import CutmateError
+    dst = tmp_path / "face.mp4"
+
+    def fake_run(cmd, **kw):
+        Path(cmd[-1]).write_bytes(b"partial")
+        return subprocess.CompletedProcess(cmd, 1, "", "boom")
+    monkeypatch.setattr(B, "run", fake_run)
+    with pytest.raises(CutmateError, match="pip face clip"):
+        B.face_clip(tmp_path / "a.mp4", 0, 1, [0.5, 0.5], (1920, 1080), dst)
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_missing_component_is_cutmate_error(tmp_path):
+    from cutmate.errors import CutmateError
+    with pytest.raises(CutmateError, match="theme has no nope.html component"):
+        B._sections(tmp_path / "nope.html")

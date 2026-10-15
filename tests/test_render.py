@@ -35,7 +35,7 @@ def test_render_then_finalize(tmp_path, monkeypatch):
     monkeypatch.setattr(R, "run", lambda cmd, cwd=None, env=None: subprocess.CompletedProcess(cmd, 0, "Check passed", ""))
     monkeypatch.setattr(R, "hf", lambda *a: ["hf", *a])
 
-    def fake_stream(cmd, cwd):
+    def fake_stream(cmd, cwd, log=None):
         make_clip(out / "work" / "render.mp4", dur=2.0, gaps=())
         return 0
     monkeypatch.setattr(R, "_stream", fake_stream)
@@ -52,7 +52,7 @@ def test_stale_render_cleared(tmp_path, monkeypatch):
     monkeypatch.setattr(R, "run", lambda cmd, cwd=None, env=None: subprocess.CompletedProcess(cmd, 0, "Check passed", ""))
     monkeypatch.setattr(R, "hf", lambda *a: ["hf", *a])
 
-    def fake_stream(cmd, cwd):
+    def fake_stream(cmd, cwd, log=None):
         # Return 0 but don't write the file (simulating failed render that returns success code)
         return 0
     monkeypatch.setattr(R, "_stream", fake_stream)
@@ -75,7 +75,7 @@ def test_cwd_and_output_path(tmp_path, monkeypatch):
         return subprocess.CompletedProcess(cmd, 0, "Check passed", "")
     monkeypatch.setattr(R, "run", fake_run)
 
-    def fake_stream(cmd, cwd):
+    def fake_stream(cmd, cwd, log=None):
         captured_calls["_stream"].append((cmd, cwd))
         make_clip(out / "work" / "render.mp4", dur=2.0, gaps=())
         return 0
@@ -103,7 +103,7 @@ def test_malformed_checkpoints(tmp_path, monkeypatch):
     monkeypatch.setattr(R, "run", lambda cmd, cwd=None, env=None: subprocess.CompletedProcess(cmd, 0, "Check passed", ""))
     monkeypatch.setattr(R, "hf", lambda *a: ["hf", *a])
 
-    def fake_stream(cmd, cwd):
+    def fake_stream(cmd, cwd, log=None):
         make_clip(out / "work" / "render.mp4", dur=2.0, gaps=())
         return 0
     monkeypatch.setattr(R, "_stream", fake_stream)
@@ -118,7 +118,7 @@ def test_render_clears_old_check_frames(tmp_path, monkeypatch):
     monkeypatch.setattr(R, "run", lambda cmd, cwd=None, env=None: subprocess.CompletedProcess(cmd, 0, "Check passed", ""))
     monkeypatch.setattr(R, "hf", lambda *a: ["hf", *a])
 
-    def fake_stream(cmd, cwd):
+    def fake_stream(cmd, cwd, log=None):
         make_clip(out / "work" / "render.mp4", dur=2.0, gaps=())
         return 0
     monkeypatch.setattr(R, "_stream", fake_stream)
@@ -132,7 +132,7 @@ def test_render_uses_project_format(tmp_path, monkeypatch):
     monkeypatch.setattr(R, "run", lambda cmd, cwd=None, env=None: subprocess.CompletedProcess(cmd, 0, "Check passed", ""))
     monkeypatch.setattr(R, "hf", lambda *a: ["hf", *a])
 
-    def fake_stream(cmd, cwd):
+    def fake_stream(cmd, cwd, log=None):
         (out / "work" / "render.mp4").write_bytes(b"v")
         return 0
     monkeypatch.setattr(R, "_stream", fake_stream)
@@ -144,3 +144,14 @@ def test_render_uses_project_format(tmp_path, monkeypatch):
     monkeypatch.setattr(R, "finalize", fake_finalize)
     R.render(out)
     assert seen["fmt"] == "16:9"
+
+
+def test_stream_writes_log(tmp_path, capsys):
+    import sys
+    log = tmp_path / "work" / "render.log"
+    log.parent.mkdir()
+    log.write_text("old\n", encoding="utf-8")
+    code = R._stream([sys.executable, "-c", "print('a'); print('b')"], tmp_path, log)
+    assert code == 0
+    assert log.read_text(encoding="utf-8") == "a\nb\n"
+    assert capsys.readouterr().out == "a\nb\n"

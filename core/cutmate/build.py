@@ -5,6 +5,7 @@ SFX <audio> tags, and web/cutmate.js driving captions / punch-ins / hits / split
 """
 import html as _html
 import json
+import os
 import re
 import shutil
 import unicodedata
@@ -20,7 +21,7 @@ from .hf import ensure_project
 from .media import duration, run
 from .music import carve, pick_source, prepare_music
 from .paths import assets_dir, theme_dir, web_dir
-from .plan import PLATE, Graphic, load_plan
+from .plan import PLATE, Graphic, load_plan, plate_chapters
 
 CHAPTER_LABEL = {"pl": "ROZDZIAŁ", "en": "CHAPTER"}
 LEAD = 0.3                    # host starts this much before the graphic's word (entrance lead-in)
@@ -185,6 +186,8 @@ def _prune(folder: Path, keep: set) -> None:
 
 
 def _sections(path: Path) -> dict:
+    if not path.exists():
+        raise CutmateError(f"theme has no {path.name} component — update the theme or run theme-check")
     d = dict(_SECTION.findall(path.read_text(encoding="utf-8")))
     if "script" not in d:
         raise CutmateError(f"{path}: component has no <script> section")
@@ -219,12 +222,16 @@ def face_clip(aroll: Path, start: float, end: float, center: list[float], size: 
     side = round(H * 0.6) // 2 * 2
     cx = min(max(center[0] * W, side / 2), W - side / 2)
     cy = min(max(center[1] * H, side / 2), H - side / 2)
+    dst = Path(dst)
+    tmp = dst.with_name(dst.stem + ".tmp.mp4")
     r = run(["ffmpeg", "-nostdin", "-v", "error", "-y", "-ss", f"{start:.3f}", "-t", f"{end - start:.3f}", "-i", aroll,
              "-vf", f"crop={side}:{side}:{int(cx - side / 2)}:{int(cy - side / 2)},scale={FACE_PX}:{FACE_PX}",
-             "-an", "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-g", "30", "-pix_fmt", "yuv420p", dst])
-    if r.returncode or not Path(dst).exists():
+             "-an", "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-g", "30", "-pix_fmt", "yuv420p", tmp])
+    if r.returncode or not tmp.exists():
+        tmp.unlink(missing_ok=True)
         raise CutmateError(f"cannot cut the pip face clip: {' '.join(r.stderr.split())[-300:]}")
-    return Path(dst)
+    os.replace(tmp, dst)
+    return dst
 
 
 def _seg_at(timed: list[dict], t: float) -> str:
@@ -306,7 +313,7 @@ def chapter_plates(plan, end: float, lang: str) -> list[Graphic]:
     word = CHAPTER_LABEL.get(lang, CHAPTER_LABEL["en"])
     return [Graphic("chapter", c["start"], round(min(c["start"] + PLATE, end - 0.05), 3),
                     {"num": c["num"], "title": c["title"], "label": f"{word} {c['num']:02d}"}, False, None, -1)
-            for c in plan.chapters[1:] if c["start"] < end - 0.35]
+            for c in plate_chapters(plan.chapters, end)]
 
 
 def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: bool = False,

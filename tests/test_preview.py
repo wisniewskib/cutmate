@@ -48,3 +48,11 @@ def test_preview_without_chapters(tmp_path):
 
 def test_plate_image_size():
     assert plate_image("ROZDZIAŁ 02", "Tytuł ąę", (854, 480), "clean").size == (854, 480)
+
+
+def test_preview_skips_plate_near_end(tmp_path):
+    words = WORDS + [{"seg": "S2", "word": "Koniec", "start": 3.8, "end": 3.95}]
+    out = make_out(tmp_path, {"chapters": [{"at": "S1:Cześć", "title": "A"}, {"at": "S2:Koniec", "title": "B"}]})
+    (out / "work" / "aligned_words.json").write_text(json.dumps(words, ensure_ascii=False), encoding="utf-8")
+    r = preview(out)
+    assert _mean(extract_frame(r["preview"], 3.9, tmp_path / "late.png")) > 60       # no plate this close to the end

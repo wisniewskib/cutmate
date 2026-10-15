@@ -26,6 +26,7 @@ unit: 1080×1920 (9:16), 30 fps
 
 - **The speaker owns the frame.** Graphics are small and live in the top-right corner (x 1340–1860, y 60–420).
   Burned captions (only when the config says `burn`/`both`) sit at y 880–1000. Lower-third: bottom-left x 80–900, y 820–980.
+  Burned captions share that bottom band with the lower-third and the pip circle — avoid long burned captions under them / prefer `srt`.
 - **`split` does not exist in 16:9 — use `pip`:** the b-roll fills the screen and the speaker's face sits in a circle in a
   bottom corner (`corner` `br` default / `bl`). Use it for "look at this page / tool / recording" beats, `fit: cover` for
   page screenshots.
