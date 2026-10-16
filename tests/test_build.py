@@ -675,7 +675,7 @@ def test_2b_user_theme_without_new_components_builds(tmp_path, monkeypatch, caps
     assert printed.count("has no bg component") == 1
     subs = {p.name: p.read_text(encoding="utf-8") for p in (proj / "compositions").glob("gx-*.html")}
     assert any(n.endswith("-bg.html") and "bg-wrap" in t for n, t in subs.items())
-    assert any(n.endswith("-custom.html") and "U.glowOrb" in t for n, t in subs.items())
+    assert any(n.endswith("-custom.html") and "fx-orb" in t for n, t in subs.items())
 
 
 def test_custom_effect_assets_folder(out169, theme):
