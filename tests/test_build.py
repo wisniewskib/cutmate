@@ -702,3 +702,10 @@ def test_custom_effect_without_folder_has_no_assets_key(out169, theme):
     write_plan(out169, {"graphics": [{"type": "custom", "name": "orb", "at": "S2:minus"}]})
     proj = B.build(out169, theme=theme)["project"]
     assert "assets" not in _P((proj / "compositions" / "gx-01-custom.html").read_text(encoding="utf-8"))
+
+
+def test_three_effect_has_lint_visible_import(out169, theme):
+    _fx(out169, "cube", FX.replace("U.clock", "const m = new THREE.Mesh(); U.clock"))
+    write_plan(out169, {"graphics": [{"type": "custom", "name": "cube", "at": "S2:minus"}]})
+    sub = (B.build(out169, theme=theme)["project"] / "compositions" / "gx-01-custom.html").read_text(encoding="utf-8")
+    assert re.search(r"\b(?:import|from)\s*[^;\n]*['\"][^'\"]*three[^'\"]*['\"]", sub)   # hyperframes missing_three_script rule

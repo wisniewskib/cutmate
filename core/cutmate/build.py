@@ -15,7 +15,7 @@ from .captions import to_srt
 from .chapters import chapters_txt
 from .config import CAPTION_MODES, DEFAULT_CAPTIONS
 from .cut import load_timed
-from .effects import find_effect, libs_head, lint_effect, track_slice
+from .effects import THREE_MARK, find_effect, libs_head, lint_effect, track_slice
 from .errors import CutmateError
 from .formats import size_of
 from .hf import ensure_project, hf
@@ -385,9 +385,13 @@ def subcomp(cid: str, g: Graphic, host_start: float, theme: Path, assets: Path, 
                               else _html.escape(str(P.get(m.group(1), ""))), sec.get("markup", ""))
     if region:
         markup = REGION.format(x=region[0], y=region[1], w=region[2], h=region[3], markup=markup)
+    script = sec["script"]
+    if g.type == "custom" and re.search(THREE_MARK, script):
+        # hyperframes lint checks each composition for a Three.js import; ours comes from the importmap in index.html
+        script = '// import("three") is resolved by the importmap in index.html (U.three)\n' + script
     return SUBCOMP.format(lang=lang, cid=cid, w=W, h=H, dur=round(g.end - host_start, 3), root=root, u_open=u_open,
                           u_close=u_close, fade=fade, style=sec.get("style", "").replace("ROOT", f"#{cid}"),
-                          markup=markup, params=_js(P), script=sec["script"])
+                          markup=markup, params=_js(P), script=script)
 
 
 def _sfx_cues(g: Graphic, meta: dict) -> list[tuple]:
