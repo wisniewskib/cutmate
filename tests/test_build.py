@@ -411,3 +411,69 @@ def test_missing_component_is_cutmate_error(tmp_path):
     from cutmate.errors import CutmateError
     with pytest.raises(CutmateError, match="theme has no nope.html component"):
         B._sections(tmp_path / "nope.html")
+
+
+FX = """<style>ROOT .fx { width: 10px; height: 10px; }</style>
+<markup><div class="fx"></div></markup>
+<script>
+const el = root.querySelector(".fx");
+U.follow(el, P.track);
+U.clock((t) => { el.style.opacity = String(Math.min(1, t)); });
+</script>"""
+
+
+def _fx(o, name="orb", text=FX):
+    (o / "custom").mkdir(exist_ok=True)
+    (o / "custom" / f"{name}.html").write_text(text, encoding="utf-8")
+
+
+def _tracks169(o):
+    (o / "work" / "tracks.json").write_text(json.dumps({"fps": 15, "w": 1920, "h": 1080, "tracks": {
+        "face": [], "hand_left": [], "hand_right": [[2.2, 0.5, 0.5, 0.9], [2.6, 0.75, 0.5, 0.9]]}}), encoding="utf-8")
+
+
+def test_custom_host_with_follow(out169, theme):
+    _fx(out169)
+    _tracks169(out169)
+    write_plan(out169, {"graphics": [{"type": "custom", "name": "orb", "from": "S2:minus", "to": "S2:Claude'a",
+                                      "follow": "hand", "params": {"color": "#fff"}}]})
+    proj = B.build(out169, theme=theme)["project"]
+    sub = (proj / "compositions" / "gx-01-custom.html").read_text(encoding="utf-8")
+    P = json.loads(re.search(r"const P = (.*?);\n", sub).group(1).replace("<\\/", "</"))
+    assert P["color"] == "#fff" and (P["w"], P["h"]) == (1920, 1080)
+    assert P["track"] == [[0.4, 960.0, 540.0], [0.8, 1440.0, 540.0]]          # host starts 1.8 (2.1 - 0.3)
+    assert "CutmateFX.make" in sub and "U.follow(el, P.track)" in sub
+    html = (proj / "index.html").read_text(encoding="utf-8")
+    assert '<script src="assets/effects.js"></script>' in html and (proj / "assets" / "effects.js").exists()
+    assert "importmap" not in html                                            # no Three marker
+
+
+def test_follow_without_samples(out169, theme):
+    _fx(out169)
+    (out169 / "work" / "tracks.json").write_text(json.dumps({"fps": 15, "w": 1920, "h": 1080,
+                                                             "tracks": {"face": [], "hand_left": [], "hand_right": []}}))
+    write_plan(out169, {"graphics": [{"type": "custom", "name": "orb", "at": "S2:minus", "follow": "face"}]})
+    sub = (B.build(out169, theme=theme)["project"] / "compositions" / "gx-01-custom.html").read_text(encoding="utf-8")
+    assert '"track": []' in sub
+
+
+@pytest.mark.skip(reason="side arrives in Task 7")
+def test_custom_three_injects_importmap_and_region(out169, theme):
+    _fx(out169, "logo", FX.replace("U.clock", "U.three({}).then(() => {}); U.clock"))
+    write_plan(out169, {"graphics": [{"type": "side", "from": "S2:minus", "to": "S2:koniec.", "effect": "logo"}]})
+    proj = B.build(out169, theme=theme)["project"]
+    html = (proj / "index.html").read_text(encoding="utf-8")
+    assert html.index("assets/effects.js") < html.index('type="importmap"')
+    sub = (proj / "compositions" / "gx-01-custom.html").read_text(encoding="utf-8")
+    assert "left: 60px; top: 60px; width: 840px; height: 960px" in sub and '"w": 840' in sub
+
+
+def test_custom_lint_and_missing(out169, theme):
+    from cutmate.errors import PlanError
+    _fx(out169, "bad", FX.replace("U.clock", "Math.random(); U.clock"))
+    write_plan(out169, {"graphics": [{"type": "custom", "name": "bad", "at": "S2:minus"}]})
+    with pytest.raises(PlanError, match="bad.html: uses Math.random"):
+        B.build(out169, theme=theme)
+    write_plan(out169, {"graphics": [{"type": "custom", "name": "nope", "at": "S2:minus"}]})
+    with pytest.raises(PlanError, match="nope"):
+        B.build(out169, theme=theme)

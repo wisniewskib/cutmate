@@ -15,6 +15,7 @@ from .captions import to_srt
 from .chapters import chapters_txt
 from .config import CAPTION_MODES, DEFAULT_CAPTIONS
 from .cut import load_timed
+from .effects import find_effect, libs_head, lint_effect, track_slice
 from .errors import CutmateError
 from .formats import size_of
 from .hf import ensure_project
@@ -22,6 +23,7 @@ from .media import duration, run
 from .music import carve, pick_source, prepare_music
 from .paths import assets_dir, theme_dir, web_dir
 from .plan import PLATE, Graphic, load_plan, plate_chapters
+from .tracks import load_tracks, pick_hand
 
 CHAPTER_LABEL = {"pl": "ROZDZIAŁ", "en": "CHAPTER"}
 LEAD = 0.3                    # host starts this much before the graphic's word (entrance lead-in)
@@ -35,17 +37,17 @@ SUBCOMP = """<!doctype html>
   <link rel="stylesheet" href="assets/tokens.css" />
   <link rel="stylesheet" href="assets/theme.css" />
   <style>#{cid} {{ position: absolute; inset: 0; pointer-events: none; }}
-{style}</style>
+{extra_style}{style}</style>
   <div id="{cid}" data-composition-id="{cid}" data-width="{w}" data-height="{h}" data-duration="{dur}">{markup}</div>
   <script>(function () {{
     const tl = gsap.timeline({{ paused: true }});
     const root = document.getElementById("{cid}");
     const P = {params};
-    const U = {{
+    const U = Object.assign(window.CutmateFX ? window.CutmateFX.make(tl, root, "{cid}", P) : {{}}, {{
       el(tag, cls, text, parent) {{ const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; (parent || root).appendChild(e); return e; }},
       counter(el, fmt) {{ const d = {{}}; let v = 0; Object.defineProperty(d, "v", {{ get: () => v, set: (n) => {{ v = n; el.textContent = fmt(n); }} }}); return d; }},
       out(target, t) {{ tl.to(target, {{ opacity: 0, y: -30, duration: 0.2, ease: "power2.in", immediateRender: false }}, Math.max(0, t)); }},
-    }};
+    }});
 {script}
     window.__timelines["{cid}"] = tl;
   }})();</script>
@@ -59,6 +61,8 @@ INDEX = """<!doctype html>
     <meta name="viewport" content="width={w}, height={h}" />
     <title>cutmate</title>
     <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <script src="assets/effects.js"></script>
+    {libs}
     <link rel="stylesheet" href="assets/tokens.css" />
     <link rel="stylesheet" href="assets/theme.css" />
   </head>
@@ -249,8 +253,10 @@ def _media_tag(cid: str, g: Graphic, P: dict) -> str:
 
 
 def subcomp(cid: str, g: Graphic, host_start: float, theme: Path, assets: Path, media_map: dict, lang: str,
-            size: tuple = (1080, 1920), extra_tags: dict | None = None) -> str:
-    sec = _sections(theme / "components" / f"{g.type}.html")
+            size: tuple = (1080, 1920), extra_tags: dict | None = None, comp_path: Path | None = None,
+            tracks: dict | None = None) -> str:
+    sec = _sections(comp_path or theme / "components" / f"{g.type}.html")
+    W, H = size
     loc = lambda t: round(max(0.0, t - host_start), 3)  # noqa: E731
     P = {k: v for k, v in g.params.items()}
     P.update(at=loc(g.start), end=loc(g.end), lang=lang)
@@ -261,6 +267,21 @@ def subcomp(cid: str, g: Graphic, host_start: float, theme: Path, assets: Path, 
     for k in ("media", "image", "logo", "icon"):
         if k in P:
             P[k] = _copy_media(g.params[k], assets, media_map)
+    extra_style = ""
+    if g.type == "custom":
+        P = {"name": g.params["name"]}
+        P.update(at=loc(g.start), end=loc(g.end), lang=lang)
+        follow = g.params.get("follow")
+        track = []
+        if follow and tracks:
+            tn = pick_hand(tracks["tracks"], g.start, g.end) if follow == "hand" else follow
+            track = track_slice(tracks["tracks"].get(tn, []), g.start, g.end, host_start, W, H)
+        rx, ry, rw, rh = g.params.get("region") or [0, 0, W, H]
+        P.update(g.params.get("params") or {})
+        P.update(w=rw, h=rh, dur=round(g.end - host_start, 3), track=track)
+        if g.params.get("region"):
+            extra_style = (f"#{cid} {{ left: {rx}px; top: {ry}px; width: {rw}px; height: {rh}px; "
+                           f"right: auto; bottom: auto; overflow: hidden; }}\n")
     media_tag = ""
     if g.type in ("split", "pip"):
         P["fit"] = g.params.get("fit", "contain")
@@ -269,7 +290,7 @@ def subcomp(cid: str, g: Graphic, host_start: float, theme: Path, assets: Path, 
     markup = _PLACEHOLDER.sub(lambda m: tags[m.group(1)] if m.group(1) in tags
                               else _html.escape(str(P.get(m.group(1), ""))), sec.get("markup", ""))
     w, h = size
-    return SUBCOMP.format(lang=lang, cid=cid, w=w, h=h, dur=round(g.end - host_start, 3),
+    return SUBCOMP.format(lang=lang, cid=cid, w=w, h=h, dur=round(g.end - host_start, 3), extra_style=extra_style,
                           style=sec.get("style", "").replace("ROOT", f"#{cid}"), markup=markup,
                           params=_js(P), script=sec["script"])
 
@@ -340,6 +361,7 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
     for f in (th / "fonts").glob("*.ttf"):
         shutil.copy2(f, A / "fonts" / f.name)
     shutil.copy2(web_dir() / "cutmate.js", A / "cutmate.js")
+    shutil.copy2(web_dir() / "effects.js", A / "effects.js")
 
     words = json.loads((out / "work" / "aligned_words.json").read_text(encoding="utf-8"))
     timed = load_timed(out)
@@ -347,6 +369,8 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
     media_map, hosts, cues, ids = {}, [], [], []
     items = sorted(plan.graphics + chapter_plates(plan, end, language), key=lambda g: g.start)
     face_names = set()
+    tr = load_tracks(out)
+    effect_texts = []
     for i, g in enumerate(items):
         cid = f"gx-{i + 1:02d}-{g.type}"
         ids.append(cid)
@@ -362,8 +386,14 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
             loc_at = round(g.start - hs, 3)
             extra = {"face_tag": f'<video id="{cid}-f" class="clip" data-hf-media-start-basis="local" data-start="{loc_at}" '
                                  f'data-duration="{round(g.end - g.start, 3)}" src="assets/media/{name}" muted playsinline></video>'}
+        comp_path = None
+        if g.type == "custom":
+            comp_path = find_effect(g.params["name"], out, theme)
+            lint_effect(comp_path)
+            effect_texts.append(comp_path.read_text(encoding="utf-8"))
         (proj / "compositions" / f"{cid}.html").write_text(
-            subcomp(cid, g, hs, th, A, media_map, language, size=(W, H), extra_tags=extra), encoding="utf-8")
+            subcomp(cid, g, hs, th, A, media_map, language, size=(W, H), extra_tags=extra, comp_path=comp_path,
+                    tracks=tr), encoding="utf-8")
         hosts.append(f'      <div id="{cid}-slot" data-composition-id="{cid}" data-composition-src="compositions/{cid}.html" '
                      f'data-start="{hs}" data-duration="{round(g.end - hs, 3)}" data-track-index="{2 + i % 2}" '
                      f'data-width="{W}" data-height="{H}"></div>')
@@ -404,7 +434,8 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
         _prune(A / "bgm", set())
     vdur = round(min(end, duration(A / "aroll.mp4")), 3)
     (proj / "index.html").write_text(INDEX.format(lang=language, fcls="f169" if fmt == "16:9" else "f916", w=W, h=H, end=round(end, 3), vdur=vdur,
-                                                  hosts="\n".join(hosts), audio="\n".join(audio), cfg=_js(cfg)),
+                                                  hosts="\n".join(hosts), audio="\n".join(audio), cfg=_js(cfg),
+                                                  libs=libs_head(effect_texts)),
                                      encoding="utf-8")
     if src and not carve(proj):
         half = round(vol * 0.5, 3)

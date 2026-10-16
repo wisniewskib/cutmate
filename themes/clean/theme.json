@@ -6,6 +6,7 @@
     "title": [["whoosh", -0.05, 0.35]],
     "counter": [["pop", 0.0, 0.35], ["ping", 0.65, 0.3]],
     "list": [],
+    "custom": [],
     "list.item": [["click", 0.0, 0.35]],
     "chip": [["pop", 0.0, 0.3]],
     "stamp": [["impact", 0.0, 0.4]],
