@@ -108,6 +108,11 @@ def save_effect(out_dir: Path, name: str, theme: str = "clean", description: str
     entries = [e for e in entries if isinstance(e, dict)]
     dest_dir.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(src, dest)
+    folder, dest_folder = src.parent / name, dest_dir / name    # the effect's own files (Lottie JSON, textures…)
+    if dest_folder.exists():
+        shutil.rmtree(dest_folder)
+    if folder.is_dir():
+        shutil.copytree(folder, dest_folder)
     entries = [e for e in entries if e.get("name") != name]
     entries.append({"name": name, "description": description, "params": params, "follow": follow})
     entries.sort(key=lambda e: str(e.get("name", "")))

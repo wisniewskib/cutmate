@@ -122,3 +122,17 @@ def test_lint_rejects_clock_and_playback_apis(tmp_path, api):
     p.write_text(GOOD.replace("U.clock((t) => {});", f"const x = {api}; U.clock(() => {{}});"), encoding="utf-8")
     with pytest.raises(PlanError, match=re.escape(f"fx.html: uses {api}")):
         E.lint_effect(p)
+
+
+def test_save_effect_copies_assets_folder(tmp_path, monkeypatch):
+    monkeypatch.setenv("CUTMATE_HOME", str(tmp_path / "home"))
+    out = tmp_path / "rec" / "out"
+    (out / "custom" / "orb").mkdir(parents=True)
+    (out / "custom" / "orb.html").write_text(GOOD, encoding="utf-8")
+    (out / "custom" / "orb" / "anim.json").write_text("{}", encoding="utf-8")
+    p = E.save_effect(out, "orb", "clean")
+    assert (p.parent / "orb" / "anim.json").exists()
+    (out / "custom" / "orb" / "anim.json").unlink()
+    (out / "custom" / "orb" / "new.json").write_text("{}", encoding="utf-8")
+    E.save_effect(out, "orb", "clean", force=True)
+    assert sorted(f.name for f in (p.parent / "orb").iterdir()) == ["new.json"]

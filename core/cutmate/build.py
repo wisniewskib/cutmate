@@ -262,6 +262,19 @@ def _copy_if_newer(src: Path, dst: Path) -> None:
         shutil.copy2(src, dst)
 
 
+def _sync_dir(src: Path, dst: Path) -> None:
+    """Mirror src into dst: copy new / changed files, remove what src no longer has."""
+    dst.mkdir(parents=True, exist_ok=True)
+    for f in src.rglob("*"):
+        if f.is_file():
+            t = dst / f.relative_to(src)
+            t.parent.mkdir(parents=True, exist_ok=True)
+            _copy_if_newer(f, t)
+    for f in sorted(dst.rglob("*"), reverse=True):     # children before their folders
+        if not (src / f.relative_to(dst)).exists():
+            shutil.rmtree(f) if f.is_dir() else f.unlink()
+
+
 FACE_PX = 360
 
 
@@ -451,7 +464,7 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
     items = sorted(plan.graphics + chapter_plates(plan, end, language), key=lambda g: g.start)
     keep_media = set()
     tr = plan.tracks
-    effect_texts, warned = [], set()
+    effect_texts, warned, fx_used = [], set(), set()
     for i, g in enumerate(items):
         cid = f"gx-{i + 1:02d}-{g.type}"
         ids.append(cid)
@@ -473,20 +486,32 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
             loc_at = round(g.start - hs, 3)
             extra = {"cut_tag": f'<video id="{cid}-c" class="clip" data-hf-media-start-basis="local" data-start="{loc_at}" '
                                 f'data-duration="{round(g.end - g.start, 3)}" src="assets/media/{name}" muted playsinline></video>'}
+        assets_url = None
         if g.type == "custom":
             comp_path = find_effect(g.params["name"], out, theme)
             lint_effect(comp_path)
             effect_texts.append(comp_path.read_text(encoding="utf-8"))
+            folder = comp_path.parent / g.params["name"]     # the effect's own files (Lottie JSON, textures…)
+            if folder.is_dir():
+                _sync_dir(folder, A / "fx" / g.params["name"])
+                fx_used.add(g.params["name"])
+                assets_url = f"assets/fx/{g.params['name']}/"
         else:
             comp_path = _component(th, g.type, theme, warned)
         (proj / "compositions" / f"{cid}.html").write_text(
             subcomp(cid, g, hs, th, A, media_map, language, size=(W, H), extra_tags=extra, comp_path=comp_path,
-                    tracks=tr), encoding="utf-8")
+                    tracks=tr, assets_url=assets_url), encoding="utf-8")
         hosts.append(f'      <div id="{cid}-slot" data-composition-id="{cid}" data-composition-src="compositions/{cid}.html" '
                      f'data-start="{hs}" data-duration="{round(g.end - hs, 3)}" data-track-index="{2 + i % 2}" '
                      f'data-width="{W}" data-height="{H}"></div>')
         cues += _sfx_cues(g, meta)
     _prune(A / "media", {Path(v).name for v in media_map.values()} | keep_media)
+    if (A / "fx").exists():
+        for d in (A / "fx").iterdir():
+            if d.name not in fx_used:
+                shutil.rmtree(d) if d.is_dir() else d.unlink()
+        if not fx_used:
+            (A / "fx").rmdir()
     if effect_texts:
         shutil.copy2(web_dir() / "effects.js", A / "effects.js")
     else:

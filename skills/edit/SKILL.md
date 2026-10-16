@@ -92,6 +92,8 @@ components; `ROOT` in style is the effect root. Rules:
 - `P.w`, `P.h`, `P.dur`, `P.at`, `P.end`, `P.track`, plus your own params at the top level of `P` (they cannot override these keys).
   Used as a `side` effect, `root` is the 840×960 panel (build clips it there), `P.w`/`P.h` are the panel size and
   `P.track` is in panel px. Used as `bg`/`side` `"effect"`, build fades `root` in at `P.at` and out by `P.end`.
+- Files the effect needs (Lottie JSON, textures, SVGs) go in the folder `out/custom/<name>/`; build copies it to the
+  project and `P.assets` is its URL prefix (`fetch(P.assets + "anim.json")`, `P.assets + "tex.png"`); `save-effect` keeps the folder.
 - Hand-placed `custom` effects get no automatic fade: draw nothing before `P.at` and be gone by `P.end` —
   gate everything with a visibility factor, as energy-ball does:
   `const vis = Math.min(1, Math.max(0, (t - P.at) / 0.25)) * Math.min(1, Math.max(0, (P.end - t) / 0.25));`

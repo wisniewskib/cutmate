@@ -672,3 +672,30 @@ def test_2b_user_theme_without_new_components_builds(tmp_path, monkeypatch, caps
     subs = {p.name: p.read_text(encoding="utf-8") for p in (proj / "compositions").glob("gx-*.html")}
     assert any(n.endswith("-bg.html") and "bg-wrap" in t for n, t in subs.items())
     assert any(n.endswith("-custom.html") and "U.glowOrb" in t for n, t in subs.items())
+
+
+def test_custom_effect_assets_folder(out169, theme):
+    _fx(out169)
+    d = out169 / "custom" / "orb"
+    (d / "tex").mkdir(parents=True)
+    (d / "anim.json").write_text("{}", encoding="utf-8")
+    (d / "tex" / "a.png").write_bytes(b"png")
+    write_plan(out169, {"graphics": [{"type": "custom", "name": "orb", "at": "S2:minus"}]})
+    proj = B.build(out169, theme=theme)["project"]
+    fx = proj / "assets" / "fx"
+    assert (fx / "orb" / "anim.json").exists() and (fx / "orb" / "tex" / "a.png").read_bytes() == b"png"
+    assert _P((proj / "compositions" / "gx-01-custom.html").read_text(encoding="utf-8"))["assets"] == "assets/fx/orb/"
+    (d / "anim.json").unlink()
+    (fx / "stale").mkdir()
+    B.build(out169, theme=theme)
+    assert sorted(str(p.relative_to(fx)) for p in fx.rglob("*")) == ["orb", "orb/tex", "orb/tex/a.png"]
+    write_plan(out169, {"graphics": [{"type": "chip", "at": "S2:minus", "text": "X"}]})
+    B.build(out169, theme=theme)
+    assert not fx.exists()
+
+
+def test_custom_effect_without_folder_has_no_assets_key(out169, theme):
+    _fx(out169)
+    write_plan(out169, {"graphics": [{"type": "custom", "name": "orb", "at": "S2:minus"}]})
+    proj = B.build(out169, theme=theme)["project"]
+    assert "assets" not in _P((proj / "compositions" / "gx-01-custom.html").read_text(encoding="utf-8"))
