@@ -148,16 +148,34 @@ def caption_pages(words: list[dict], end: float, key: list[str], max_words: int 
 FACE_DEFAULT = [0.5, 0.4]
 
 
-def cam_from_cuts(timed: list[dict], fmt: str = "9:16", face: dict | None = None) -> list[list[float]]:
-    """Punch-in on every other cut. 16:9 zooms further and centres on the speaker's face."""
+def cam_from_cuts(timed: list[dict], fmt: str = "9:16", face: dict | None = None,
+                  bgs: list | tuple = ()) -> list[list[float]]:
+    """Punch-in on every other cut. 16:9 zooms further and centres on the speaker's face.
+
+    While a bg is on screen the camera is unzoomed (scale 1.0): the cut-out is the unzoomed A-roll."""
     if fmt != "16:9":
-        return [[round(float(s["start"]), 3), 1.0 if i % 2 == 0 else 1.12] for i, s in enumerate(timed)]
-    face = face or {}
-    out = []
-    for i, s in enumerate(timed):
-        fx, fy = face.get(str(s["id"]), FACE_DEFAULT)
-        out.append([round(float(s["start"]), 3), 1.0 if i % 2 == 0 else 1.25, round(fx, 3), round(fy, 3)])
-    return out
+        cam = [[round(float(s["start"]), 3), 1.0 if i % 2 == 0 else 1.12] for i, s in enumerate(timed)]
+    else:
+        face = face or {}
+        cam = []
+        for i, s in enumerate(timed):
+            fx, fy = face.get(str(s["id"]), FACE_DEFAULT)
+            cam.append([round(float(s["start"]), 3), 1.0 if i % 2 == 0 else 1.25, round(fx, 3), round(fy, 3)])
+    if not bgs:
+        return cam
+
+    def under_bg(t):
+        return any(a - 1e-9 <= t < b - 1e-9 for a, b in bgs)
+
+    def entry_at(t):
+        return next((c for c in reversed(cam) if c[0] <= t + 1e-9), cam[0])
+    out = {c[0]: [c[0], 1.0, *c[2:]] if under_bg(c[0]) else list(c) for c in cam}
+    for a, b in bgs:
+        a, b = round(float(a), 3), round(float(b), 3)
+        out[a] = [a, 1.0, *entry_at(a)[2:]]
+        e = entry_at(b)
+        out[b] = [b, 1.0 if under_bg(b) else e[1], *e[2:]]
+    return [out[t] for t in sorted(out)]
 
 
 def _scale_at(cam: list[list[float]], t: float) -> float:
@@ -170,6 +188,7 @@ def _scale_at(cam: list[list[float]], t: float) -> float:
 
 def hits_for(graphics: list[Graphic], cam: list[list[float]], timed: list[dict], end: float) -> list[list[float]]:
     cuts = sorted(float(s["start"]) for s in timed)
+    bgs = [(g.start, g.end) for g in graphics if g.type == "bg"]
     out = []
     for g in graphics:
         if not g.hit:
@@ -177,6 +196,8 @@ def hits_for(graphics: list[Graphic], cam: list[list[float]], timed: list[dict],
         t = g.start
         nxt = next((c for c in cuts if c > t + 1e-9), end)
         punch = min(0.5, nxt - (t + 0.12) - 0.02)
+        if any(a - 1e-9 <= t < b for a, b in bgs):
+            punch = 0                                    # no punch-in over a bg cut-out (shake only)
         out.append([t, _scale_at(cam, t), round(punch, 3) if punch >= 0.15 else 0])
     return out
 
@@ -458,7 +479,7 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
     for f in (proj / "compositions").glob("gx-*.html"):
         if f.stem not in ids:
             f.unlink()
-    cam = cam_from_cuts(timed, fmt, plan.face)
+    cam = cam_from_cuts(timed, fmt, plan.face, [(g.start, g.end) for g in plan.graphics if g.type == "bg"])
     hits = hits_for(plan.graphics, cam, timed, end)
     hit_name, hit_vol = meta["hit_sfx"]
     cues += [(hit_name, h[0], hit_vol) for h in hits]

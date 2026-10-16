@@ -620,3 +620,30 @@ def test_no_effects_build_matches_2b_shape(out, theme):
     sub = (proj / "compositions" / "gx-01-chip.html").read_text(encoding="utf-8")
     assert "CutmateFX" not in sub and "    const U = {\n" in sub and "    };\n" in sub
     assert "pointer-events: none; }\n#gx-01-chip .band" in sub                # no extra style line
+
+
+def test_cam_unzoomed_while_bg_on_screen():
+    cam = B.cam_from_cuts(TIMED, "16:9", {"S2": [0.3, 0.25]}, bgs=[(2.1, 3.1)])
+    assert cam == [[0.0, 1.0, 0.5, 0.4], [2.0, 1.25, 0.3, 0.25], [2.1, 1.0, 0.3, 0.25], [3.1, 1.25, 0.3, 0.25]]
+    cam = B.cam_from_cuts(TIMED, "16:9", {}, bgs=[(1.5, 2.5)])                  # bg spans a cut
+    assert cam == [[0.0, 1.0, 0.5, 0.4], [1.5, 1.0, 0.5, 0.4], [2.0, 1.0, 0.5, 0.4], [2.5, 1.25, 0.5, 0.4]]
+    assert B.cam_from_cuts(TIMED, "9:16", bgs=[(2.1, 3.1)]) == [[0.0, 1.0], [2.0, 1.12], [2.1, 1.0], [3.1, 1.12]]
+    gs = [Graphic("bg", 2.1, 3.1, {}, False, None, 0), Graphic("stamp", 2.35, 3.0, {"text": "X"}, True, None, 1)]
+    cam = B.cam_from_cuts(TIMED, "16:9", {}, bgs=[(2.1, 3.1)])
+    assert B.hits_for(gs, cam, TIMED, 4.0) == [[2.35, 1.0, 0]]                  # shake only, no punch
+
+
+def test_build_cam_around_bg(out169, theme, monkeypatch):
+    def fake_cut(aroll, a, b, media):
+        (media / "bgcut-x.webm").write_bytes(b"w")
+        return "bgcut-x.webm"
+    monkeypatch.setattr(B, "bg_cutout", fake_cut)
+    (out169.parent / "broll").mkdir()
+    from PIL import Image
+    Image.new("RGB", (32, 18), "blue").save(out169.parent / "broll" / "k.png")
+    write_plan(out169, {"face": {"S2": [0.3, 0.25]}, "graphics": [
+        {"type": "bg", "from": "S2:minus", "to": "S2:Claude'a", "media": "broll/k.png"},
+        {"type": "stamp", "at": "S2:75%", "text": "X", "hit": True}]})
+    cfg = cfg_of((B.build(out169, theme=theme)["project"] / "index.html").read_text(encoding="utf-8"))
+    assert cfg["cam"][1:] == [[2.0, 1.25, 0.3, 0.25], [2.1, 1.0, 0.3, 0.25], [3.1, 1.25, 0.3, 0.25]]
+    assert cfg["hits"] == [[2.35, 1.0, 0]]
