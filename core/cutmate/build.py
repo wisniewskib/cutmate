@@ -187,8 +187,8 @@ def _scale_at(cam: list[list[float]], t: float) -> float:
 
 
 def hits_for(graphics: list[Graphic], cam: list[list[float]], timed: list[dict], end: float) -> list[list[float]]:
-    cuts = sorted(float(s["start"]) for s in timed)
     bgs = [(g.start, g.end) for g in graphics if g.type == "bg"]
+    cuts = sorted([float(s["start"]) for s in timed] + [t for r in bgs for t in r])  # camera changes end a punch
     out = []
     for g in graphics:
         if not g.hit:

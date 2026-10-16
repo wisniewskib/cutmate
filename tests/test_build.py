@@ -631,6 +631,9 @@ def test_cam_unzoomed_while_bg_on_screen():
     gs = [Graphic("bg", 2.1, 3.1, {}, False, None, 0), Graphic("stamp", 2.35, 3.0, {"text": "X"}, True, None, 1)]
     cam = B.cam_from_cuts(TIMED, "16:9", {}, bgs=[(2.1, 3.1)])
     assert B.hits_for(gs, cam, TIMED, 4.0) == [[2.35, 1.0, 0]]                  # shake only, no punch
+    gs = [Graphic("bg", 2.8, 3.5, {}, False, None, 0), Graphic("stamp", 2.35, 2.7, {"text": "X"}, True, None, 1)]
+    assert B.hits_for(gs, B.cam_from_cuts(TIMED, "16:9", {}, bgs=[(2.8, 3.5)]), TIMED, 4.0) == \
+        [[2.35, 1.25, 0.31]]                                                     # punch ends before the bg starts
 
 
 def test_build_cam_around_bg(out169, theme, monkeypatch):
