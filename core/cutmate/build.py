@@ -23,7 +23,7 @@ from .media import duration, run
 from .music import carve, pick_source, prepare_music
 from .paths import assets_dir, theme_dir, web_dir
 from .plan import PLATE, Graphic, load_plan, plate_chapters
-from .tracks import load_tracks, pick_hand
+from .tracks import pick_hand
 
 CHAPTER_LABEL = {"pl": "ROZDZIAŁ", "en": "CHAPTER"}
 LEAD = 0.3                    # host starts this much before the graphic's word (entrance lead-in)
@@ -399,7 +399,7 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
     media_map, hosts, cues, ids = {}, [], [], []
     items = sorted(plan.graphics + chapter_plates(plan, end, language), key=lambda g: g.start)
     keep_media = set()
-    tr = load_tracks(out)
+    tr = plan.tracks
     effect_texts = []
     for i, g in enumerate(items):
         cid = f"gx-{i + 1:02d}-{g.type}"

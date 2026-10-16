@@ -535,3 +535,16 @@ def test_side_shifts_speaker_to_face(out169, theme):
     assert cfg["sides"] == [[2.1, pytest.approx(3.1), 672]]               # 1440 - 0.4*1920
     sub = (proj / "compositions" / "gx-01-side.html").read_text(encoding="utf-8")
     assert '"speaker": "right"' in sub
+
+
+def test_build_ignores_stale_tracks(out169, theme):
+    import os
+    (out169 / "work" / "tracks.json").write_text(json.dumps({"tracks": {
+        "face": [[t / 10, 0.2, 0.25, 0.9] for t in range(40)]}}), encoding="utf-8")
+    write_plan(out169, {"graphics": [{"type": "chip", "at": "S2:minus", "text": "X"}]})
+    cam = cfg_of((B.build(out169, theme=theme)["project"] / "index.html").read_text(encoding="utf-8"))["cam"]
+    assert cam[1][2:] == [0.2, 0.25]                                          # fresh: auto face used
+    t = (out169 / "work" / "tracks.json").stat().st_mtime
+    os.utime(out169 / "aroll.mp4", (t + 5, t + 5))
+    cam = cfg_of((B.build(out169, theme=theme)["project"] / "index.html").read_text(encoding="utf-8"))["cam"]
+    assert cam[1][2:] == [0.5, 0.4]                                           # stale: default face

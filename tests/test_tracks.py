@@ -128,3 +128,26 @@ def test_pose_detector_real_footage(tmp_path):
     d = analyze(clip, PoseDetector())
     assert len(d["tracks"]["face"]) > 30
     assert all(0 < p[1] < 1 and 0 < p[2] < 0.6 for p in d["tracks"]["face"])   # face in the upper part
+
+
+@pytest.mark.parametrize("data", ['[]', '{"fps": 15}', '{"tracks": []}', '{"tracks": {"face": 3}}'])
+def test_load_tracks_validates_shape(tmp_path, data):
+    from cutmate.errors import CutmateError
+    (tmp_path / "work").mkdir()
+    (tmp_path / "work" / "tracks.json").write_text(data, encoding="utf-8")
+    with pytest.raises(CutmateError, match="tracks.json"):
+        load_tracks(tmp_path)
+
+
+def test_tracks_fresh(tmp_path):
+    import os
+    from cutmate.tracks import tracks_fresh
+    assert not tracks_fresh(tmp_path)                                  # no tracks.json
+    save_tracks(tmp_path, {"tracks": {"face": []}})
+    assert tracks_fresh(tmp_path)                                      # no aroll to compare against
+    (tmp_path / "aroll.mp4").write_bytes(b"x")
+    t = (tmp_path / "work" / "tracks.json").stat().st_mtime
+    os.utime(tmp_path / "aroll.mp4", (t - 5, t - 5))
+    assert tracks_fresh(tmp_path)
+    os.utime(tmp_path / "aroll.mp4", (t + 5, t + 5))                   # re-cut after tracking
+    assert not tracks_fresh(tmp_path)

@@ -412,3 +412,27 @@ def test_bg_budget_warning(tmp_path):
     (out.parent / "broll").mkdir()
     (out.parent / "broll" / "k.png").write_bytes(b"x")
     assert any("bg covers 42s" in w for w in load_plan(out).warnings)
+
+
+def _stale(out):
+    import os
+    t = (out / "work" / "tracks.json").stat().st_mtime
+    (out / "aroll.mp4").write_bytes(b"x")
+    os.utime(out / "aroll.mp4", (t + 5, t + 5))
+
+
+def test_follow_with_stale_tracks(tmp_path):
+    out = make_out169(tmp_path, {"graphics": [{"type": "custom", "name": "x", "at": "S1:Mówić", "follow": "face"}]})
+    _tracks(out)
+    _stale(out)
+    with pytest.raises(PlanError, match=r"tracks.json is older than aroll.mp4 — run `cutmate track`"):
+        load_plan(out)
+
+
+def test_auto_face_ignores_stale_tracks(tmp_path):
+    out = make_out169(tmp_path, {"face": {"S1": [0.2, 0.2]}})
+    _tracks(out, face=(0.45, 0.3))
+    assert load_plan(out).tracks is not None
+    _stale(out)
+    pl = load_plan(out)
+    assert pl.face == {"S1": [0.2, 0.2]} and pl.tracks is None

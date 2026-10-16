@@ -63,9 +63,20 @@ def load_tracks(out_dir: Path) -> dict | None:
     if not p.exists():
         return None
     try:
-        return json.loads(p.read_text(encoding="utf-8"))
+        data = json.loads(p.read_text(encoding="utf-8"))
     except ValueError:
-        raise CutmateError(f"{p}: broken file — run `cutmate track` again") from None
+        raise CutmateError(f"{p}: broken file — run `cutmate track --force`") from None
+    if not (isinstance(data, dict) and isinstance(data.get("tracks"), dict)
+            and all(isinstance(v, list) for v in data["tracks"].values())):
+        raise CutmateError(f"{p}: broken file (needs {{\"tracks\": {{name: [samples]}}}}) — run `cutmate track --force`")
+    return data
+
+
+def tracks_fresh(out_dir: Path) -> bool:
+    """tracks.json exists and is not older than aroll.mp4 (a re-cut makes old tracks point at the wrong frames)."""
+    out = Path(out_dir)
+    p, a = out / "work" / "tracks.json", out / "aroll.mp4"
+    return p.exists() and (not a.exists() or p.stat().st_mtime >= a.stat().st_mtime)
 
 
 def save_tracks(out_dir: Path, data: dict) -> Path:

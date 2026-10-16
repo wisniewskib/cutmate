@@ -11,7 +11,7 @@ from pathlib import Path
 from .cut import load_timed
 from .errors import PlanError
 from .formats import format_of
-from .tracks import face_median, load_tracks
+from .tracks import face_median, load_tracks, tracks_fresh
 
 TYPES = ("title", "counter", "list", "chip", "stamp", "bars", "point", "split", "pip", "lower-third", "custom", "bg", "side")
 REQUIRED = {"title": ("at", "text"), "counter": ("at", "to", "label"), "list": ("items",), "chip": ("at", "text"),
@@ -54,6 +54,7 @@ class Plan:
     chapters: list = field(default_factory=list)
     face: dict = field(default_factory=dict)
     format: str = "9:16"
+    tracks: dict | None = None          # tracks.json when it is fresh (not older than aroll.mp4), else None
 
 
 def norm(word: str) -> str:
@@ -357,7 +358,12 @@ def load_plan(out_dir: Path, factcheck: bool = False) -> Plan:
         raise PlanError(f"{p}: \"graphics\" must be a list")
     gs = sorted((_graphic(i, g, words, end, out.parent, fmt) for i, g in enumerate(graphics_list or [])),
                 key=lambda g: g.start)
-    if any(g.params.get("follow") for g in gs) and load_tracks(out) is None:
+    tr = load_tracks(out)
+    if tr is not None and not tracks_fresh(out):
+        if any(g.params.get("follow") for g in gs):
+            raise PlanError("out/work/tracks.json is older than aroll.mp4 — run `cutmate track`")
+        tr = None
+    if any(g.params.get("follow") for g in gs) and tr is None:
         raise PlanError("follow needs out/work/tracks.json — run `cutmate track`")
     gs = _expand(gs)
     for i, g in enumerate(gs):
@@ -369,7 +375,6 @@ def load_plan(out_dir: Path, factcheck: bool = False) -> Plan:
             raise PlanError(f"graphic #{g.index + 1} ({g.type}) starts at {g.start:.2f}s, too close to the end ({end:.2f}s)")
     chapters = _chapters(raw, words, end)
     face = _face(raw, words)
-    tr = load_tracks(out)
     if tr:
         for s in load_timed(out):
             sid = str(s["id"])
@@ -395,4 +400,4 @@ def load_plan(out_dir: Path, factcheck: bool = False) -> Plan:
         if (not isinstance(music, dict) or isinstance(v, bool) or not isinstance(v, (int, float)) or not 0 <= v <= 2
                 or ("src" in music and not isinstance(music["src"], str))):
             raise PlanError(f"{p}: \"music\" must be an object with a numeric \"volume\" (0–2) and an optional string \"src\"")
-    return Plan(gs, captions, music, end, warnings, chapters, face, fmt)
+    return Plan(gs, captions, music, end, warnings, chapters, face, fmt, tr)

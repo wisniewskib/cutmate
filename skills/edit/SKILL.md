@@ -79,7 +79,7 @@ and the bundled `energy-ball` (params `radius`, `colors`; use with `"follow": "h
 - `face` per segment is filled automatically from tracks.json when missing.
 
 **Tracking:** if any graphic uses `"follow"`, or you want face-centred punch-ins without reading sheets, run
-`$CM track <folder>/out` after `cut` (cached by A-roll mtime; `--force` redoes it). Needs mediapipe; otherwise tell the user to run `/cutmate:setup`.
+`$CM track <folder>/out` after `cut` (it skips the work when tracks.json is newer than aroll.mp4; `--force` redoes it). After every re-cut run it again: plan/build ignore a tracks.json older than aroll.mp4, and `follow` then fails. Needs mediapipe; otherwise tell the user to run `/cutmate:setup`.
 
 **Writing a custom effect** in `out/custom/<name>.html`: the same `<style>` / `<markup>` / `<script>` sections as theme
 components; `ROOT` in style is the effect root. Rules:
@@ -208,7 +208,7 @@ about every `WARN`. The last line prints `checkpoints: t1,t2,...`. Then, from th
 
 `$CM render <folder>/out` (check → render → finalize; writes `out/final.mp4`). 9:16 takes ~1–2 min. 16:9 takes ~45–60 min per 15 min of video: run it in the background (Bash `run_in_background: true`), follow `out/work/render.log`, and tell the user the ETA. READ every `check_*.png` it
 writes and describe each in one line. If `steps.qa`: `$CM qa <folder>/out` and handle every hit: probe/rms, fix the
-EDL (then cut → align → build → render; graphics move with their words automatically) or explain why it's fine.
+EDL (then cut → align → track (if used) → build → render; graphics move with their words automatically) or explain why it's fine.
 
 ## 8. Thumbnail (if `steps.thumbnail`)
 
