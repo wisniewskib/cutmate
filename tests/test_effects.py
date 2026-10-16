@@ -1,3 +1,5 @@
+import re
+
 import pytest
 
 from cutmate import effects as E
@@ -112,3 +114,11 @@ def test_save_effect_corrupt_json_is_one_line_error(tmp_path, monkeypatch, which
     with pytest.raises(CutmateError, match=which) as e:
         E.save_effect(out, "orb", "clean")
     assert "\n" not in str(e.value)
+
+
+@pytest.mark.parametrize("api", ["THREE.Clock", "new Date", "crypto.getRandomValues", "gsap.ticker", ".play("])
+def test_lint_rejects_clock_and_playback_apis(tmp_path, api):
+    p = tmp_path / "fx.html"
+    p.write_text(GOOD.replace("U.clock((t) => {});", f"const x = {api}; U.clock(() => {{}});"), encoding="utf-8")
+    with pytest.raises(PlanError, match=re.escape(f"fx.html: uses {api}")):
+        E.lint_effect(p)

@@ -95,8 +95,10 @@ components; `ROOT` in style is the effect root. Rules:
 - Hand-placed `custom` effects get no automatic fade: draw nothing before `P.at` and be gone by `P.end` —
   gate everything with a visibility factor, as energy-ball does:
   `const vis = Math.min(1, Math.max(0, (t - P.at) / 0.25)) * Math.min(1, Math.max(0, (P.end - t) / 0.25));`
-- Forbidden (build rejects the file, even in comments or strings): Date.now, Math.random, performance.now, requestAnimationFrame, setTimeout, setInterval, onUpdate,
-  setAnimationLoop, anime.utils.random, d3.transition, AfterimagePass. Libraries (GSAP plugins, Three.js, Anime.js, Lottie, KaTeX, Rough.js, D3) load automatically when used.
+- Forbidden (build rejects the file, even in comments or strings): Date.now, new Date, Math.random, crypto.getRandomValues,
+  performance.now, requestAnimationFrame, setTimeout, setInterval, onUpdate, setAnimationLoop, THREE.Clock, gsap.ticker,
+  `.play(`, anime.utils.random, d3.transition, AfterimagePass. Create Anime.js / Lottie objects with `autoplay: false` and
+  hand them to `U.anime` / `U.lottie` (the clock seeks them). Libraries (GSAP plugins, Three.js, Anime.js, Lottie, KaTeX, Rough.js, D3) load automatically when used.
 
 Pattern (the energy-ball effect, abridged):
 ```html

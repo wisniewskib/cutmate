@@ -10,7 +10,8 @@ from .paths import plugin_root
 from .plan import NAME_RE
 
 FORBIDDEN = ("Date.now", "Math.random", "performance.now", "requestAnimationFrame", "setTimeout", "setInterval",
-             "onUpdate", "setAnimationLoop", "anime.utils.random", "d3.transition", "AfterimagePass")
+             "onUpdate", "setAnimationLoop", "anime.utils.random", "d3.transition", "AfterimagePass",
+             "THREE.Clock", "new Date", "crypto.getRandomValues", "gsap.ticker", ".play(")
 _SECTION = re.compile(r"<(style|markup|script)>(.*?)</\1>", re.S)
 GSAP = "https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/"
 THREE = "https://cdn.jsdelivr.net/npm/three@0.181.2/"
