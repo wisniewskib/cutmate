@@ -115,15 +115,18 @@
           composer.addPass(new RenderPass(scene, camera));
           composer.addPass(new UnrealBloomPass(new THREE.Vector2(w, h), opt.bloom.strength ?? 1.5, opt.bloom.radius ?? 0.5, opt.bloom.threshold ?? 0));
           composer.addPass(new OutputPass());
-          // the bloom blur writes alpha 1 everywhere, which would paint the frame black: rebuild alpha from
-          // brightness (premultiplied), so the glow composites like light (≈ screen) over the A-roll
-          const { ShaderPass } = await import("three/addons/postprocessing/ShaderPass.js");
-          composer.addPass(new ShaderPass({
-            uniforms: { tDiffuse: { value: null } },
-            vertexShader: "varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }",
-            fragmentShader: "uniform sampler2D tDiffuse; varying vec2 vUv; void main(){ vec3 c=clamp(texture2D(tDiffuse,vUv).rgb,0.0,1.0);"
-              + " gl_FragColor=vec4(c, max(c.r, max(c.g, c.b))); }",
-          }));
+          // alpha "luma" (default): the bloom blur writes alpha 1 everywhere, which would paint the frame black, so
+          // rebuild alpha from brightness (premultiplied) and the glow composites like light (≈ screen) over the A-roll.
+          // alpha "keep": skip that pass (solid objects keep their own alpha; dark parts stay opaque)
+          if ((opt.bloom.alpha || "luma") !== "keep") {
+            const { ShaderPass } = await import("three/addons/postprocessing/ShaderPass.js");
+            composer.addPass(new ShaderPass({
+              uniforms: { tDiffuse: { value: null } },
+              vertexShader: "varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }",
+              fragmentShader: "uniform sampler2D tDiffuse; varying vec2 vUv; void main(){ vec3 c=clamp(texture2D(tDiffuse,vUv).rgb,0.0,1.0);"
+                + " gl_FragColor=vec4(c, max(c.r, max(c.g, c.b))); }",
+            }));
+          }
         }
         const toWorld = function (xPx, yPx, z) {    // frame pixels → point on the plane z (default 0)
           const v = new THREE.Vector3((xPx / w) * 2 - 1, -(yPx / h) * 2 + 1, 0.5).unproject(camera);

@@ -85,7 +85,9 @@ and the bundled `energy-ball` (params `radius`, `colors`; use with `"follow": "h
 components; `ROOT` in style is the effect root. Rules:
 - `U.clock(fn)` is the only per-frame driver (`fn(t)`, local time) — never `onUpdate`, timers or rAF. `U.seed(n)` is the only randomness.
 - `U.trackAt(P.track, t)` → `[x, y]` px or null; `U.follow(el, P.track)` sticks an element to the hand / face.
-- `U.three({el, bloom:{strength,radius,threshold}, camera})` → Promise of `{THREE, scene, camera, renderer, composer, toWorld(xPx, yPx, z), render}`;
+- `U.three({el, bloom:{strength, radius, threshold, alpha}, camera:{fov, z}})` → Promise of `{THREE, scene, camera, renderer, composer, toWorld(xPx, yPx, z), render}`
+  (camera defaults: fov 35, z 10). Bloom is for glowing things (orbs, sparks, neon): its default `alpha: "luma"` makes
+  dark pixels transparent. For solid 3D objects (logos, cubes) use `alpha: "keep"` or no bloom;
   `U.glowOrb(S, {radius, colors, swirl})` → `{group, update(t)}`; `U.particles(target, {count, seed, life, speed, spin, size, colors, emitter})`
   → `{update(t), points?}` (canvas: px; inside `U.three`: world units: frame height ÷ 6.3 px per unit, ≈171 at 1080 px tall, ≈305 at 1920); `U.draw(sel, {from, dur, stagger})`;
   `U.rough(svg, shapes, {seed})` (shape = `{kind: "rectangle"|"circle"|"line"|"path"…, args: [...], opts: {...}}`); `U.tex(el, latex)`; `U.anime(timeline)`; `U.lottie(anim)`.
@@ -109,11 +111,12 @@ Pattern (the energy-ball effect, abridged):
 <script>
 // root = the effect's root element
 U.three({ el: root.querySelector(".fx"), bloom: { strength: 1.2, radius: 0.6, threshold: 0.1 } }).then(S => {
-  const orb = U.glowOrb(S, { radius: P.radius || 1, colors: P.colors, swirl: 1 });
-  S.scene.add(orb.group);
+  const orb = U.glowOrb(S, { radius: P.radius || 1, colors: P.colors, swirl: 1 });   // already in S.scene
   U.clock(t => {
     const p = U.trackAt(P.track, t);
+    const vis = p ? Math.min(1, Math.max(0, (t - P.at) / 0.25)) * Math.min(1, Math.max(0, (P.end - t) / 0.25)) : 0;
     if (p) orb.group.position.copy(S.toWorld(p[0], p[1], 0));
+    orb.group.scale.setScalar(Math.max(0.001, vis));
     orb.update(t); S.render();
   });
 });

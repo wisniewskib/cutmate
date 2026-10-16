@@ -30,3 +30,9 @@ def test_pure_helpers():
     assert d["farBefore"] is None and d["farAfter"] is None                  # > 0.25 s outside the samples
     assert d["inGap"] is None and d["gapEdge"] == [300, 400]                 # samples > 0.5 s apart: no position
     assert d["p1"] == d["p2"] and 0 <= d["p1"]["alpha"] <= 1      # stateless: same t → same particle
+
+
+def test_bloom_alpha_option():
+    js = (web_dir() / "effects.js").read_text(encoding="utf-8")
+    assert '(opt.bloom.alpha || "luma") !== "keep"' in js
+    assert js.index('!== "keep"') < js.index("ShaderPass.js")             # the luma pass is skipped for "keep"
