@@ -35,7 +35,7 @@ def theme(tmp_path, monkeypatch):
     dst = tmp_path / "home" / "themes" / "testtheme"
     shutil.copytree(src, dst, ignore=shutil.ignore_patterns("components"))
     (dst / "components").mkdir()
-    for t in ("title", "counter", "list", "chip", "stamp", "bars", "point", "split", "chapter", "pip", "lower-third", "bg"):
+    for t in ("title", "counter", "list", "chip", "stamp", "bars", "point", "split", "chapter", "pip", "lower-third", "bg", "side"):
         (dst / "components" / f"{t}.html").write_text(FAKE_COMPONENT, encoding="utf-8")
     monkeypatch.setenv("CUTMATE_HOME", str(tmp_path / "home"))
     return "testtheme"
@@ -457,10 +457,9 @@ def test_follow_without_samples(out169, theme):
     assert '"track": []' in sub
 
 
-@pytest.mark.skip(reason="side arrives in Task 7")
 def test_custom_three_injects_importmap_and_region(out169, theme):
     _fx(out169, "logo", FX.replace("U.clock", "U.three({}).then(() => {}); U.clock"))
-    write_plan(out169, {"graphics": [{"type": "side", "from": "S2:minus", "to": "S2:koniec.", "effect": "logo"}]})
+    write_plan(out169, {"graphics": [{"type": "side", "from": "S2:minus", "to": "S2:</script>", "effect": "logo"}]})
     proj = B.build(out169, theme=theme)["project"]
     html = (proj / "index.html").read_text(encoding="utf-8")
     assert html.index("assets/effects.js") < html.index('type="importmap"')
@@ -523,3 +522,16 @@ def test_bg_cutout_failure_leaves_nothing(out169, theme, monkeypatch, tmp_path):
     with pytest.raises(CutmateError, match="boom"):
         B.bg_cutout(out169 / "aroll.mp4", 2.1, 3.1, media)
     assert list(media.iterdir()) == []
+
+
+def test_side_shifts_speaker_to_face(out169, theme):
+    (out169.parent / "broll").mkdir()
+    from PIL import Image
+    Image.new("RGB", (32, 18), "red").save(out169.parent / "broll" / "d.png")
+    write_plan(out169, {"face": {"S2": [0.4, 0.3]},
+                        "graphics": [{"type": "side", "from": "S2:minus", "to": "S2:</script>", "media": "broll/d.png"}]})
+    proj = B.build(out169, theme=theme)["project"]
+    cfg = cfg_of((proj / "index.html").read_text(encoding="utf-8"))
+    assert cfg["sides"] == [[2.1, pytest.approx(3.1), 672]]               # 1440 - 0.4*1920
+    sub = (proj / "compositions" / "gx-01-side.html").read_text(encoding="utf-8")
+    assert '"speaker": "right"' in sub

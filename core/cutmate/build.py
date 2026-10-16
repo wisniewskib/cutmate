@@ -308,6 +308,13 @@ def subcomp(cid: str, g: Graphic, host_start: float, theme: Path, assets: Path, 
     if g.type in ("split", "pip"):
         P["fit"] = g.params.get("fit", "contain")
         media_tag = _media_tag(cid, g, P)
+    if g.type == "side":
+        P["side"] = "l" if g.params["speaker"] == "right" else "r"
+        P["fit"] = g.params.get("fit", "cover")
+        if "media" in g.params:
+            media_tag = _media_tag(cid, g, P)
+        else:
+            P["side"] += " side-fx"
     back_tag = _media_tag(cid, g, P) if g.type == "bg" and "media" in g.params else ""
     tags = {"media_tag": media_tag, "back_tag": back_tag, **(extra_tags or {})}
     markup = _PLACEHOLDER.sub(lambda m: tags[m.group(1)] if m.group(1) in tags
@@ -437,7 +444,12 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
     cues += [(hit_name, h[0], hit_vol) for h in hits]
     splits = [[g.start, round(max(g.start + 0.45, g.end - 0.4), 3)] for g in plan.graphics if g.type == "split"]
     pages = caption_pages(words, end, plan.captions["key"], plan.captions["max_words"])
+    sides = [[g.start, round(max(g.start + 0.45, g.end - 0.4), 3),
+              round((1440 if g.params["speaker"] == "right" else 480) - plan.face.get(_seg_at(timed, g.start), FACE_DEFAULT)[0] * W)]
+             for g in plan.graphics if g.type == "side"]
     cfg = {"end": end, "pages": pages if mode in ("burn", "both") else [], "cam": cam, "hits": hits, "splits": splits}
+    if sides:
+        cfg["sides"] = sides
     srt = out / "captions.srt"
     if mode in ("srt", "both"):
         srt.write_text(to_srt(pages), encoding="utf-8")

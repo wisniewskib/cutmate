@@ -104,3 +104,15 @@ html.f169 .chapter .ch-title { max-width: 1500px; font-size: 110px; }
 .bg-back .img { position: absolute; inset: 0; background-size: cover; background-position: center; }
 .bg-cut { position: absolute; inset: 0; }
 .bg-cut video { width: 100%; height: 100%; object-fit: cover; }
+
+.side-panel { position: absolute; top: 60px; width: 840px; height: 960px; border-radius: 28px; overflow: hidden;
+              background: var(--card); box-shadow: var(--shadow); opacity: 0; }
+.side-panel.side-l { left: 60px; }
+.side-panel.side-r { left: 1020px; }
+.side-panel.side-fx { background: transparent; box-shadow: none; }
+.side-media { position: absolute; inset: 0; }
+.side-media video { width: 100%; height: 100%; object-fit: contain; }
+.side-media .img { position: absolute; inset: 0; background-size: contain; background-position: center; background-repeat: no-repeat; }
+.side-media.fit-cover video { object-fit: cover; }
+.side-media.fit-cover .img { background-size: cover; }
+.side-media:empty { display: none; }

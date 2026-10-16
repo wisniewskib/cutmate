@@ -5,7 +5,7 @@ from cutmate.build import _sections
 from cutmate.plan import TYPES
 
 EXTRA = ("chapter",)
-PENDING = ("side",)  # components arrive in Tasks 6 and 7 — remove each when its file exists
+PENDING = ()  # components arrive in Tasks 6 and 7 — remove each when its file exists
 
 
 def test_every_component_has_a_script_and_no_forbidden_apis():

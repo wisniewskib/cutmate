@@ -60,7 +60,16 @@
     });
   }
 
+  function sides(tl, cfg) {
+    if (!(cfg.sides || []).length) return;
+    tl.set("#split", { x: 0 }, 0);
+    cfg.sides.forEach(([tIn, tOut, dx]) => {
+      tl.fromTo("#split", { x: 0 }, { x: dx, duration: 0.45, ease: "power3.out", immediateRender: false }, tIn);
+      tl.fromTo("#split", { x: dx }, { x: 0, duration: 0.4, ease: "power3.inOut", immediateRender: false }, tOut);
+    });
+  }
+
   window.Cutmate = {
-    build(tl, cfg) { captions(tl, cfg); camera(tl, cfg); hits(tl, cfg); splits(tl, cfg); },
+    build(tl, cfg) { captions(tl, cfg); camera(tl, cfg); hits(tl, cfg); splits(tl, cfg); sides(tl, cfg); },
   };
 })();
