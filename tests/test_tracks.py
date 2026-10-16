@@ -151,3 +151,15 @@ def test_tracks_fresh(tmp_path):
     assert tracks_fresh(tmp_path)
     os.utime(tmp_path / "aroll.mp4", (t + 5, t + 5))                   # re-cut after tracking
     assert not tracks_fresh(tmp_path)
+
+
+def test_analyze_unreadable_video_is_error(tmp_path, monkeypatch):
+    from cutmate import tracks as T
+    from cutmate.errors import CutmateError
+    bad = tmp_path / "bad.mp4"
+    bad.write_bytes(b"\x00" * 4096)
+    monkeypatch.setattr(T, "probe_video", lambda p: {"width": 1920, "height": 1080})   # probe passes, decode fails
+    det = FakeDetector()
+    with pytest.raises(CutmateError, match="bad.mp4"):
+        T.analyze(bad, det)
+    assert det.calls == []

@@ -109,6 +109,6 @@ def save_effect(out_dir: Path, name: str, theme: str = "clean", description: str
     shutil.copyfile(src, dest)
     entries = [e for e in entries if e.get("name") != name]
     entries.append({"name": name, "description": description, "params": params, "follow": follow})
-    entries.sort(key=lambda e: e["name"])
+    entries.sort(key=lambda e: str(e.get("name", "")))
     index.write_text(json.dumps(entries, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return dest

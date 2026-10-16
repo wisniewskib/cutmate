@@ -4,6 +4,7 @@ Samples are [t, x, y, conf] with x, y as fractions of the frame; t is A-roll sec
 import hashlib
 import json
 import subprocess
+import tempfile
 from pathlib import Path
 from statistics import median
 
@@ -149,8 +150,9 @@ def analyze(video: Path, detector, every: int = 2, width: int = 640) -> dict:
     W, H = int(info["width"]), int(info["height"])
     w = width
     h = int(round(H * w / W / 2) * 2)
+    err = tempfile.TemporaryFile()                     # a file, not a pipe: a chatty ffmpeg cannot block the read
     proc = subprocess.Popen(["ffmpeg", "-nostdin", "-v", "error", "-i", str(video), "-vf", f"fps=30,scale={w}:{h}",
-                             "-f", "rawvideo", "-pix_fmt", "rgb24", "-"], stdout=subprocess.PIPE)
+                             "-f", "rawvideo", "-pix_fmt", "rgb24", "-"], stdout=subprocess.PIPE, stderr=err)
     raw = {n: [] for n in TRACKS}
     size, i = w * h * 3, 0
     try:
@@ -168,6 +170,11 @@ def analyze(video: Path, detector, every: int = 2, width: int = 640) -> dict:
     finally:
         proc.stdout.close()
         proc.wait()
+        err.seek(0)
+        msg = " ".join(err.read().decode("utf-8", "replace").split())[-300:]
+        err.close()
+    if proc.returncode or i == 0:
+        raise CutmateError(f"cannot read frames from {video} (ffmpeg exit {proc.returncode}): {msg or 'no frames'}")
     step = every / 30
     return {"fps": round(30 / every), "w": W, "h": H,
             "tracks": {n: fill_gaps(smooth(s), 0.5, step) for n, s in raw.items()}}
