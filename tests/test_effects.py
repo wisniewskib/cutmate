@@ -50,3 +50,29 @@ def test_track_slice():
     s = [[0.9, 0.5, 0.5, 1], [1.0, 0.5, 0.25, 1], [1.5, 0.75, 0.5, 1], [2.1, 0.1, 0.1, 1]]
     assert E.track_slice(s, 1.0, 2.0, 0.7, 1920, 1080) == [[0.3, 960.0, 270.0], [0.8, 1440.0, 540.0]]
     assert E.track_slice([], 1.0, 2.0, 0.7, 1920, 1080) == []
+
+
+def test_save_effect_force_and_bundled_untouched(tmp_path, monkeypatch):
+    import json
+    from cutmate.effects import save_effect
+    from cutmate.errors import CutmateError
+    from cutmate.paths import plugin_root
+    monkeypatch.setenv("CUTMATE_HOME", str(tmp_path / "home"))
+    out = tmp_path / "rec" / "out"
+    (out / "custom").mkdir(parents=True)
+    (out / "custom" / "orb.html").write_text(GOOD, encoding="utf-8")
+    (out / "plan.json").write_text(json.dumps({"graphics": [
+        {"type": "custom", "name": "orb", "at": "S1:a", "follow": "hand", "params": {"color": "#fff", "size": 2}}]}))
+    bundled = sorted(p.name for p in (plugin_root() / "themes" / "clean").rglob("*"))
+    p = save_effect(out, "orb", "clean", "Kula energii na dłoni")
+    assert p == tmp_path / "home" / "themes" / "clean" / "components" / "custom" / "orb.html"
+    idx = json.loads((p.parent / "index.json").read_text(encoding="utf-8"))
+    assert idx == [{"name": "orb", "description": "Kula energii na dłoni", "params": ["color", "size"], "follow": "hand"}]
+    with pytest.raises(CutmateError, match="--force"):
+        save_effect(out, "orb", "clean")
+    save_effect(out, "orb", "clean", "v2", force=True)
+    assert [e["description"] for e in json.loads((p.parent / "index.json").read_text())] == ["v2"]
+    (out / "custom" / "unused.html").write_text(GOOD, encoding="utf-8")
+    save_effect(out, "unused", "clean")
+    assert {"name": "unused", "description": "", "params": [], "follow": None} in json.loads((p.parent / "index.json").read_text())
+    assert sorted(p.name for p in (plugin_root() / "themes" / "clean").rglob("*")) == bundled

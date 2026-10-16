@@ -1,9 +1,11 @@
 """Effects written on request (custom components): where they live, what they may not use, which libraries they need."""
+import json
 import re
+import shutil
 from pathlib import Path
 
 from .config import home
-from .errors import PlanError
+from .errors import CutmateError, PlanError
 from .paths import plugin_root
 
 FORBIDDEN = ("Date.now", "Math.random", "performance.now", "requestAnimationFrame", "setTimeout", "setInterval",
@@ -59,3 +61,31 @@ def libs_head(texts: list[str]) -> str:
 
 def track_slice(samples, a: float, b: float, host_start: float, W: int, H: int) -> list[list[float]]:
     return [[round(t - host_start, 3), round(x * W, 1), round(y * H, 1)] for t, x, y, *_ in samples if a <= t <= b]
+
+
+def save_effect(out_dir: Path, name: str, theme: str = "clean", description: str = "", force: bool = False) -> Path:
+    out_dir = Path(out_dir)
+    src = out_dir / "custom" / f"{name}.html"
+    if not src.exists():
+        raise CutmateError(f"effect {name!r} not found — expected {src}")
+    lint_effect(src)
+    dest_dir = home() / "themes" / theme / "components" / "custom"
+    dest = dest_dir / f"{name}.html"
+    if dest.exists() and not force:
+        raise CutmateError(f"effect {name} already saved in theme {theme} — use --force to replace it")
+    params, follow = [], None
+    plan = out_dir / "plan.json"
+    if plan.exists():
+        used = [g for g in json.loads(plan.read_text(encoding="utf-8")).get("graphics", [])
+                if g.get("type") == "custom" and g.get("name") == name]
+        if used:
+            params, follow = list(used[-1].get("params") or {}), used[-1].get("follow")
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(src, dest)
+    index = dest_dir / "index.json"
+    entries = json.loads(index.read_text(encoding="utf-8")) if index.exists() else []
+    entries = [e for e in entries if e.get("name") != name]
+    entries.append({"name": name, "description": description, "params": params, "follow": follow})
+    entries.sort(key=lambda e: e["name"])
+    index.write_text(json.dumps(entries, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return dest

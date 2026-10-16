@@ -118,6 +118,12 @@ def _parser() -> argparse.ArgumentParser:
     th2.add_argument("--hook", default="")
     th2.add_argument("--theme")
     th2.add_argument("--side", choices=["left", "right"], default="right")
+    se = sub.add_parser("save-effect", help="keep a custom effect from out/custom in the user theme")
+    se.add_argument("out")
+    se.add_argument("name")
+    se.add_argument("--theme")
+    se.add_argument("--description", default="")
+    se.add_argument("--force", action="store_true")
     return ap
 
 
@@ -219,6 +225,9 @@ def _dispatch(args) -> int:
         r = thumbnail(Path(args.out), args.at, args.title, args.hook, args.theme or cfg.theme, side=args.side)
         print(r["png"])
         print(r["jpg"])
+    elif args.cmd == "save-effect":
+        from .effects import save_effect
+        print(save_effect(Path(args.out), args.name, args.theme or cfg.theme, args.description, args.force))
     return 0
 
 
