@@ -44,7 +44,7 @@ def test_check(tmp_path):
 def test_cli_requests(tmp_path, capsys):
     from cutmate.cli import main
     assert main(["requests", str(tmp_path)]) == 0
-    assert capsys.readouterr().out.strip() == "requests: 0 ok, 0 missing"
+    assert capsys.readouterr().out.strip() == "requests: 0 ok, 0 missing, 0 bad"
 
 
 def test_corrupt_plan_is_one_line_error(tmp_path, capsys):
@@ -81,3 +81,18 @@ def test_unresolvable_anchors_are_bad_lines(tmp_path):
 def test_graphic_outside_window_is_missing(tmp_path):
     out = _setup(tmp_path, "- [c] a → pip @ S1\n")
     assert check_requests(out)[0].startswith("MISSING")
+
+
+def test_time_anchors(tmp_path):
+    out = _setup(tmp_path, "- [uwagi 0:04] a → pip @ 0:04\n- [uwagi] b → pip @ 4.9\n- [uwagi] c → pip @ 2.5\n"
+                           "- [uwagi] d → pip @ 1:30\n")
+    lines = check_requests(out)                                   # the pip starts at 4.4 s
+    assert lines[0].startswith("OK") and lines[1].startswith("OK") and lines[2].startswith("MISSING")
+    assert lines[3].startswith("BAD") and "outside the video" in lines[3]
+
+
+def test_cli_summary_counts_bad(tmp_path, capsys):
+    from cutmate.cli import main
+    out = _setup(tmp_path, "- [c] a → pip @ S2\n- [c] b → pip @ S9\n- [c] c → pip @ S1\n- zła linia\n")
+    assert main(["requests", str(out)]) == 0
+    assert capsys.readouterr().out.strip().splitlines()[-1] == "requests: 1 ok, 1 missing, 2 bad"

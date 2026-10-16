@@ -58,7 +58,7 @@ Everything else in this skill applies; these are the differences.
 The user can ask for things the built-in components don't cover. Collect every request, map it, show it, then build.
 
 **Collect** into `out/requests.md` early, as requests come in (it needs no EDL; `$CM requests` runs later, see Checkpoint), one line each: `- [<source>] <what> → <target> [@ <anchor>]`. Target = component type,
-`custom:<name>`, `cut` or `skip`; anchor = segment id (`S5`) or word anchor (`S7:Rasengan`). Sources:
+`custom:<name>`, `cut` or `skip`; anchor = segment id (`S5`), word anchor (`S7:Rasengan`) or a time in the cut video (`41.0` seconds or `0:41`; matches ±1 s). Sources:
 - `[czat]` — the user's message to you.
 - `[nagranie <clip> <time>]` — spoken director notes (polecenia) in the transcript: phrases addressed to the editor, second
   person ("tutaj ma być", "dodaj", "przenosisz mnie", "zrób"). These segments never go into the EDL unless they are
@@ -119,7 +119,7 @@ U.three({ el: root.querySelector(".fx"), bloom: { strength: 1.2, radius: 0.6, th
 ```
 
 **Checkpoint "zrozumiałem tak":** map every request into `plan.json` in §5 first (a word anchor in requests.md matches a graphic starting within ±1 s of that word). Then, right before build (16:9: together with the preview), when `requests.md` has ≥ 1 line, run `$CM requests <folder>/out` — it needs aligned_words.json, edl_timed.json and plan.json (one line per request: OK / MISSING /
-NOTE / BAD, then `requests: N ok, M missing`), fix every `MISSING` and `BAD`, then show the user the list as "zrozumiałem tak: …"
+NOTE / BAD, then `requests: N ok, M missing, K bad`), fix every `MISSING` and `BAD`, then show the user the list as "zrozumiałem tak: …"
 and wait for OK. No requests → no pause.
 
 **After acceptance:** for each `custom` effect used, ask once "Zapisać efekt <name> w theme?" → `$CM save-effect <folder>/out <name> --description "…"`

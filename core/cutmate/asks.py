@@ -23,8 +23,18 @@ def parse_requests(text: str) -> list[dict]:
     return out
 
 
+_SECONDS = re.compile(r"\d+(?:\.\d+)?")
+_MMSS = re.compile(r"(\d+):([0-5]?\d(?:\.\d+)?)")
+
+
 def _range(anchor, timed: list[dict], words: list[dict], end: float) -> tuple[float, float]:
     from .plan import resolve_anchor
+    m = _MMSS.fullmatch(anchor)
+    if m or _SECONDS.fullmatch(anchor):                      # a time: "41.0" (seconds) or "0:41" (mm:ss)
+        t = int(m.group(1)) * 60 + float(m.group(2)) if m else float(anchor)
+        if not 0 <= t <= end:
+            raise CutmateError(f"time {anchor} is outside the video (0–{end:.1f}s)")
+        return t - 1.0, t + 1.0
     if ":" in anchor:
         t = resolve_anchor(anchor, words, end)[0]
         return t - 1.0, t + 1.0

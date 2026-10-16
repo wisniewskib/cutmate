@@ -236,7 +236,7 @@ def _dispatch(args) -> int:
         for ln in lines:
             print(ln)
         print(f"requests: {sum(ln.startswith('OK') for ln in lines)} ok, "
-              f"{sum(ln.startswith('MISSING') for ln in lines)} missing")
+              f"{sum(ln.startswith('MISSING') for ln in lines)} missing, {sum(ln.startswith('BAD') for ln in lines)} bad")
     return 0
 
 
