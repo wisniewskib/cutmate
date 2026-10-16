@@ -21,7 +21,7 @@ WORDS = [
 ]
 TIMED = [{"id": "S1", "start": 0.0, "end": 2.0, "text": "a"}, {"id": "S2", "start": 2.0, "end": 4.0, "text": "b"}]
 FAKE_COMPONENT = """<style>ROOT .band .x { color: red; }</style>
-<markup><div class="band"><div class="x">{{label}}</div>{{media_tag}}{{face_tag}}</div></markup>
+<markup><div class="band"><div class="x">{{label}}</div>{{media_tag}}{{face_tag}}{{back_tag}}{{cut_tag}}</div></markup>
 <script>
 tl.fromTo(root.querySelector(".x"), { opacity: 0 }, { opacity: 1, duration: 0.2 }, P.at);
 U.out(root.querySelector(".band"), P.end - 0.2);
@@ -35,7 +35,7 @@ def theme(tmp_path, monkeypatch):
     dst = tmp_path / "home" / "themes" / "testtheme"
     shutil.copytree(src, dst, ignore=shutil.ignore_patterns("components"))
     (dst / "components").mkdir()
-    for t in ("title", "counter", "list", "chip", "stamp", "bars", "point", "split", "chapter", "pip", "lower-third"):
+    for t in ("title", "counter", "list", "chip", "stamp", "bars", "point", "split", "chapter", "pip", "lower-third", "bg"):
         (dst / "components" / f"{t}.html").write_text(FAKE_COMPONENT, encoding="utf-8")
     monkeypatch.setenv("CUTMATE_HOME", str(tmp_path / "home"))
     return "testtheme"
@@ -477,3 +477,49 @@ def test_custom_lint_and_missing(out169, theme):
     write_plan(out169, {"graphics": [{"type": "custom", "name": "nope", "at": "S2:minus"}]})
     with pytest.raises(PlanError, match="nope"):
         B.build(out169, theme=theme)
+
+
+def test_bg_cutout_cached_and_atomic(out169, theme, monkeypatch):
+    calls = []
+
+    def fake_run(cmd, cwd=None, env=None):
+        cmd = [str(c) for c in cmd]
+        calls.append((cmd, cwd))
+        if "remove-background" in cmd:
+            o = cmd[cmd.index("-o") + 1]
+            assert "/" not in o and "\\" not in o                    # plain names, cwd-relative (Windows npx)
+            (Path(cwd) / o).write_bytes(b"webm")
+        elif cmd[0] == "ffmpeg":
+            Path(cmd[-1]).write_bytes(b"mp4")
+        return type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+    monkeypatch.setattr(B, "run", fake_run)
+    (out169.parent / "broll").mkdir()
+    from PIL import Image
+    Image.new("RGB", (32, 18), "blue").save(out169.parent / "broll" / "k.png")
+    write_plan(out169, {"graphics": [{"type": "bg", "from": "S2:minus", "to": "S2:Claude'a", "media": "broll/k.png"}]})
+    proj = B.build(out169, theme=theme)["project"]
+    media = proj / "assets" / "media"
+    assert sorted(p.name for p in media.iterdir()) == ["bgcut-2100-3100.webm", "m01-k.png"]
+    n = sum("remove-background" in c[0] for c in calls)
+    B.build(out169, theme=theme)
+    assert sum("remove-background" in c[0] for c in calls) == n                  # cached
+    sub = (proj / "compositions" / "gx-01-bg.html").read_text(encoding="utf-8")
+    assert 'src="assets/media/bgcut-2100-3100.webm"' in sub and "muted" in sub
+
+
+def test_bg_cutout_failure_leaves_nothing(out169, theme, monkeypatch, tmp_path):
+    from cutmate.errors import CutmateError
+
+    def fail_run(cmd, cwd=None, env=None):
+        cmd = [str(c) for c in cmd]
+        if "remove-background" in cmd:
+            (Path(cwd) / cmd[cmd.index("-o") + 1]).write_bytes(b"half")
+            return type("R", (), {"returncode": 1, "stdout": "", "stderr": "boom"})()
+        Path(cmd[-1]).write_bytes(b"mp4")
+        return type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+    monkeypatch.setattr(B, "run", fail_run)
+    media = tmp_path / "m"
+    media.mkdir()
+    with pytest.raises(CutmateError, match="boom"):
+        B.bg_cutout(out169 / "aroll.mp4", 2.1, 3.1, media)
+    assert list(media.iterdir()) == []

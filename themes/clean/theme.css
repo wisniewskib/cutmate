@@ -96,3 +96,11 @@ html.f169 .chapter .ch-title { max-width: 1500px; font-size: 110px; }
 .pip-face.pip-br { right: 60px; }
 .pip-face.pip-bl { left: 60px; }
 .pip-face video { width: 100%; height: 100%; object-fit: cover; }
+
+.bg-wrap { position: absolute; inset: 0; opacity: 0; }
+.bg-back { position: absolute; inset: 0; overflow: hidden; }
+.bg-back:empty { display: none; }
+.bg-back video { width: 100%; height: 100%; object-fit: cover; }
+.bg-back .img { position: absolute; inset: 0; background-size: cover; background-position: center; }
+.bg-cut { position: absolute; inset: 0; }
+.bg-cut video { width: 100%; height: 100%; object-fit: cover; }

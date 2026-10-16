@@ -18,7 +18,7 @@ from .cut import load_timed
 from .effects import find_effect, libs_head, lint_effect, track_slice
 from .errors import CutmateError
 from .formats import size_of
-from .hf import ensure_project
+from .hf import ensure_project, hf
 from .media import duration, run
 from .music import carve, pick_source, prepare_music
 from .paths import assets_dir, theme_dir, web_dir
@@ -238,6 +238,28 @@ def face_clip(aroll: Path, start: float, end: float, center: list[float], size: 
     return dst
 
 
+def bg_cutout(aroll: Path, start: float, end: float, media_dir: Path) -> str:
+    """Speaker without background for [start, end] (transparent WebM), cached per range and A-roll."""
+    stem = f"bgcut-{int(start * 1000)}-{int(end * 1000)}"
+    final = media_dir / f"{stem}.webm"
+    if final.exists() and final.stat().st_mtime >= Path(aroll).stat().st_mtime:
+        return final.name
+    src, tmp = media_dir / f"bgsrc-{stem[6:]}.mp4", media_dir / f"{stem}.tmp.webm"
+    try:
+        r = run(["ffmpeg", "-nostdin", "-v", "error", "-y", "-ss", f"{start:.3f}", "-t", f"{end - start:.3f}",
+                 "-i", aroll, "-an", "-c:v", "libx264", "-crf", "16", "-pix_fmt", "yuv420p", src])
+        if r.returncode:
+            raise CutmateError(f"cannot cut the bg source: {' '.join(r.stderr.split())[-300:]}")
+        r = run(hf("remove-background", src.name, "-o", tmp.name, "--device", "auto"), cwd=media_dir)
+        if r.returncode or not tmp.exists():
+            raise CutmateError(f"background removal failed: {' '.join((r.stdout + r.stderr).split())[-300:]}")
+        os.replace(tmp, final)
+        return final.name
+    finally:
+        src.unlink(missing_ok=True)
+        tmp.unlink(missing_ok=True)
+
+
 def _seg_at(timed: list[dict], t: float) -> str:
     return next((str(s["id"]) for s in timed if s["start"] <= t + 1e-9 < s["end"]), str(timed[-1]["id"]))
 
@@ -286,7 +308,8 @@ def subcomp(cid: str, g: Graphic, host_start: float, theme: Path, assets: Path, 
     if g.type in ("split", "pip"):
         P["fit"] = g.params.get("fit", "contain")
         media_tag = _media_tag(cid, g, P)
-    tags = {"media_tag": media_tag, **(extra_tags or {})}
+    back_tag = _media_tag(cid, g, P) if g.type == "bg" and "media" in g.params else ""
+    tags = {"media_tag": media_tag, "back_tag": back_tag, **(extra_tags or {})}
     markup = _PLACEHOLDER.sub(lambda m: tags[m.group(1)] if m.group(1) in tags
                               else _html.escape(str(P.get(m.group(1), ""))), sec.get("markup", ""))
     w, h = size
@@ -368,7 +391,7 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
     end = plan.end
     media_map, hosts, cues, ids = {}, [], [], []
     items = sorted(plan.graphics + chapter_plates(plan, end, language), key=lambda g: g.start)
-    face_names = set()
+    keep_media = set()
     tr = load_tracks(out)
     effect_texts = []
     for i, g in enumerate(items):
@@ -382,10 +405,16 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
             dst = A / "media" / name
             if not dst.exists() or dst.stat().st_mtime < (A / "aroll.mp4").stat().st_mtime:
                 face_clip(A / "aroll.mp4", g.start, g.end, [fx, fy], (W, H), dst)
-            face_names.add(name)
+            keep_media.add(name)
             loc_at = round(g.start - hs, 3)
             extra = {"face_tag": f'<video id="{cid}-f" class="clip" data-hf-media-start-basis="local" data-start="{loc_at}" '
                                  f'data-duration="{round(g.end - g.start, 3)}" src="assets/media/{name}" muted playsinline></video>'}
+        if g.type == "bg":
+            name = bg_cutout(A / "aroll.mp4", g.start, g.end, A / "media")
+            keep_media.add(name)
+            loc_at = round(g.start - hs, 3)
+            extra = {"cut_tag": f'<video id="{cid}-c" class="clip" data-hf-media-start-basis="local" data-start="{loc_at}" '
+                                f'data-duration="{round(g.end - g.start, 3)}" src="assets/media/{name}" muted playsinline></video>'}
         comp_path = None
         if g.type == "custom":
             comp_path = find_effect(g.params["name"], out, theme)
@@ -398,7 +427,7 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
                      f'data-start="{hs}" data-duration="{round(g.end - hs, 3)}" data-track-index="{2 + i % 2}" '
                      f'data-width="{W}" data-height="{H}"></div>')
         cues += _sfx_cues(g, meta)
-    _prune(A / "media", {Path(v).name for v in media_map.values()} | face_names)
+    _prune(A / "media", {Path(v).name for v in media_map.values()} | keep_media)
     for f in (proj / "compositions").glob("gx-*.html"):
         if f.stem not in ids:
             f.unlink()
