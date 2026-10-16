@@ -129,6 +129,7 @@
           }
         }
         const toWorld = function (xPx, yPx, z) {    // frame pixels → point on the plane z (default 0)
+          camera.updateMatrixWorld(); camera.updateProjectionMatrix();   // valid before the first render too
           const v = new THREE.Vector3((xPx / w) * 2 - 1, -(yPx / h) * 2 + 1, 0.5).unproject(camera);
           const dir = v.sub(camera.position).normalize();
           const d = ((z || 0) - camera.position.z) / dir.z;
