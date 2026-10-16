@@ -88,3 +88,27 @@ def test_find_effect_falls_back_to_bundled_clean(tmp_path, monkeypatch):
     with pytest.raises(PlanError) as e:
         E.find_effect("nope", tmp_path / "out", "mytheme")
     assert str(plugin_root() / "themes" / "clean" / "components" / "custom" / "nope.html") in str(e.value)
+
+
+@pytest.mark.parametrize("name, theme, msg", [("../evil", "clean", "effect name"), ("Orb", "clean", "effect name"),
+                                              ("orb", "../x", "theme name"), ("orb", "a/b", "theme name")])
+def test_save_effect_validates_names(tmp_path, monkeypatch, name, theme, msg):
+    from cutmate.errors import CutmateError
+    monkeypatch.setenv("CUTMATE_HOME", str(tmp_path / "home"))
+    with pytest.raises(CutmateError, match=msg):
+        E.save_effect(tmp_path / "out", name, theme)
+
+
+@pytest.mark.parametrize("which", ["plan.json", "index.json"])
+def test_save_effect_corrupt_json_is_one_line_error(tmp_path, monkeypatch, which):
+    from cutmate.errors import CutmateError
+    monkeypatch.setenv("CUTMATE_HOME", str(tmp_path / "home"))
+    out = tmp_path / "rec" / "out"
+    (out / "custom").mkdir(parents=True)
+    (out / "custom" / "orb.html").write_text(GOOD, encoding="utf-8")
+    idx = tmp_path / "home" / "themes" / "clean" / "components" / "custom" / "index.json"
+    idx.parent.mkdir(parents=True)
+    (out / "plan.json" if which == "plan.json" else idx).write_text("{oops", encoding="utf-8")
+    with pytest.raises(CutmateError, match=which) as e:
+        E.save_effect(out, "orb", "clean")
+    assert "\n" not in str(e.value)

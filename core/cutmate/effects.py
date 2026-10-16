@@ -7,6 +7,7 @@ from pathlib import Path
 from .config import home
 from .errors import CutmateError, PlanError
 from .paths import plugin_root
+from .plan import NAME_RE
 
 FORBIDDEN = ("Date.now", "Math.random", "performance.now", "requestAnimationFrame", "setTimeout", "setInterval",
              "onUpdate", "setAnimationLoop", "anime.utils.random", "d3.transition", "AfterimagePass")
@@ -65,7 +66,21 @@ def track_slice(samples, a: float, b: float, host_start: float, W: int, H: int) 
     return [[round(t - host_start, 3), round(x * W, 1), round(y * H, 1)] for t, x, y, *_ in samples if a <= t <= b]
 
 
+THEME_RE = re.compile(r"^[A-Za-z0-9_-]+$")
+
+
+def _read_json(path: Path):
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (ValueError, OSError) as e:
+        raise CutmateError(f"{path}: cannot read ({' '.join(str(e).split())})") from None
+
+
 def save_effect(out_dir: Path, name: str, theme: str = "clean", description: str = "", force: bool = False) -> Path:
+    if not NAME_RE.match(str(name)):
+        raise CutmateError(f"bad effect name {name!r}: lowercase letters, digits and dashes (e.g. energy-ball)")
+    if not THEME_RE.match(str(theme)):
+        raise CutmateError(f"bad theme name {theme!r}: letters, digits, _ and - only")
     out_dir = Path(out_dir)
     src = out_dir / "custom" / f"{name}.html"
     if not src.exists():
@@ -78,14 +93,20 @@ def save_effect(out_dir: Path, name: str, theme: str = "clean", description: str
     params, follow = [], None
     plan = out_dir / "plan.json"
     if plan.exists():
-        used = [g for g in json.loads(plan.read_text(encoding="utf-8")).get("graphics", [])
-                if g.get("type") == "custom" and g.get("name") == name]
+        raw = _read_json(plan)
+        gs = raw.get("graphics") if isinstance(raw, dict) else None
+        used = [g for g in gs if isinstance(g, dict) and g.get("type") == "custom" and g.get("name") == name] \
+            if isinstance(gs, list) else []
         if used:
-            params, follow = list(used[-1].get("params") or {}), used[-1].get("follow")
+            p = used[-1].get("params")
+            params, follow = list(p) if isinstance(p, dict) else [], used[-1].get("follow")
+    index = dest_dir / "index.json"
+    entries = _read_json(index) if index.exists() else []
+    if not isinstance(entries, list):
+        raise CutmateError(f"{index}: must be a JSON list — fix or delete it")
+    entries = [e for e in entries if isinstance(e, dict)]
     dest_dir.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(src, dest)
-    index = dest_dir / "index.json"
-    entries = json.loads(index.read_text(encoding="utf-8")) if index.exists() else []
     entries = [e for e in entries if e.get("name") != name]
     entries.append({"name": name, "description": description, "params": params, "follow": follow})
     entries.sort(key=lambda e: e["name"])
