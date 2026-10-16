@@ -363,6 +363,10 @@ def subcomp(cid: str, g: Graphic, host_start: float, theme: Path, assets: Path, 
                  dur=round(g.end - host_start, 3), track=track)
         if assets_url:
             P["assets"] = assets_url
+        if g.params.get("place_xy"):
+            P["place"] = [round(g.params["place_xy"][0] * W - rx, 1), round(g.params["place_xy"][1] * H - ry, 1)]
+        if "media" in g.params:
+            P["media"] = _copy_media(g.params["media"], assets, media_map)
         u_open, u_close = FX_OPEN.format(cid=cid), ")"
         if region:
             root = f'document.querySelector("#{cid} > .cm-region")'
@@ -371,7 +375,8 @@ def subcomp(cid: str, g: Graphic, host_start: float, theme: Path, assets: Path, 
     media_tag = ""
     if g.type in ("split", "pip"):
         P["fit"] = g.params.get("fit", "contain")
-        media_tag = _media_tag(cid, g, P)
+        if "media" in g.params:                          # a split with an effect has an empty media box
+            media_tag = _media_tag(cid, g, P)
     if g.type == "side":
         P["side"] = "l" if g.params["speaker"] == "right" else "r"
         P["fit"] = g.params.get("fit", "cover")
@@ -469,6 +474,11 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
     keep_media = set()
     tr = plan.tracks
     effect_texts, warned, fx_used = [], set(), set()
+    found = {}
+    for g in items:                                    # resolve + lint every effect first: a failure writes nothing
+        if g.type == "custom" and g.params["name"] not in found:
+            found[g.params["name"]] = find_effect(g.params["name"], out, theme)
+            lint_effect(found[g.params["name"]])
     for i, g in enumerate(items):
         cid = f"gx-{i + 1:02d}-{g.type}"
         ids.append(cid)
@@ -492,8 +502,7 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
                                 f'data-duration="{round(g.end - g.start, 3)}" src="assets/media/{name}" muted playsinline></video>'}
         assets_url = None
         if g.type == "custom":
-            comp_path = find_effect(g.params["name"], out, theme)
-            lint_effect(comp_path)
+            comp_path = found[g.params["name"]]
             effect_texts.append(comp_path.read_text(encoding="utf-8"))
             folder = comp_path.parent / g.params["name"]     # the effect's own files (Lottie JSON, textures…)
             if folder.is_dir():

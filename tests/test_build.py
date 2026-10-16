@@ -739,3 +739,54 @@ def test_ensure_project_with_existing_dir(tmp_path, monkeypatch):
     assert (proj / "hyperframes.json").exists() and (proj / "index.html").exists()
     assert (proj / ".media" / "images" / "a.jpg").read_bytes() == b"jpg"
     assert [p.name for p in proj.parent.iterdir()] == ["composition"]
+
+
+def test_custom_place_px(out169, theme):
+    _fx(out169)
+    _tracks169(out169)
+    write_plan(out169, {"graphics": [{"type": "custom", "name": "orb", "at": "S2:minus"}]})
+    p = out169 / "work" / "tracks.json"
+    # no place -> no P.place
+    sub = (B.build(out169, theme=theme)["project"] / "compositions" / "gx-01-custom.html").read_text(encoding="utf-8")
+    assert "place" not in _P(sub)
+    hand = {"fps": 15, "w": 1920, "h": 1080, "tracks": {"face": [], "point_right": [[t / 10, 0.75, 0.5, 0.9] for t in range(0, 40)]}}
+    p.write_text(json.dumps(hand), encoding="utf-8")
+    write_plan(out169, {"graphics": [{"type": "custom", "name": "orb", "at": "S2:minus", "place": "gesture"}]})
+    sub = (B.build(out169, theme=theme)["project"] / "compositions" / "gx-01-custom.html").read_text(encoding="utf-8")
+    assert _P(sub)["place"] == [1440.0, 540.0]
+    write_plan(out169, {"graphics": [{"type": "custom", "name": "orb", "at": "S2:minus", "place": "gesture",
+                                      "region": [1020, 60, 840, 960]}]})
+    sub = (B.build(out169, theme=theme)["project"] / "compositions" / "gx-01-custom.html").read_text(encoding="utf-8")
+    assert _P(sub)["place"] == [420.0, 480.0]
+
+
+def test_custom_media_param_copied(out169, theme):
+    _fx(out169)
+    (out169.parent / "broll").mkdir()
+    (out169.parent / "broll" / "a.png").write_bytes(b"png")
+    write_plan(out169, {"graphics": [{"type": "custom", "name": "orb", "at": "S2:minus", "media": "broll/a.png"}]})
+    proj = B.build(out169, theme=theme)["project"]
+    P = _P((proj / "compositions" / "gx-01-custom.html").read_text(encoding="utf-8"))
+    assert P["media"].startswith("assets/media/") and (proj / P["media"]).exists()
+
+
+def test_split_effect_host_and_order(out, theme):
+    _fx(out, "diagram")
+    write_plan(out, {"graphics": [{"type": "split", "from": "S2:minus", "to": "S2:</script>", "effect": "diagram"}]})
+    proj = B.build(out, theme=theme)["project"]
+    html = (proj / "index.html").read_text(encoding="utf-8")
+    assert html.index("gx-01-split") < html.index("gx-02-custom")
+    split = (proj / "compositions" / "gx-01-split.html").read_text(encoding="utf-8")
+    assert "<video" not in split and 'class="img"' not in split and "media_tag" not in split and "band" in split
+    sub = (proj / "compositions" / "gx-02-custom.html").read_text(encoding="utf-8")
+    assert 'class="cm-region" style="position:absolute;left:40px;top:40px;width:1000px;height:820px' in sub
+    assert "duration: 0.45" in sub and (_P(sub)["w"], _P(sub)["h"]) == (1000, 820)
+    assert cfg_of(html)["splits"]                                              # face still moves down for the host
+
+
+def test_split_effect_missing(out, theme):
+    from cutmate.errors import PlanError
+    write_plan(out, {"graphics": [{"type": "split", "from": "S2:minus", "to": "S2:</script>", "effect": "nope"}]})
+    with pytest.raises(PlanError, match="nope"):
+        B.build(out, theme=theme)
+    assert not list((out / "composition" / "compositions").glob("gx-*.html"))
