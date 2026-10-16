@@ -29,11 +29,13 @@ THREE_MARK = r"\bTHREE\b|U\.three\(|U\.glowOrb\(|['\"]three['\"]"
 def find_effect(name: str, out_dir: Path, theme: str) -> Path:
     places = [Path(out_dir) / "custom" / f"{name}.html",
               home() / "themes" / theme / "components" / "custom" / f"{name}.html",
-              plugin_root() / "themes" / theme / "components" / "custom" / f"{name}.html"]
+              plugin_root() / "themes" / theme / "components" / "custom" / f"{name}.html",
+              plugin_root() / "themes" / "clean" / "components" / "custom" / f"{name}.html"]  # stock effects
+    places = list(dict.fromkeys(places))
     for p in places:
         if p.exists():
             return p
-    raise PlanError(f"effect {name!r} not found — write {places[0]} (also looked in {places[1]}, {places[2]})")
+    raise PlanError(f"effect {name!r} not found — write {places[0]} (also looked in {', '.join(map(str, places[1:]))})")
 
 
 def lint_effect(path: Path) -> None:

@@ -21,7 +21,7 @@ from .formats import size_of
 from .hf import ensure_project, hf
 from .media import duration, run
 from .music import carve, pick_source, prepare_music
-from .paths import assets_dir, theme_dir, web_dir
+from .paths import assets_dir, plugin_root, theme_dir, web_dir
 from .plan import PLATE, Graphic, load_plan, plate_chapters
 from .tracks import pick_hand
 
@@ -218,6 +218,20 @@ def _prune(folder: Path, keep: set) -> None:
     for f in folder.iterdir():
         if f.is_file() and f.name not in keep:
             f.unlink()
+
+
+FALLBACK = ("bg", "side", "chapter", "pip", "lower-third")  # components newer than many user themes
+
+
+def _component(th: Path, kind: str, theme: str, warned: set) -> Path:
+    """The theme's component file; for newer types a theme lacks, the bundled clean one (with a WARN, once per type)."""
+    p = th / "components" / f"{kind}.html"
+    if p.exists() or kind not in FALLBACK:
+        return p
+    if kind not in warned:
+        warned.add(kind)
+        print(f"WARN theme {theme} has no {kind} component — using clean's")
+    return plugin_root() / "themes" / "clean" / "components" / f"{kind}.html"
 
 
 def _sections(path: Path) -> dict:
@@ -437,7 +451,7 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
     items = sorted(plan.graphics + chapter_plates(plan, end, language), key=lambda g: g.start)
     keep_media = set()
     tr = plan.tracks
-    effect_texts = []
+    effect_texts, warned = [], set()
     for i, g in enumerate(items):
         cid = f"gx-{i + 1:02d}-{g.type}"
         ids.append(cid)
@@ -459,11 +473,12 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
             loc_at = round(g.start - hs, 3)
             extra = {"cut_tag": f'<video id="{cid}-c" class="clip" data-hf-media-start-basis="local" data-start="{loc_at}" '
                                 f'data-duration="{round(g.end - g.start, 3)}" src="assets/media/{name}" muted playsinline></video>'}
-        comp_path = None
         if g.type == "custom":
             comp_path = find_effect(g.params["name"], out, theme)
             lint_effect(comp_path)
             effect_texts.append(comp_path.read_text(encoding="utf-8"))
+        else:
+            comp_path = _component(th, g.type, theme, warned)
         (proj / "compositions" / f"{cid}.html").write_text(
             subcomp(cid, g, hs, th, A, media_map, language, size=(W, H), extra_tags=extra, comp_path=comp_path,
                     tracks=tr), encoding="utf-8")

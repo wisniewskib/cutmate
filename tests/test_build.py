@@ -647,3 +647,28 @@ def test_build_cam_around_bg(out169, theme, monkeypatch):
     cfg = cfg_of((B.build(out169, theme=theme)["project"] / "index.html").read_text(encoding="utf-8"))
     assert cfg["cam"][1:] == [[2.0, 1.25, 0.3, 0.25], [2.1, 1.0, 0.3, 0.25], [3.1, 1.25, 0.3, 0.25]]
     assert cfg["hits"] == [[2.35, 1.0, 0]]
+
+
+def test_2b_user_theme_without_new_components_builds(tmp_path, monkeypatch, capsys):
+    """A user theme copied before 2c (no bg/side components, no custom/ folder) still builds the 16:9 theme-check plan."""
+    from cutmate.theme_check import _synthetic_rec
+    home = tmp_path / "home"
+    shutil.copytree(paths.plugin_root() / "themes" / "clean", home / "themes" / "old",
+                    ignore=shutil.ignore_patterns("bg.html", "side.html", "custom"))
+    monkeypatch.setenv("CUTMATE_HOME", str(home))
+    monkeypatch.setattr(B, "ensure_project", lambda proj, fmt="9:16": (proj.mkdir(parents=True, exist_ok=True),
+                                                                       (proj / "hyperframes.json").write_text("{}")))
+
+    def fake_cut(aroll, a, b, media):
+        (media / "bgcut-x.webm").write_bytes(b"w")
+        return "bgcut-x.webm"
+    monkeypatch.setattr(B, "bg_cutout", fake_cut)
+    out = _synthetic_rec(tmp_path, "16:9")
+    proj = B.build(out, theme="old", captions={"16:9": "both"})["project"]
+    printed = capsys.readouterr().out
+    assert "WARN theme old has no bg component — using clean's" in printed
+    assert "WARN theme old has no side component — using clean's" in printed
+    assert printed.count("has no bg component") == 1
+    subs = {p.name: p.read_text(encoding="utf-8") for p in (proj / "compositions").glob("gx-*.html")}
+    assert any(n.endswith("-bg.html") and "bg-wrap" in t for n, t in subs.items())
+    assert any(n.endswith("-custom.html") and "U.glowOrb" in t for n, t in subs.items())

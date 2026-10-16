@@ -79,3 +79,12 @@ def test_save_effect_force_and_bundled_untouched(tmp_path, monkeypatch):
     save_effect(out, "unused", "clean")
     assert {"name": "unused", "description": "", "params": [], "follow": None} in json.loads((p.parent / "index.json").read_text())
     assert sorted(p.name for p in (plugin_root() / "themes" / "clean").rglob("*")) == bundled
+
+
+def test_find_effect_falls_back_to_bundled_clean(tmp_path, monkeypatch):
+    monkeypatch.setenv("CUTMATE_HOME", str(tmp_path / "home"))
+    assert E.find_effect("energy-ball", tmp_path / "out", "mytheme") == \
+        plugin_root() / "themes" / "clean" / "components" / "custom" / "energy-ball.html"
+    with pytest.raises(PlanError) as e:
+        E.find_effect("nope", tmp_path / "out", "mytheme")
+    assert str(plugin_root() / "themes" / "clean" / "components" / "custom" / "nope.html") in str(e.value)
