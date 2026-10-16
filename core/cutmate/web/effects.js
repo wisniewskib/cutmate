@@ -111,6 +111,15 @@
           composer.addPass(new RenderPass(scene, camera));
           composer.addPass(new UnrealBloomPass(new THREE.Vector2(w, h), opt.bloom.strength ?? 1.5, opt.bloom.radius ?? 0.5, opt.bloom.threshold ?? 0));
           composer.addPass(new OutputPass());
+          // the bloom blur writes alpha 1 everywhere, which would paint the frame black: rebuild alpha from
+          // brightness (premultiplied), so the glow composites like light (≈ screen) over the A-roll
+          const { ShaderPass } = await import("three/addons/postprocessing/ShaderPass.js");
+          composer.addPass(new ShaderPass({
+            uniforms: { tDiffuse: { value: null } },
+            vertexShader: "varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }",
+            fragmentShader: "uniform sampler2D tDiffuse; varying vec2 vUv; void main(){ vec3 c=clamp(texture2D(tDiffuse,vUv).rgb,0.0,1.0);"
+              + " gl_FragColor=vec4(c, max(c.r, max(c.g, c.b))); }",
+          }));
         }
         const toWorld = function (xPx, yPx, z) {    // frame pixels → point on the plane z (default 0)
           const v = new THREE.Vector3((xPx / w) * 2 - 1, -(yPx / h) * 2 + 1, 0.5).unproject(camera);
@@ -132,25 +141,30 @@
       const c1 = new THREE.Color((o.colors && o.colors[0]) || "#e0f7ff"), c2 = new THREE.Color((o.colors && o.colors[1]) || "#38bdf8");
       const mat = new THREE.ShaderMaterial({
         transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
-        uniforms: { uTime: { value: 0 }, uIn: { value: c1 }, uOut: { value: c2 }, uNoise: { value: o.noise ?? 1.0 } },
+        uniforms: { uTime: { value: 0 }, uIn: { value: c1 }, uOut: { value: c2 }, uNoise: { value: o.noise ?? 1.0 }, uShell: { value: 0 } },
         vertexShader: "varying vec3 vN; varying vec3 vP; void main(){ vN=normalize(normalMatrix*normal); vP=position; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }",
         fragmentShader: [
-          "uniform float uTime; uniform vec3 uIn; uniform vec3 uOut; uniform float uNoise; varying vec3 vN; varying vec3 vP;",
+          "uniform float uTime; uniform vec3 uIn; uniform vec3 uOut; uniform float uNoise; uniform float uShell; varying vec3 vN; varying vec3 vP;",
           "float h(vec3 p){ return fract(sin(dot(p, vec3(12.9898,78.233,37.719)))*43758.5453); }",
           "float n(vec3 p){ vec3 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f);",
           " return mix(mix(mix(h(i),h(i+vec3(1,0,0)),f.x),mix(h(i+vec3(0,1,0)),h(i+vec3(1,1,0)),f.x),f.y),",
           "            mix(mix(h(i+vec3(0,0,1)),h(i+vec3(1,0,1)),f.x),mix(h(i+vec3(0,1,1)),h(i+vec3(1,1,1)),f.x),f.y),f.z); }",
           "float fbm(vec3 p){ float s=0.0, a=0.5; for(int k=0;k<4;k++){ s+=a*n(p); p*=2.0; a*=0.5; } return s; }",
+          // core (uShell 0): bright centre fading to a coloured rim; shells (uShell 1): mostly clear, swirling streaks
           "void main(){ float fr=pow(1.0-abs(dot(vN, vec3(0,0,1))), 2.0);",
-          " float sw=fbm(vP*3.0 + vec3(uTime*1.7, -uTime*2.3, uTime)) * uNoise;",
-          " vec3 col=mix(uIn, uOut, fr + sw*0.6); gl_FragColor=vec4(col, clamp(0.35 + fr + sw*0.5, 0.0, 1.0)); }"].join("\n"),
+          " float sw=fbm(normalize(vP)*3.5 + vec3(uTime*1.7, -uTime*2.3, uTime));",
+          " float st=smoothstep(0.45, 0.65, sw) * uNoise;",
+          " vec3 core=mix(uIn, uOut, fr); float ca=mix(0.6, 0.25, fr) * (0.7 + 0.6*sw);",
+          " vec3 shell=uOut; float sa=st*0.8 + fr*0.2;",
+          " gl_FragColor=vec4(mix(core, shell, uShell), clamp(mix(ca, sa, uShell), 0.0, 1.0)); }"].join("\n"),
       });
       const r = o.radius || 0.5;
       const group = new THREE.Group();
       const core = new THREE.Mesh(new THREE.SphereGeometry(r, 48, 48), mat);
       const shells = [1.15, 1.35].map((k) => {
         const s = new THREE.Mesh(new THREE.SphereGeometry(r * k, 32, 32), mat.clone());
-        s.material.uniforms.uNoise.value = (o.noise ?? 1.0) * 1.4;
+        s.material.uniforms.uNoise.value = o.noise ?? 1.0;
+        s.material.uniforms.uShell.value = 1;
         group.add(s); return s;
       });
       group.add(core); scene.add(group);

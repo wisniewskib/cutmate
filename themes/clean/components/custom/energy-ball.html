@@ -1,0 +1,21 @@
+<markup><div class="fx-orb"></div></markup>
+<script>
+const box = root.querySelector(".fx-orb");
+U.three({ el: box, bloom: { strength: 1.0, radius: 0.4, threshold: 0.15 } }).then((S) => {
+  const orb = U.glowOrb(S, { radius: P.radius || 0.45, colors: P.colors || ["#e0f7ff", "#38bdf8"], swirl: 1 });
+  const sparks = U.particles(S, { count: 180, seed: 7, life: 0.9, speed: 1.1, spin: 6, size: 0.08,
+                                  colors: ["#bae6fd"], emitter: () => [0, 0] });
+  U.clock((t) => {
+    const p = U.trackAt(P.track, t);
+    const vis = p ? Math.min(1, Math.max(0, (t - P.at) / 0.25)) * Math.min(1, Math.max(0, (P.end - t) / 0.25)) : 0;
+    const w = p ? S.toWorld(p[0], p[1] - 40) : S.toWorld(P.w / 2, P.h / 2);
+    orb.group.position.copy(w);
+    orb.group.scale.setScalar(Math.max(0.001, vis));
+    sparks.points.position.copy(w);
+    sparks.points.material.opacity = vis;
+    orb.update(t);
+    sparks.update(t);
+    S.render();
+  });
+});
+</script>

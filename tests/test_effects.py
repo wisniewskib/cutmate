@@ -2,6 +2,7 @@ import pytest
 
 from cutmate import effects as E
 from cutmate.errors import PlanError
+from cutmate.paths import plugin_root
 
 GOOD = "<markup><div class='fx'></div></markup>\n<script>\nU.clock((t) => {});\n</script>"
 
@@ -16,12 +17,14 @@ def test_find_effect_order(tmp_path, monkeypatch):
     (out / "custom").mkdir(parents=True)
     (out / "custom" / "orb.html").write_text(GOOD, encoding="utf-8")
     assert E.find_effect("orb", out, "clean") == out / "custom" / "orb.html"
-    try:  # placeholder until Task 10 ships the bundled energy-ball; `or True` alone can't swallow the PlanError
-        assert E.find_effect("energy-ball", out, "clean").name == "energy-ball.html" or True
-    except PlanError:
-        pass
+    assert E.find_effect("energy-ball", out, "clean") == \
+        plugin_root() / "themes" / "clean" / "components" / "custom" / "energy-ball.html"
     with pytest.raises(PlanError, match="nope.html"):
         E.find_effect("nope", out, "clean")
+
+
+def test_bundled_energy_ball_passes_lint(tmp_path):
+    E.lint_effect(E.find_effect("energy-ball", tmp_path, "clean"))
 
 
 def test_lint_names_api_and_file(tmp_path):

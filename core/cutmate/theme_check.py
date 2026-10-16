@@ -1,9 +1,12 @@
 """Contract test for a theme pack: every component renders in a real HyperFrames build.
 
-Builds a synthetic 24 s video in the given format (test-pattern A-roll, synthetic words) with one graphic per
-component type of that format (9:16: + a video split; 16:9: + a video pip and a chapter plate), runs `hyperframes check`, snapshots each graphic and tiles a contact sheet.
+Builds a synthetic video in the given format (test-pattern A-roll, synthetic words; 9:16 24 s, 16:9 36 s) with one
+graphic per component type of that format (9:16: + a video split; 16:9: + a video pip, a chapter plate and a third
+segment with the stock energy-ball effect on a synthetic hand track, a bg and a side), runs `hyperframes check`,
+snapshots each graphic and tiles a contact sheet.
 """
 import json
+import math
 import tempfile
 from pathlib import Path
 
@@ -46,8 +49,19 @@ GRAPHICS_169 = [
     {"type": "point", "at": "S2:10%", "until": "S2:słowo11", "image": "broll/page.png", "corner": "tr"},
     {"type": "pip", "from": "S2:słowo12", "to": "S2:słowo14", "media": "broll/page.png"},
     {"type": "pip", "from": "S2:słowo16", "to": "S2:słowo18", "media": "broll/clip.mp4", "corner": "bl", "fit": "contain"},
+    {"type": "custom", "name": "energy-ball", "from": "S3:słowo1", "to": "S3:słowo6", "follow": "hand"},
+    {"type": "bg", "from": "S3:słowo8", "to": "S3:słowo11", "media": "broll/page.png"},
+    {"type": "side", "from": "S3:słowo13", "to": "S3:słowo17", "media": "broll/page.png", "speaker": "right"},
 ]
 CHAPTERS_169 = [{"at": "S1:0%", "title": "Intro"}, {"at": "S2:0%", "title": "Drugi rozdział ąę"}]
+SEG = 12.0
+
+
+def _hand_track(a: float, b: float) -> list[list[float]]:
+    """A hand sweeping left→right across [a, b] with a small bob, sampled every 1/15 s ([t, x, y, conf])."""
+    n = round((b - a) * 15)
+    return [[round(a + i / 15, 4), round(0.2 + 0.6 * i / n, 4), round(0.62 + 0.04 * math.sin(i / 4), 4), 0.9]
+            for i in range(n + 1)]
 
 
 def _synthetic_rec(root: Path, fmt: str = "9:16") -> Path:
@@ -56,8 +70,9 @@ def _synthetic_rec(root: Path, fmt: str = "9:16") -> Path:
     (out / "work").mkdir(parents=True, exist_ok=True)
     (rec / "broll").mkdir(exist_ok=True)
     aroll_size = "1920x1080" if fmt == "16:9" else "1080x1920"
+    nseg = 3 if fmt == "16:9" else 2
     (out / "edl.json").write_text(json.dumps({"format": fmt, "segments": []}), encoding="utf-8")
-    for dst, size, d in ((out / "aroll.mp4", aroll_size, 24), (rec / "broll" / "clip.mp4", "1280x720", 3)):
+    for dst, size, d in ((out / "aroll.mp4", aroll_size, round(nseg * SEG)), (rec / "broll" / "clip.mp4", "1280x720", 3)):
         r = run(["ffmpeg", "-nostdin", "-v", "error", "-y", "-f", "lavfi", "-i", f"testsrc2=size={size}:rate=30:duration={d}",
                  "-f", "lavfi", "-i", f"sine=frequency=220:duration={d}", "-c:v", "libx264", "-pix_fmt", "yuv420p",
                  "-c:a", "aac", "-shortest", str(dst)])
@@ -67,18 +82,20 @@ def _synthetic_rec(root: Path, fmt: str = "9:16") -> Path:
     ImageDraw.Draw(img).rectangle((80, 80, 1520, 920), outline="#7dd3fc", width=12)
     img.save(rec / "broll" / "page.png")
     words, timed = [], []
-    for s in range(2):
+    for s in range(nseg):
         sid = f"S{s + 1}"
-        timed.append({"id": sid, "start": s * 12.0, "end": (s + 1) * 12.0, "text": ""})
+        timed.append({"id": sid, "start": s * SEG, "end": (s + 1) * SEG, "text": ""})
         for i in range(WORDS_PER_SEG):
-            t = s * 12.0 + 0.2 + i * 0.58
+            t = s * SEG + 0.2 + i * 0.58
             words.append({"seg": sid, "word": f"słowo{i}" if i % 5 else f"{i}%", "start": round(t, 2), "end": round(t + 0.4, 2)})
     (out / "work" / "aligned_words.json").write_text(json.dumps(words, ensure_ascii=False), encoding="utf-8")
     (out / "work" / "edl_timed.json").write_text(json.dumps(timed), encoding="utf-8")
     plan = {"captions": {"key": ["SŁOWO3"]}, "graphics": GRAPHICS_169 if fmt == "16:9" else GRAPHICS_916}
     if fmt == "16:9":
         plan["chapters"] = CHAPTERS_169
-        plan["face"] = {"S1": [0.5, 0.35], "S2": [0.45, 0.35]}
+        plan["face"] = {"S1": [0.5, 0.35], "S2": [0.45, 0.35], "S3": [0.5, 0.35]}
+        tracks = {"tracks": {"hand_right": _hand_track(2 * SEG + 0.6, 2 * SEG + 4.2)}}
+        (out / "work" / "tracks.json").write_text(json.dumps(tracks), encoding="utf-8")
     (out / "plan.json").write_text(json.dumps(plan, ensure_ascii=False), encoding="utf-8")
     return out
 
