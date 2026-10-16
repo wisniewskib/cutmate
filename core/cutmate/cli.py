@@ -97,6 +97,9 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument("--prompt")
     p.add_argument("--backend", choices=config.BACKENDS)
     p.add_argument("--language", choices=config.LANGUAGES)
+    tk = sub.add_parser("track", help="where the face and hands are over time (out/work/tracks.json)")
+    tk.add_argument("out")
+    tk.add_argument("--force", action="store_true")
     r = sub.add_parser("rms", help="RMS scan in short bins (speech blobs)")
     r.add_argument("wav")
     r.add_argument("--start", type=float, required=True)
@@ -196,6 +199,12 @@ def _dispatch(args) -> int:
         t = transcribe_window(get_backend(args.backend or cfg.transcription), Path(args.wav), args.start, args.end,
                               language, args.prompt)
         print(" ".join(f"{w.word}@{w.start:.2f}-{w.end:.2f}" for w in t.words))
+    elif args.cmd == "track":
+        from .tracks import load_tracks, track
+        p = track(Path(args.out), force=args.force)
+        d = load_tracks(Path(args.out))
+        print(p)
+        print("samples: " + ", ".join(f"{n} {len(s)}" for n, s in d["tracks"].items()))
     elif args.cmd == "rms":
         from .takes import blobs, rms_bins
         bins = rms_bins(Path(args.wav), args.start, args.end, args.bin)

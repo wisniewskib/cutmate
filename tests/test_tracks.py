@@ -41,3 +41,90 @@ def test_tracks_io(tmp_path):
     from cutmate.errors import CutmateError
     with pytest.raises(CutmateError, match="tracks.json"):
         load_tracks(out)
+
+
+from conftest import make_clip
+
+
+class FakeDetector:
+    """Face drifts right over time; right hand only after 1 s."""
+    def __init__(self):
+        self.calls = []
+
+    def __call__(self, rgb, t):
+        self.calls.append((rgb.shape, round(t, 3)))
+        return {"face": (0.4 + t * 0.1, 0.3, 0.9), "hand_left": None,
+                "hand_right": (0.7, 0.6, 0.8) if t >= 1.0 else None}
+
+
+def test_analyze_every_second_frame(tmp_path):
+    from cutmate.tracks import analyze
+    clip = make_clip(tmp_path / "a.mp4", dur=2.0, size="1920x1080", gaps=())
+    det = FakeDetector()
+    d = analyze(clip, det, every=2, width=640)
+    assert (d["fps"], d["w"], d["h"]) == (15, 1920, 1080)
+    assert len(det.calls) == 30 and det.calls[0][0] == (360, 640, 3)
+    assert det.calls[1][1] == pytest.approx(2 / 30, abs=1e-3)
+    face = d["tracks"]["face"]
+    assert face[0][1] == pytest.approx(0.4, abs=0.01) and face[-1][1] == pytest.approx(0.593, abs=0.02)
+    assert d["tracks"]["hand_left"] == [] and d["tracks"]["hand_right"][0][0] >= 1.0
+
+
+def test_track_cache_invalidated_by_new_aroll(tmp_path):
+    import os
+    import time
+    from cutmate.tracks import track
+    out = tmp_path / "out"
+    make_clip(out / "aroll.mp4", dur=1.0, size="1920x1080", gaps=())
+    det = FakeDetector()
+    p = track(out, detector=det)
+    n = len(det.calls)
+    track(out, detector=det)                                   # cached
+    assert len(det.calls) == n
+    later = time.time() + 5
+    os.utime(out / "aroll.mp4", (later, later))                # re-cut
+    track(out, detector=det)
+    assert len(det.calls) == 2 * n and p.exists()
+    track(out, detector=det, force=True)
+    assert len(det.calls) == 3 * n
+
+
+def test_model_path_checks_sha(tmp_path, monkeypatch):
+    from cutmate import tracks as T
+    from cutmate.errors import CutmateError
+    monkeypatch.setenv("CUTMATE_HOME", str(tmp_path))
+
+    class R:
+        status_code = 200
+        content = b"not a model"
+        def raise_for_status(self):
+            pass
+    monkeypatch.setattr(T.requests, "get", lambda url, timeout: R())
+    with pytest.raises(CutmateError, match="SHA-256"):
+        T.model_path()
+    assert not (tmp_path / "models" / "pose_landmarker_lite.task").exists()
+
+
+def test_track_cli_requires_aroll(tmp_path, capsys):
+    from cutmate.cli import main
+    assert main(["track", str(tmp_path / "out")]) == 2
+    assert "aroll.mp4" in capsys.readouterr().err
+
+
+@pytest.mark.slow
+def test_pose_detector_real_footage(tmp_path):
+    """Real MediaPipe on a local landscape clip (CUTMATE_TEST_HAND_CLIP); skipped when unset."""
+    import shutil
+    from pathlib import Path
+    from cutmate.tracks import PoseDetector, analyze
+    import os
+    env_clip = os.environ.get("CUTMATE_TEST_HAND_CLIP")
+    if not env_clip or not Path(env_clip).exists():
+        pytest.skip("set CUTMATE_TEST_HAND_CLIP to a landscape clip of a pointing speaker")
+    src = Path(env_clip)
+    clip = tmp_path / "c.mp4"
+    import subprocess
+    subprocess.run(["ffmpeg", "-nostdin", "-v", "error", "-y", "-ss", "36", "-t", "3", "-i", str(src), "-an", str(clip)], check=True)
+    d = analyze(clip, PoseDetector())
+    assert len(d["tracks"]["face"]) > 30
+    assert all(0 < p[1] < 1 and 0 < p[2] < 0.6 for p in d["tracks"]["face"])   # face in the upper part

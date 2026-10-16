@@ -13,6 +13,7 @@ dependencies = ["numpy>=1.24", "Pillow>=10.1", "requests>=2.31"]
 faster = ["faster-whisper>=1.2,<2"]
 mlx = ["mlx-whisper>=0.4.3"]
 align = ["torch>=2.2", "transformers>=4.40"]
+track = ["mediapipe>=0.10.20"]
 dev = ["pytest>=8", "responses>=0.25"]
 
 [project.scripts]
