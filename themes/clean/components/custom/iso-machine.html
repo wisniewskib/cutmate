@@ -1,0 +1,652 @@
+<style>
+ROOT .im { position: absolute; inset: 0; overflow: hidden; font-family: var(--font);
+  --bg1: #f8f6f1; --bg2: #e7e2d8; --dot: rgba(15, 23, 42, 0.10); --lab: #ffffff; --labink: #0f172a; --labmut: #64748b;
+  --lead: rgba(15, 23, 42, 0.38); --head: #0f172a; }
+ROOT .im.dark { --bg1: #1a1d25; --bg2: #0b0c10; --dot: rgba(255, 255, 255, 0.10); --lab: #1f232c; --labink: #ffffff;
+  --labmut: #94a3b8; --lead: rgba(255, 255, 255, 0.42); --head: #ffffff; }
+ROOT .im-bg { position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 42%, var(--bg1) 0%, var(--bg2) 100%); }
+ROOT .im-dots { position: absolute; inset: 0; background-image: radial-gradient(circle, var(--dot) 1.4px, transparent 1.7px);
+  background-size: calc(var(--s) * 34px) calc(var(--s) * 34px); }
+ROOT .im-stage { position: absolute; inset: 0; }
+ROOT svg.im-lines { position: absolute; left: 0; top: 0; overflow: visible; }
+ROOT .im-title { position: absolute; left: 0; right: 0; text-align: center; color: var(--head); font-weight: 900;
+  letter-spacing: -0.03em; line-height: 1.05; }
+ROOT .im-title .bar { display: block; margin: calc(var(--s) * 14px) auto 0; width: calc(var(--s) * 110px);
+  height: calc(var(--s) * 9px); border-radius: calc(var(--s) * 5px); background: var(--ac); transform-origin: center; }
+ROOT .im-label { position: absolute; left: 0; top: 0; box-sizing: border-box; display: flex; align-items: center;
+  gap: calc(var(--s) * 14px); max-width: calc(var(--s) * 300px); background: var(--lab); color: var(--labink);
+  padding: calc(var(--s) * 12px) calc(var(--s) * 20px) calc(var(--s) * 12px) calc(var(--s) * 12px);
+  border-radius: calc(var(--s) * 18px); font-weight: 800; font-size: calc(var(--s) * 30px); line-height: 1.1;
+  letter-spacing: -0.015em; box-shadow: 0 calc(var(--s) * 10px) calc(var(--s) * 28px) rgba(15, 23, 42, 0.18); }
+ROOT .im-label .n { flex: none; width: calc(var(--s) * 40px); height: calc(var(--s) * 40px); border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; color: #ffffff; font-weight: 900; font-size: calc(var(--s) * 22px); }
+ROOT .im-label.cnt { flex-direction: column; align-items: flex-start; gap: calc(var(--s) * 4px);
+  padding: calc(var(--s) * 14px) calc(var(--s) * 26px); }
+ROOT .im-label.cnt .v { font-weight: 900; font-size: calc(var(--s) * 64px); line-height: 0.95; letter-spacing: -0.04em;
+  font-feature-settings: "tnum" 1; }
+ROOT .im-label.cnt .l { font-weight: 800; font-size: calc(var(--s) * 24px); color: var(--labmut); text-transform: uppercase;
+  letter-spacing: 0.04em; }
+</style>
+<markup><div class="im"></div></markup>
+<script>
+const s = Math.min(P.w / 1000, P.h / 820);
+const W = P.w, H = P.h;
+const box = root.querySelector(".im");
+const dark = P.theme === "dark";
+if (dark) box.classList.add("dark");
+box.style.setProperty("--s", s);
+box.style.setProperty("--ac", P.accent || "var(--accent)");
+const accent = P.accent || getComputedStyle(root).getPropertyValue("--accent").trim() || "#7dd3fc";
+const clamp = (v) => Math.min(1, Math.max(0, v));
+const quartOut = (u) => 1 - Math.pow(1 - u, 4);
+const backOut = (u) => 1 + 2.2 * Math.pow(u - 1, 3) + 1.2 * Math.pow(u - 1, 2);
+const inOut = (u) => (u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2);
+const drop = (u) => (u < 0.7 ? 1 - Math.pow(u / 0.7, 2) : -0.07 * Math.sin(Math.PI * (u - 0.7) / 0.3));  // 1 → 0, small hop
+
+const PALETTE = ["#4f7cff", "#ff9f43", "#ef5a6f", "#22b8a6", "#9b6bff"];
+const SHAPES = ["box", "cylinder", "funnel", "screen", "gear"];
+const parts = (Array.isArray(P.parts) ? P.parts : []).slice(0, 5).map((p, i) => {
+  p = p && typeof p === "object" ? p : { label: String(p || "") };
+  return { label: String(p.label || ""), shape: SHAPES.includes(p.shape) ? p.shape : "box", color: p.color || PALETTE[i % 5] };
+});
+const n = parts.length;
+const counter = P.counter && typeof P.counter === "object" ? P.counter : null;
+const tokenKind = P.token === "sphere" ? "sphere" : (P.token === "cube" ? "cube" : null);
+
+// ---------- DOM: background, title, labels ----------
+U.el("div", "im-bg", null, box);
+U.el("div", "im-dots", null, box);
+const stage = U.el("div", "im-stage", null, box);
+const NS = "http://www.w3.org/2000/svg";
+const svg = document.createElementNS(NS, "svg");
+svg.setAttribute("class", "im-lines");
+svg.setAttribute("width", W); svg.setAttribute("height", H); svg.setAttribute("viewBox", "0 0 " + W + " " + H);
+box.appendChild(svg);
+let title = null, bar = null, topBand = 26 * s;
+if (P.title) {
+  title = U.el("div", "im-title", String(P.title), box);
+  title.style.top = 30 * s + "px";
+  title.style.padding = "0 " + 40 * s + "px";
+  title.style.fontSize = Math.min(52 * s, (W - 80 * s) / Math.max(6, String(P.title).length * 0.56)) + "px";
+  bar = U.el("span", "bar", null, title);
+  topBand = 30 * s + title.offsetHeight + 18 * s;
+}
+const fmtNum = (v) => String(Math.round(v)).replace(/\B(?=(\d{3})+(?!\d))/g, P.lang === "pl" ? " " : ",");
+const labels = parts.map((p, i) => {
+  const el = U.el("div", "im-label", null, box);
+  const b = U.el("span", "n", String(i + 1), el);
+  b.style.background = p.color;
+  U.el("span", null, p.label, el);
+  return { el, color: p.color };
+});
+let cntVal = null;
+if (counter) {
+  const el = U.el("div", "im-label cnt", null, box);
+  cntVal = U.el("div", "v", fmtNum(0), el);
+  U.el("div", "l", String(counter.label || ""), el);
+  labels.push({ el, color: accent, counter: true });
+}
+labels.forEach((L) => {
+  L.w = L.el.offsetWidth; L.h = L.el.offsetHeight;
+  L.line = document.createElementNS(NS, "line");
+  L.line.setAttribute("stroke", "var(--lead)"); L.line.setAttribute("stroke-width", 2.5 * s);
+  L.line.setAttribute("stroke-dasharray", 7 * s + " " + 6 * s);
+  L.dot = document.createElementNS(NS, "circle");
+  L.dot.setAttribute("r", 7 * s); L.dot.setAttribute("fill", L.color);
+  L.dot.setAttribute("stroke", dark ? "#0b0c10" : "#ffffff"); L.dot.setAttribute("stroke-width", 3 * s);
+  svg.appendChild(L.line); svg.appendChild(L.dot);
+});
+
+// ---------- timing ----------
+const span = Math.max(1, P.end - P.at);
+const SP = 2.3;                                           // station spacing (world units)
+const tStart = P.at + Math.min(1.0, span * 0.3);          // the conveyor starts indexing once everything has landed
+const tStop = P.end - 0.35;
+const win = Math.max(0.4, tStop - tStart);
+const cycles = Math.max(1, Math.min(14, Math.round(win / 1.15)));
+const cyc = win / cycles, MOVE = 0.45;                    // each cycle: dwell (stations work), then move one station
+const phase = (t) => {                                    // → {D: belt travel, act: 0..1 station action, dwell}
+  if (t <= tStart) return { D: 0, act: 0, dwell: false };
+  const q = Math.min(cycles, (t - tStart) / cyc), c = Math.floor(q), f = q - c;
+  if (c >= cycles) return { D: cycles * SP, act: 0, dwell: false };
+  if (f < 1 - MOVE) {
+    const w = f / (1 - MOVE);
+    return { D: c * SP, act: w > 0.12 && w < 0.88 ? Math.sin(Math.PI * (w - 0.12) / 0.76) : 0, dwell: true, w };
+  }
+  return { D: (c + inOut((f - (1 - MOVE)) / MOVE)) * SP, act: 0, dwell: false };
+};
+const timeAtD = (D) => {                                  // first time the belt reaches travel D (∞ if never)
+  if (D <= 0) return tStart;
+  if (D > cycles * SP + 1e-6) return Infinity;
+  let lo = tStart, hi = tStop;
+  for (let k = 0; k < 40; k++) { const m = (lo + hi) / 2; if (phase(m).D >= D) hi = m; else lo = m; }
+  return hi;
+};
+
+U.three({ el: stage }).then((S) => {
+  const { THREE, scene, renderer } = S;
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFShadowMap;
+  renderer.toneMapping = THREE.NeutralToneMapping;
+  renderer.toneMappingExposure = dark ? 1.0 : 1.05;
+
+  // ---------- materials / geometry helpers ----------
+  const col = (c) => new THREE.Color(c);
+  const shade = (c, k) => col(c).multiplyScalar(k);
+  const tint = (c, k) => col(c).lerp(col("#ffffff"), k);
+  const M = (c, o) => new THREE.MeshStandardMaterial(Object.assign({ color: c, roughness: 0.6, metalness: 0.05 }, o || {}));
+  const METAL = M("#c9ced6", { roughness: 0.35, metalness: 0.55 });
+  const FRAME = M(dark ? "#4a505c" : "#5b6170", { roughness: 0.55 });
+  const INK = M("#23262e", { roughness: 0.5 });
+  const mesh = (geo, mat, x, y, z, parent) => {
+    const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z);
+    m.castShadow = true; m.receiveShadow = true; parent.add(m); return m;
+  };
+  const rrect = (w, h, r) => {
+    const sh = new THREE.Shape(), x = -w / 2, y = -h / 2;
+    r = Math.max(0.001, Math.min(r, w / 2 - 0.001, h / 2 - 0.001));
+    sh.moveTo(x + r, y); sh.lineTo(x + w - r, y); sh.quadraticCurveTo(x + w, y, x + w, y + r);
+    sh.lineTo(x + w, y + h - r); sh.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    sh.lineTo(x + r, y + h); sh.quadraticCurveTo(x, y + h, x, y + h - r);
+    sh.lineTo(x, y + r); sh.quadraticCurveTo(x, y, x + r, y);
+    return sh;
+  };
+  const geoCache = {};
+  const rbox = (w, h, d, r) => {                          // box with soft rounded edges, centred
+    const key = [w, h, d, r].join("|");
+    if (geoCache[key]) return geoCache[key];
+    r = Math.min(r, w / 2 - 0.002, h / 2 - 0.002, d / 2 - 0.002);
+    const g = new THREE.ExtrudeGeometry(rrect(w - 2 * r, h - 2 * r, r * 0.6),
+      { depth: d - 2 * r, bevelEnabled: true, bevelThickness: r, bevelSize: r, bevelSegments: 3, curveSegments: 5 });
+    g.translate(0, 0, -(d - 2 * r) / 2);
+    return (geoCache[key] = g);
+  };
+  const cyl = (rt, rb, h, seg, open) => new THREE.CylinderGeometry(rt, rb, h, seg || 32, 1, !!open);
+  const gearGeo = (N, m, depth, spokes) => {
+    const r = (m * N) / 2, ro = r + m, rr = r - 1.2 * m, hp = Math.PI / N, sh = new THREE.Shape();
+    for (let k = 0; k < N; k++) {
+      const th = k * 2 * hp;
+      [[rr, th - hp * 0.62], [ro, th - hp * 0.3], [ro, th + hp * 0.3], [rr, th + hp * 0.62], [rr, th + hp]].forEach(([R, a], j) => {
+        const x = R * Math.cos(a), y = R * Math.sin(a);
+        if (k === 0 && j === 0) sh.moveTo(x, y); else sh.lineTo(x, y);
+      });
+    }
+    sh.closePath();
+    const hole = (cx, cy, hr) => { const p = new THREE.Path(); p.absarc(cx, cy, hr, 0, Math.PI * 2, true); sh.holes.push(p); };
+    hole(0, 0, r * 0.16);
+    if (spokes) for (let k = 0; k < spokes; k++) {
+      const a = (k / spokes) * Math.PI * 2;
+      hole(Math.cos(a) * r * 0.55, Math.sin(a) * r * 0.55, r * 0.17);
+    }
+    const g = new THREE.ExtrudeGeometry(sh, { depth, bevelEnabled: true, bevelThickness: depth * 0.18, bevelSize: m * 0.14,
+                                              bevelSegments: 2, curveSegments: 12 });
+    g.translate(0, 0, -depth / 2);
+    return { g, r };
+  };
+
+  // ---------- layout: a conveyor path of one leg (+X, runs down-right on screen) or, in tall panels, two legs
+  // (+X then +Z: down-right, then down-left). u = distance along the path; slots are SP apart. Each leg is a group
+  // whose local +X runs along the leg and local −Z is the far side (leg 2 is mirrored so its back faces away too).
+  const BY = 0.46, BW = 1.0;                              // belt top height, belt width
+  const twoLegs = H > W * 1.05 && n >= 3;
+  const k1 = twoLegs ? Math.ceil(n / 2) : n;              // parts on the first leg
+  const slotOf = parts.map((_, i) => (i < k1 ? i + 1 : i + 2));   // slot 0 = input, slot k1 + 1 = the corner
+  const lastSlot = n ? slotOf[n - 1] : 0;
+  const uSlot = (sl) => 0.6 + sl * SP;
+  const uc = twoLegs ? uSlot(k1 + 1) : Infinity;          // corner
+  const uE = counter ? uSlot(lastSlot) + 0.62 * SP : uSlot(lastSlot) + SP + 0.5;   // belt end
+  const CR = 1.2;
+  const machine = new THREE.Group();
+  scene.add(machine);
+  const legs = [new THREE.Group()];
+  machine.add(legs[0]);
+  if (twoLegs) {
+    const g = new THREE.Group(); g.position.set(uc, 0, 0); g.rotation.y = -Math.PI / 2; g.scale.z = -1;
+    machine.add(g); legs.push(g);
+  }
+  const legOf = (u) => (u > uc ? 1 : 0);
+  const legStart = (l) => (l ? uc : 0);
+  const posAt = (u) => (u > uc ? [uc, u - uc] : [u, 0]);   // world x, z on the belt centre line
+  const lastLeg = legs.length - 1, uEl = uE - legStart(lastLeg);
+  const anims = [];                                       // {obj, y0, t0, dur, h}
+  const dropIn = (obj, t0, h, dur) => { anims.push({ obj, y0: obj.position.y, t0, dur: dur || 0.36, h: h ?? 2.2 }); };
+
+  // platform (one slab per leg; the second sits a hair higher so it covers the seam) + soft floor shadow
+  const PLAT = M(dark ? "#2b2f39" : "#f1ede6", { roughness: 0.85 });
+  const crateEnd = counter ? uEl + 0.95 + CR / 2 + 0.5 : uEl + 0.5;
+  const slab = (leg, x0, x1, lift) => {
+    const q = new THREE.Group(); leg.add(q);
+    mesh(rbox(x1 - x0, 0.26, 2.9, 0.12), PLAT, (x0 + x1) / 2, -0.13 + lift, -0.42, q);
+    return q;
+  };
+  const slabs = twoLegs ? [slab(legs[0], -0.55, uc + 1.03, 0), slab(legs[1], -1.87, crateEnd, 0.004)]
+                        : [slab(legs[0], -0.55, crateEnd, 0)];
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(80, 80), new THREE.ShadowMaterial({ opacity: dark ? 0.35 : 0.13 }));
+  floor.rotation.x = -Math.PI / 2; floor.position.y = -0.27; floor.receiveShadow = true; scene.add(floor);
+  slabs.forEach((q) => dropIn(q, P.at, 0.8, 0.34));
+
+  // conveyor: legs, rails, belt with moving chevrons, rollers at the two ends
+  const tc = document.createElement("canvas"); tc.width = 128; tc.height = 128;
+  const g2 = tc.getContext("2d");
+  g2.fillStyle = "#30333b"; g2.fillRect(0, 0, 128, 128);
+  g2.strokeStyle = "#454a55"; g2.lineWidth = 14; g2.lineCap = "round"; g2.lineJoin = "round";
+  g2.beginPath(); g2.moveTo(40, 22); g2.lineTo(84, 64); g2.lineTo(40, 106); g2.stroke();
+  const TEXU = 0.62, belts = [], rollers = [], convs = [];
+  const RZ = BW / 2 + 0.06;
+  const segment = (leg, x0, x1, back, front, rollAt) => {   // belt x0..x1 (leg-local), rails [from, to] per side
+    const q = new THREE.Group(); leg.add(q); convs.push(q);
+    const L = x1 - x0, cx = (x0 + x1) / 2;
+    const tex = new THREE.CanvasTexture(tc);
+    tex.colorSpace = THREE.SRGBColorSpace; tex.wrapS = THREE.RepeatWrapping; tex.anisotropy = 4;
+    tex.repeat.set(L / TEXU, 1);
+    belts.push({ tex, phase: x0 / TEXU });
+    mesh(new THREE.BoxGeometry(L, 0.1, BW), INK, cx, BY - 0.052, 0, q);
+    const top = mesh(new THREE.PlaneGeometry(L, BW), M("#ffffff", { map: tex, roughness: 0.75 }), cx, BY + 0.001, 0, q);
+    top.rotation.x = -Math.PI / 2;
+    [[back, -1], [front, 1]].forEach(([r, sz]) => {
+      mesh(rbox(r[1] - r[0], 0.16, 0.1, 0.03), FRAME, (r[0] + r[1]) / 2, BY - 0.02, sz * RZ, q);
+      const nl = Math.max(2, Math.round((r[1] - r[0]) / SP) + 1);
+      for (let k = 0; k < nl; k++) {
+        const x = r[0] + 0.2 + (k / (nl - 1)) * (r[1] - r[0] - 0.4);
+        mesh(rbox(0.12, BY - 0.08, 0.12, 0.03), FRAME, x, (BY - 0.08) / 2, sz * RZ, q);
+      }
+    });
+    rollAt.forEach((x) => {
+      const r = mesh(cyl(0.07, 0.07, BW + 0.02, 24), METAL, x, BY - 0.05, 0, q); r.rotation.x = Math.PI / 2; rollers.push(r);
+    });
+    return q;
+  };
+  if (twoLegs) {
+    segment(legs[0], 0, uc + BW / 2, [-0.12, uc + RZ + 0.05], [-0.12, uc - RZ + 0.05], [0]);
+    segment(legs[1], BW / 2, uEl, [RZ - 0.05, uEl + 0.12], [-RZ - 0.05, uEl + 0.12], [uEl]);
+  } else {
+    segment(legs[0], 0, uE, [-0.12, uE + 0.12], [-0.12, uE + 0.12], [0, uE]);
+  }
+  convs.forEach((q) => dropIn(q, P.at + 0.08, 1.4, 0.34));
+
+  // input chute above the first slot
+  const chute = new THREE.Group(); legs[0].add(chute);
+  const xIn = uSlot(0);
+  const CH = M(dark ? "#d7dbe2" : "#ffffff", { roughness: 0.4, transparent: true, opacity: 0.55, side: THREE.DoubleSide, depthWrite: false });
+  mesh(cyl(0.27, 0.27, 0.75, 32, true), CH, xIn, 1.55, 0, chute).castShadow = false;
+  const ring = (r, tube, parent, x, y, z, mat) => {
+    const m = mesh(new THREE.TorusGeometry(r, tube, 10, 40), mat, x, y, z, parent); m.rotation.x = Math.PI / 2; return m;
+  };
+  ring(0.27, 0.035, chute, xIn, 1.92, 0, FRAME); ring(0.27, 0.035, chute, xIn, 1.18, 0, FRAME);
+  mesh(rbox(0.1, 1.7, 0.1, 0.03), FRAME, xIn, 1.05, -0.62, chute);
+  mesh(rbox(0.1, 0.1, 0.42, 0.03), FRAME, xIn, 1.55, -0.38, chute);
+  dropIn(chute, P.at + 0.12, 1.6, 0.34);
+
+  // ---------- parts ----------
+  const spread = n > 1 ? 0.22 / (n - 1) : 0;
+  const stations = [];
+  parts.forEach((p, i) => {
+    const u = uSlot(slotOf[i]), leg = legs[legOf(u)];
+    const g = new THREE.Group(); g.position.x = u - legStart(legOf(u)); leg.add(g);
+    const t0 = P.at + 0.14 + i * spread;
+    let k = 0;
+    const piece = () => { const q = new THREE.Group(); g.add(q); dropIn(q, t0 + 0.04 * k++, 2.2); return q; };
+    const main = M(p.color, { roughness: 0.5 });
+    const deep = M(shade(p.color, 0.72), { roughness: 0.55 });
+    const light = M(tint(p.color, 0.55), { roughness: 0.5 });
+    const st = { shape: p.shape, g };
+    if (p.shape === "box") {                                   // housing the belt runs through
+      const a = piece();
+      [-1, 1].forEach((sz) => mesh(rbox(1.2, 0.62, 0.26, 0.06), deep, 0, 0.31, sz * 0.66, a));
+      const b = piece();
+      mesh(rbox(1.5, 0.78, 1.66, 0.12), main, 0, 1.03, 0, b);
+      mesh(rbox(1.1, 0.06, 1.3, 0.03), light, 0, 1.44, 0, b);
+      for (let v = 0; v < 4; v++) mesh(rbox(0.04, 0.4, 0.12, 0.02), deep, 0.755, 1.03, -0.5 + v * 0.33, b);
+      const panel = mesh(rbox(0.9, 0.36, 0.06, 0.03), INK, 0, 1.06, 0.83, b);
+      st.lights = ["#4ade80", "#facc15", "#f87171"].map((c, j) => {
+        const lm = M(c, { emissive: c, emissiveIntensity: 0.15, roughness: 0.3 });
+        mesh(new THREE.SphereGeometry(0.07, 16, 12), lm, -0.25 + j * 0.25, 1.06, 0.87, b);
+        return lm;
+      });
+      const c = piece();
+      mesh(cyl(0.16, 0.18, 0.42, 24), deep, -0.38, 1.62, -0.42, c);
+      mesh(cyl(0.22, 0.22, 0.06, 24), light, -0.38, 1.85, -0.42, c);
+      mesh(rbox(0.42, 0.16, 0.42, 0.05), light, 0.34, 1.5, -0.3, c);
+      panel.castShadow = false;
+    } else if (p.shape === "cylinder") {                       // C-frame press with a piston
+      const a = piece();
+      mesh(rbox(0.9, 0.12, 0.7, 0.04), deep, 0, 0.06, -0.92, a);
+      mesh(rbox(0.36, 2.2, 0.36, 0.08), deep, 0, 1.15, -0.92, a);
+      mesh(rbox(0.5, 0.32, 1.25, 0.08), deep, 0, 2.2, -0.4, a);
+      const b = piece();
+      mesh(cyl(0.4, 0.4, 0.7, 40), main, 0, 1.72, 0, b);
+      ring(0.4, 0.045, b, 0, 1.4, 0, light); ring(0.4, 0.045, b, 0, 2.04, 0, light);
+      mesh(cyl(0.2, 0.2, 0.12, 24), light, 0, 1.33, 0, b);
+      const head = new THREE.Group(); b.add(head);
+      mesh(cyl(0.07, 0.07, 0.5, 16), METAL, 0, 1.1, 0, head);
+      mesh(cyl(0.3, 0.3, 0.12, 32), main, 0, 0.84, 0, head);
+      mesh(cyl(0.26, 0.26, 0.05, 32), INK, 0, 0.77, 0, head);
+      st.head = head;
+    } else if (p.shape === "funnel") {                         // hopper full of balls
+      const a = piece();
+      [[-0.48, -0.66], [0.48, -0.66], [-0.48, 0.66], [0.48, 0.66]].forEach(([x, z]) => mesh(cyl(0.045, 0.045, 1.5, 12), FRAME, x, 0.75, z, a));
+      mesh(rbox(1.1, 0.08, 1.45, 0.03), FRAME, 0, 1.36, 0, a);
+      const b = piece();
+      const cone = mesh(cyl(0.68, 0.17, 0.8, 40, true), M(p.color, { roughness: 0.5, side: THREE.DoubleSide }), 0, 1.78, 0, b);
+      cone.castShadow = true;
+      ring(0.68, 0.05, b, 0, 2.18, 0, light);
+      mesh(cyl(0.13, 0.13, 0.24, 24), deep, 0, 1.28, 0, b);
+      ring(0.14, 0.035, b, 0, 1.17, 0, light);
+      const c = piece();
+      const r = U.seed(31 + i * 7), BALLS = ["#ff5d73", "#ffd166", "#06d6a0", "#4f7cff", "#ffffff", "#b388ff"];
+      for (let q = 0; q < 26; q++) {
+        const ang = r() * Math.PI * 2, rad = Math.sqrt(r()) * 0.5, y = 1.9 + r() * 0.24;
+        mesh(new THREE.SphereGeometry(0.1, 16, 12), M(BALLS[Math.floor(r() * BALLS.length)], { roughness: 0.3 }),
+             Math.cos(ang) * rad * (0.5 + (y - 1.9) * 2.2), y, Math.sin(ang) * rad * (0.5 + (y - 1.9) * 2.2), c);
+      }
+      st.ball = mesh(new THREE.SphereGeometry(0.1, 16, 12), M("#ff5d73", { roughness: 0.3 }), 0, 1.1, 0, g);
+      st.ball.visible = false;
+    } else if (p.shape === "screen") {                         // monitor + scanner arm over the belt
+      const a = piece();
+      mesh(rbox(0.8, 0.1, 0.55, 0.04), deep, 0, 0.05, -1.05, a);
+      mesh(rbox(0.16, 0.9, 0.16, 0.05), deep, 0, 0.5, -1.05, a);
+      const b = piece();
+      mesh(rbox(1.75, 1.15, 0.16, 0.08), main, 0, 1.45, -1.05, b);
+      const scr = mesh(rbox(1.55, 0.95, 0.02, 0.01), M("#0e1320", { roughness: 0.3, emissive: "#0e1a33", emissiveIntensity: 0.6 }), 0, 1.45, -0.965, b);
+      scr.castShadow = false;
+      st.bars = [0, 1, 2, 3, 4].map((j) => {
+        const bm = mesh(new THREE.BoxGeometry(0.16, 1, 0.02), M(accent, { emissive: accent, emissiveIntensity: 0.6 }), -0.5 + j * 0.25, 1.1, -0.95, b);
+        bm.castShadow = false; return bm;
+      });
+      st.scr = scr;
+      const c = piece();
+      mesh(rbox(0.16, 0.16, 1.1, 0.05), deep, 0, 2.05, -0.5, c);
+      mesh(rbox(0.16, 0.12, 0.16, 0.04), deep, 0, 2.0, -1.05, c);
+      mesh(rbox(0.36, 0.22, 0.36, 0.07), light, 0, 1.95, 0, c);
+      const lens = mesh(cyl(0.1, 0.1, 0.04, 20), M(accent, { emissive: accent, emissiveIntensity: 0.4 }), 0, 1.83, 0, c);
+      lens.castShadow = false;
+      st.lens = lens.material;
+      const beam = new THREE.Mesh(new THREE.ConeGeometry(0.32, 1.3, 32, 1, true),
+        new THREE.MeshBasicMaterial({ color: accent, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide }));
+      beam.position.set(0, 1.81 - 0.65, 0); c.add(beam);
+      st.beam = beam;
+    } else {                                                   // gearbox: two meshing gears on a plate
+      const a = piece();
+      mesh(rbox(1.9, 0.12, 0.6, 0.04), deep, 0, 0.06, -1.05, a);
+      mesh(rbox(1.9, 2.0, 0.14, 0.08), deep, 0, 1.1, -1.08, a);
+      const MOD = 0.085, Z = -0.95;
+      const big = gearGeo(14, MOD, 0.16, 5), small = gearGeo(9, MOD, 0.16, 0);
+      const b = piece();
+      const g1 = mesh(big.g, main, -0.3, 1.35, Z, b);
+      mesh(cyl(0.12, 0.12, 0.3, 20), METAL, -0.3, 1.35, Z + 0.05, b).rotation.x = Math.PI / 2;
+      const dir = -0.55, dist = big.r + small.r;
+      const c = piece();
+      const sx = -0.3 + Math.cos(dir) * dist, sy = 1.35 + Math.sin(dir) * dist;
+      const g2m = mesh(small.g, light, sx, sy, Z, c);
+      mesh(cyl(0.09, 0.09, 0.3, 20), METAL, sx, sy, Z + 0.05, c).rotation.x = Math.PI / 2;
+      st.gears = [{ m: g1, base: dir, k: 1 }, { m: g2m, base: dir + Math.PI + Math.PI / 9, k: -14 / 9 }];
+    }
+    stations.push(st);
+  });
+
+  // output crate (counter)
+  let crate = null;
+  if (counter) {
+    crate = new THREE.Group(); legs[lastLeg].add(crate);
+    const crateX = uEl + 0.95;
+    const cm = M(accent, { roughness: 0.55 }), cd = M(shade(accent, 0.75), { roughness: 0.6 });
+    const CH2 = 0.42, T = 0.07;
+    mesh(rbox(CR, 0.06, CR, 0.02), cd, crateX, 0.03, 0, crate);
+    mesh(rbox(CR, CH2, T, 0.025), cm, crateX, CH2 / 2, CR / 2 - T / 2, crate);
+    mesh(rbox(CR, CH2, T, 0.025), cd, crateX, CH2 / 2, -CR / 2 + T / 2, crate);
+    mesh(rbox(T, CH2, CR, 0.025), cm, crateX + CR / 2 - T / 2, CH2 / 2, 0, crate);
+    mesh(rbox(T, CH2, CR, 0.025), cd, crateX - CR / 2 + T / 2, CH2 / 2, 0, crate);
+    dropIn(crate, P.at + 0.14 + 0.22 + 0.06, 2.2);
+  }
+
+  // ---------- tokens ----------
+  const TS = 0.34;
+  const tokGeo = tokenKind === "sphere" ? new THREE.SphereGeometry(TS * 0.56, 32, 20) : rbox(TS, TS, TS, 0.06);
+  const tokMat = M(accent, { roughness: 0.35, emissive: accent, emissiveIntensity: 0.12 });
+  const tokY = BY + (tokenKind === "sphere" ? TS * 0.56 : TS / 2);
+  const K = tokenKind ? n + 2 + cycles : 0;
+  const tokens = [];
+  for (let j = 0; j < K; j++) {
+    const m = mesh(tokGeo, tokMat, 0, tokY, 0, machine);
+    const u0 = uSlot(lastSlot - j);                       // token j starts in slot lastSlot − j (slot 0 = input)
+    const tIn = j <= lastSlot ? P.at + 0.6 + 0.05 * (lastSlot - j) : timeAtD(uSlot(0) - u0);
+    const tOff = timeAtD(uE - u0);
+    tokens.push({ m, u0, tIn, tOff });
+  }
+  const FLY = 0.42;
+  const crateSlot = (k) => {                              // where token k lands in the crate (world)
+    const v = new THREE.Vector3(uEl + 0.95 - 0.33 + (k % 3) * 0.33, 0.06 + TS * 0.45 + Math.floor(k / 9) * TS * 0.8,
+                                -0.33 + (Math.floor(k / 3) % 3) * 0.33);
+    return legs[lastLeg].localToWorld(v);
+  };
+  const landed = (t) => tokens.filter((o) => o.tOff + FLY <= t).length;
+  const landTotal = landed(P.end - 0.2);
+
+  // ---------- lights ----------
+  scene.add(new THREE.HemisphereLight(0xffffff, dark ? 0x2a2e38 : 0xcfc8ba, dark ? 1.0 : 1.25));
+  const key = new THREE.DirectionalLight(0xffffff, dark ? 2.3 : 2.1);
+  scene.updateMatrixWorld(true);
+  const mb = new THREE.Box3().setFromObject(machine), mc = mb.getCenter(new THREE.Vector3()), ms = mb.getSize(new THREE.Vector3());
+  key.position.set(mc.x - 5, 12, mc.z + 8);
+  key.target.position.set(mc.x, 0, mc.z);
+  scene.add(key, key.target);
+  key.castShadow = true;
+  const ext = Math.max(ms.x, ms.z) * 0.7 + 3;
+  Object.assign(key.shadow.camera, { left: -ext, right: ext, top: ext, bottom: -ext, near: 1, far: 60 });
+  key.shadow.mapSize.set(2048, 2048);
+  key.shadow.radius = 4; key.shadow.bias = -0.0004; key.shadow.normalBias = 0.02;
+  const fill = new THREE.DirectionalLight(dark ? 0xc8d6ff : 0xe6eeff, dark ? 0.8 : 0.75);
+  fill.position.set(9, 4, -2); scene.add(fill);
+  const rim = new THREE.DirectionalLight(0xffffff, 0.35); rim.position.set(-2, 5, -9); scene.add(rim);
+
+  // ---------- isometric orthographic camera, fitted to the panel ----------
+  const cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 200);
+  cam.rotation.order = "YXZ";
+  cam.rotation.y = Math.PI / 4;
+  cam.rotation.x = -Math.atan(1 / Math.SQRT2);           // −35.264°
+  cam.position.set(30, 30, 30);
+  cam.updateMatrixWorld();
+  scene.updateMatrixWorld(true);
+  const inv = cam.matrixWorldInverse;
+  let bx0 = Infinity, bx1 = -Infinity, by0 = Infinity, by1 = -Infinity;
+  const tokSet = new Set(tokens.map((o) => o.m));
+  machine.traverse((o) => {
+    if (!o.isMesh || tokSet.has(o) || !o.visible) return;
+    o.geometry.computeBoundingBox();
+    const bb = o.geometry.boundingBox;
+    for (let c = 0; c < 8; c++) {
+      const v = new THREE.Vector3(c & 1 ? bb.max.x : bb.min.x, c & 2 ? bb.max.y : bb.min.y, c & 4 ? bb.max.z : bb.min.z)
+        .applyMatrix4(o.matrixWorld).applyMatrix4(inv);
+      bx0 = Math.min(bx0, v.x); bx1 = Math.max(bx1, v.x); by0 = Math.min(by0, v.y); by1 = Math.max(by1, v.y);
+    }
+  });
+  const mL = 30 * s, mR = 30 * s, mT = topBand + 14 * s, mB = 26 * s;
+  const aw = Math.max(50, W - mL - mR), ah = Math.max(50, H - mT - mB);
+  const k = Math.max((bx1 - bx0) / aw, (by1 - by0) / ah);  // world units per px
+  const gx = (bx0 + bx1) / 2, gy = (by0 + by1) / 2, rcx = mL + aw / 2, rcy = mT + ah / 2;
+  cam.left = gx - rcx * k; cam.right = gx + (W - rcx) * k;
+  cam.top = gy + rcy * k; cam.bottom = gy - (H - rcy) * k;
+  cam.updateProjectionMatrix();
+  const proj = (x, y, z) => { const v = new THREE.Vector3(x, y, z).project(cam); return [(v.x + 1) / 2 * W, (1 - v.y) / 2 * H]; };
+
+  // label placement: each card sits straight above (or below) its part, at the nearest distance where it overlaps
+  // neither the machine nor another card; parts in the left half prefer below, the rest above (the machine runs
+  // diagonally down-right, so those are the empty corners)
+  const screenPts = (obj) => {
+    const pts = [];
+    obj.traverse((o) => {
+      if (!o.isMesh || tokSet.has(o) || !o.visible) return;
+      const bb = o.geometry.boundingBox || (o.geometry.computeBoundingBox(), o.geometry.boundingBox);
+      for (let c = 0; c < 8; c++) {
+        const v = new THREE.Vector3(c & 1 ? bb.max.x : bb.min.x, c & 2 ? bb.max.y : bb.min.y, c & 4 ? bb.max.z : bb.min.z)
+          .applyMatrix4(o.matrixWorld).project(cam);
+        pts.push([(v.x + 1) / 2 * W, (1 - v.y) / 2 * H]);
+      }
+    });
+    return pts;
+  };
+  const rectOf = (pts) => ({ x0: Math.min(...pts.map((q) => q[0])), x1: Math.max(...pts.map((q) => q[0])),
+                             y0: Math.min(...pts.map((q) => q[1])), y1: Math.max(...pts.map((q) => q[1])) });
+  const hull = (pts) => {                                 // monotone chain, clockwise in screen space
+    pts = pts.slice().sort((p1, p2) => p1[0] - p2[0] || p1[1] - p2[1]);
+    const cr = (o, p1, p2) => (p1[0] - o[0]) * (p2[1] - o[1]) - (p1[1] - o[1]) * (p2[0] - o[0]);
+    const lo = [], hi = [];
+    pts.forEach((q) => { while (lo.length > 1 && cr(lo[lo.length - 2], lo[lo.length - 1], q) <= 0) lo.pop(); lo.push(q); });
+    pts.slice().reverse().forEach((q) => { while (hi.length > 1 && cr(hi[hi.length - 2], hi[hi.length - 1], q) <= 0) hi.pop(); hi.push(q); });
+    return lo.slice(0, -1).concat(hi.slice(0, -1));
+  };
+  const inPoly = (poly, x, y) => {
+    let c = false;
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+      const [xi, yi] = poly[i], [xj, yj] = poly[j];
+      if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) c = !c;
+    }
+    return c;
+  };
+  const base = hull([].concat(...slabs.concat(convs).map(screenPts)));
+  const blocks = stations.map((st) => rectOf(screenPts(st.g))).concat([rectOf(screenPts(chute))]);
+  if (crate) blocks.push(rectOf(screenPts(crate)));
+  const pad = 10 * s, placed = [], leaderPts = [];
+  const inR = (q, x, y, m) => x > q.x0 - m && x < q.x1 + m && y > q.y0 - m && y < q.y1 + m;
+  const hits = (r, a, ex, ey, own) => {
+    if (r.x0 < 12 * s || r.x1 > W - 12 * s || r.y0 < topBand || r.y1 > H - 12 * s) return true;
+    const len = Math.hypot(ex - a[0], ey - a[1]) || 1;      // the leader may not cross another part or card
+    for (let d = 16 * s; d < len; d += 8 * s) {
+      const x = a[0] + ((ex - a[0]) * d) / len, y = a[1] + ((ey - a[1]) * d) / len;
+      if (blocks.some((q, bi) => bi !== own && inR(q, x, y, -6 * s)) || placed.some((q) => inR(q, x, y, 4 * s))) return true;
+    }
+    if (leaderPts.some(([x, y]) => inR(r, x, y, 4 * s))) return true;
+    if (placed.some((q) => r.x0 < q.x1 + pad && r.x1 > q.x0 - pad && r.y0 < q.y1 + pad && r.y1 > q.y0 - pad)) return true;
+    if (blocks.some((q) => r.x0 < q.x1 && r.x1 > q.x0 && r.y0 < q.y1 && r.y1 > q.y0)) return true;
+    for (let gx2 = 0; gx2 <= 4; gx2++) for (let gy2 = 0; gy2 <= 2; gy2++)
+      if (inPoly(base, r.x0 + (r.x1 - r.x0) * gx2 / 4, r.y0 + (r.y1 - r.y0) * gy2 / 2)) return true;
+    return false;
+  };
+  const partTop = (g) => new THREE.Box3().setFromObject(g).max.y;
+  labels.forEach((Lb, i) => {
+    const g = Lb.counter ? crate : stations[i].g;
+    const at = (x, y, z) => { const v = g.localToWorld(new THREE.Vector3(x, y, z)); return proj(v.x, v.y, v.z); };
+    const cx0 = Lb.counter ? uEl + 0.95 : 0;
+    const aUp = Lb.counter ? at(cx0, 0.45, 0) : at(0, partTop(g) + 0.06, stations[i].shape === "box" || stations[i].shape === "funnel" ? 0 : -0.5);
+    const aDn = Lb.counter ? at(cx0, 0.05, CR / 2) : at(0, BY - 0.04, BW / 2 + 0.12);
+    const prefUp = Lb.counter || i >= (labels.length - 1) / 2;
+    const own = Lb.counter ? n + 1 : i;
+    const cand = (up, d) => {
+      const a = up ? aUp : aDn;
+      const x0 = Math.min(W - 14 * s - Lb.w, Math.max(14 * s, a[0] - Lb.w / 2));
+      const y0 = up ? a[1] - d - Lb.h : a[1] + d;
+      const ex = Math.min(x0 + Lb.w - 16 * s, Math.max(x0 + 16 * s, a[0])), ey = up ? y0 + Lb.h : y0;
+      return { up, a, x0, y0, ex, ey, r: { x0, x1: x0 + Lb.w, y0, y1: y0 + Lb.h } };
+    };
+    let best = null;
+    for (const up of [prefUp, !prefUp]) {
+      for (let d = 34; d <= 420 && !best; d += 18) { const c = cand(up, d * s); if (!hits(c.r, c.a, c.ex, c.ey, own)) best = c; }
+      if (best) break;
+    }
+    best = best || cand(prefUp, 60 * s);
+    placed.push(best.r);
+    const ll = Math.hypot(best.ex - best.a[0], best.ey - best.a[1]);
+    for (let d = 0; d <= ll; d += 8 * s) leaderPts.push([best.a[0] + (best.ex - best.a[0]) * d / (ll || 1), best.a[1] + (best.ey - best.a[1]) * d / (ll || 1)]);
+    Object.assign(Lb, { up: best.up, ax: best.a[0], ay: best.a[1], lx: best.x0, ly: best.y0 });
+    Lb.ex = best.ex; Lb.ey = best.ey;                    // where the leader meets the card
+    Lb.el.style.left = Lb.lx + "px"; Lb.el.style.top = Lb.ly + "px";
+    Lb.line.setAttribute("x1", Lb.ax);
+    Lb.dot.setAttribute("cx", Lb.ax); Lb.dot.setAttribute("cy", Lb.ay);
+    Lb.t0 = Lb.counter ? P.at + 0.75 : P.at + 0.14 + i * spread + 0.45;
+  });
+
+  // ---------- per frame ----------
+  U.clock((t) => {
+    const vis = clamp((t - P.at) / 0.25) * clamp((P.end - t) / 0.25);
+    box.style.opacity = vis;
+    box.style.visibility = vis > 0 ? "visible" : "hidden";
+    if (title) {
+      const q = quartOut(clamp((t - P.at) / 0.45));
+      title.style.opacity = q; title.style.transform = "translateY(" + (1 - q) * -24 * s + "px)";
+      bar.style.transform = "scaleX(" + quartOut(clamp((t - P.at - 0.2) / 0.4)) + ")";
+    }
+    anims.forEach((a) => {
+      const u = clamp((t - a.t0) / a.dur);
+      a.obj.visible = t >= a.t0;
+      a.obj.position.y = a.y0 + a.h * drop(u);
+    });
+    const ph = phase(t), D = ph.D;
+    belts.forEach((b) => { b.tex.offset.x = b.phase - D / TEXU; });
+    rollers.forEach((r) => { r.rotation.y = -D / 0.07; });
+
+    stations.forEach((st) => {
+      const act = ph.act;
+      if (st.head) st.head.position.y = -0.28 * Math.pow(act, 0.6);
+      if (st.lights) st.lights.forEach((lm, j) => {
+        const on = ph.dwell ? clamp(1 - Math.abs(ph.w * 3.4 - 0.4 - j * 1.0) * 1.6) : 0;
+        lm.emissiveIntensity = 0.15 + 1.6 * on;
+      });
+      if (st.bars) {
+        st.bars.forEach((bm, j) => {
+          const hgt = 0.18 + 0.32 * (0.5 + 0.5 * Math.sin(t * 2.4 + j * 1.7)) + 0.28 * act * ((j * 37) % 5) / 4;
+          bm.scale.y = hgt; bm.position.y = 1.08 + hgt / 2;
+        });
+        st.beam.material.opacity = 0.32 * act;
+        st.lens.emissiveIntensity = 0.4 + 2.0 * act;
+      }
+      if (st.gears) st.gears.forEach((G) => { G.m.rotation.z = G.base + G.k * (D / 0.6 + (t - P.at) * 0.25); });
+      if (st.ball) {
+        const w = ph.dwell ? ph.w : 1;
+        const u = clamp((w - 0.05) / 0.4);
+        st.ball.visible = tokenKind && ph.dwell && u > 0 && u < 1 && t > tStart;
+        st.ball.position.y = 1.1 - (1.1 - tokY - 0.1) * u * u;
+      }
+    });
+
+    const stAt = stations.map((st, i) => uSlot(slotOf[i]));
+    const dirE = lastLeg ? [0, 1] : [1, 0], pE = posAt(uE);
+    tokens.forEach((o, j) => {
+      const m = o.m, u = o.u0 + D;
+      if (t < o.tIn) { m.visible = false; return; }
+      m.visible = true;
+      let [px, pz] = posAt(Math.min(u, uE)), py = tokY, sc = 1, sy = 1, rot = 0;
+      const din = clamp((t - o.tIn) / 0.32);
+      if (din < 1) { py = tokY + (1.3 - tokY) * (1 - din * din); sc = 0.4 + 0.6 * clamp(din * 3); }
+      if (t >= o.tOff) {
+        const f = clamp((t - o.tOff) / FLY);
+        if (counter) {
+          const c = crateSlot(j);
+          px = pE[0] + (c.x - pE[0]) * f; pz = pE[1] + (c.z - pE[1]) * f;
+          py = tokY + (c.y - tokY) * f + 0.55 * Math.sin(Math.PI * f) * (1 - f * 0.3);
+          sc = 1 - 0.15 * f; rot = f * Math.PI * 0.75;
+        } else {
+          if (f >= 1) { m.visible = false; return; }
+          px = pE[0] + dirE[0] * 0.9 * f; pz = pE[1] + dirE[1] * 0.9 * f; py = tokY - 0.6 * f * f; sc = 1 - f;
+        }
+      } else if (ph.dwell) {                                  // a station working on the token under it
+        const i = stAt.findIndex((us) => Math.abs(us - u) < 0.05), st = stations[i];
+        if (st && st.shape === "cylinder") sy = 1 - 0.22 * Math.pow(ph.act, 0.6);
+        else if (st && st.shape === "funnel") sc = 1 + 0.12 * clamp(1 - Math.abs(ph.w - 0.5) * 6);
+        else if (st) sc = 1 + 0.05 * ph.act;
+      }
+      m.position.set(px, py - (1 - sy) * (tokY - BY), pz);
+      m.scale.set(sc, sc * sy, sc);
+      m.rotation.set(rot * dirE[1], 0, -rot * dirE[0]);
+    });
+
+    labels.forEach((Lb) => {
+      const q = clamp((t - Lb.t0) / 0.4), e = quartOut(q);
+      Lb.line.setAttribute("y1", Lb.ay);
+      Lb.line.setAttribute("x2", Lb.ax + (Lb.ex - Lb.ax) * e);
+      Lb.line.setAttribute("y2", Lb.ay + (Lb.ey - Lb.ay) * e);
+      Lb.line.style.opacity = q > 0 ? 1 : 0;
+      Lb.dot.setAttribute("r", 7 * s * backOut(clamp(q * 2)));
+      Lb.dot.style.opacity = q > 0 ? 1 : 0;
+      const c = clamp((t - Lb.t0 - 0.15) / 0.35);
+      Lb.el.style.opacity = c;
+      Lb.el.style.transform = "translateY(" + (1 - quartOut(c)) * (Lb.up ? 16 : -16) * s + "px)";
+    });
+    if (cntVal) {
+      const v = landTotal ? Number(counter.to || 0) * Math.min(1, landed(t) / landTotal)
+                          : Number(counter.to || 0) * clamp((t - tStart) / win);
+      cntVal.textContent = fmtNum(v);
+    }
+    renderer.render(scene, cam);
+  });
+});
+</script>

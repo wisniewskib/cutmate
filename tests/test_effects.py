@@ -162,3 +162,14 @@ def test_bundled_index_json():
         assert isinstance(e["description"], str) and e["description"]
         assert isinstance(e["params"], dict) and all(isinstance(v, str) for v in e["params"].values())
         assert isinstance(e["follow"], bool) and isinstance(e["place"], bool)
+
+
+def test_iso_machine_lint_and_index(tmp_path, monkeypatch):
+    import json
+    monkeypatch.setenv("CUTMATE_HOME", str(tmp_path / "home"))
+    p = E.find_effect("iso-machine", tmp_path / "out", "clean")
+    assert p == BUNDLED / "iso-machine.html"
+    E.lint_effect(p)
+    idx = {e["name"]: e for e in json.loads((BUNDLED / "index.json").read_text(encoding="utf-8"))}
+    assert idx["iso-machine"]["kind"] == "explainer"
+    assert {"parts", "token", "counter", "title"} <= set(idx["iso-machine"]["params"])

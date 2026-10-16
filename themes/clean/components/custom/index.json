@@ -53,5 +53,20 @@
     },
     "follow": false,
     "place": false
+  },
+  {
+    "name": "iso-machine",
+    "kind": "explainer",
+    "description": "Isometric 3D machine (product-diagram style): 2-5 parts drop in and assemble on a conveyor, gears turn, a press stamps, tokens index through station by station, numbered labels point at the parts, optional output counter.",
+    "params": {
+      "parts": "2-5 items {\"label\", \"shape\": \"box\"|\"cylinder\"|\"funnel\"|\"screen\"|\"gear\", \"color\"?} in process order (box = housing, cylinder = piston press, funnel = hopper, screen = monitor + scanner, gear = gearbox)",
+      "token": "optional \"cube\" or \"sphere\": items travelling through the parts on the conveyor",
+      "counter": "optional {\"to\": number, \"label\": \"...\"}: an output crate whose number counts up as tokens land in it",
+      "title": "optional heading above the machine",
+      "theme": "\"light\" (default) or \"dark\" panel",
+      "accent": "optional accent colour for tokens / crate / screen (default theme --accent)"
+    },
+    "follow": false,
+    "place": false
   }
 ]
