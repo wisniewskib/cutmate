@@ -1,0 +1,57 @@
+[
+  {
+    "name": "energy-ball",
+    "kind": "3d",
+    "description": "Glowing energy orb with sparks that sits on the speaker's hand (Rasengan-style).",
+    "params": {
+      "radius": "orb radius in world units (default 0.45)",
+      "colors": "[inner, outer] colours (default [\"#e0f7ff\", \"#38bdf8\"])"
+    },
+    "follow": true,
+    "place": false
+  },
+  {
+    "name": "stat-card",
+    "kind": "explainer",
+    "description": "One big number that counts up on a white card with a highlighter sweep, a label and an optional note; optional darkened screenshot behind.",
+    "params": {
+      "value": "the number (counts up from 0; decimals kept)",
+      "prefix": "optional text before the number, e.g. \"$\"",
+      "suffix": "optional text after the number, e.g. \"%\" or \" mln\"",
+      "label": "what the number means (short sentence)",
+      "note": "optional small source / context line",
+      "media": "optional screenshot shown darkened behind the card",
+      "accent": "optional accent colour (default theme --accent)"
+    },
+    "follow": false,
+    "place": false
+  },
+  {
+    "name": "flow",
+    "kind": "explainer",
+    "description": "Step-by-step diagram: 2-6 numbered boxes pop in one by one and arrows draw between them (clean cards or hand-drawn Rough.js).",
+    "params": {
+      "nodes": "2-6 short labels, in order",
+      "edges": "optional [[from, to], ...] node indexes (default: sequential)",
+      "style": "\"clean\" (default) or \"rough\" (hand-drawn)",
+      "seed": "optional Rough.js seed (rough style)",
+      "title": "optional heading above the diagram",
+      "accent": "optional accent colour (default theme --accent)"
+    },
+    "follow": false,
+    "place": false
+  },
+  {
+    "name": "ui-mock",
+    "kind": "explainer",
+    "description": "Mock app window whose text types in character by character: an AI chat, a terminal session or a social post.",
+    "params": {
+      "kind": "\"chat\" (default), \"terminal\" or \"post\"",
+      "lines": "[{\"who\": \"user\"|\"ai\"|\"cmd\", \"text\": \"...\"}, ...] (terminal: user/cmd typed after $, ai printed as output)",
+      "title": "optional window / account name",
+      "accent": "optional accent colour (default theme --accent)"
+    },
+    "follow": false,
+    "place": false
+  }
+]

@@ -136,3 +136,29 @@ def test_save_effect_copies_assets_folder(tmp_path, monkeypatch):
     (out / "custom" / "orb" / "new.json").write_text("{}", encoding="utf-8")
     E.save_effect(out, "orb", "clean", force=True)
     assert sorted(f.name for f in (p.parent / "orb").iterdir()) == ["new.json"]
+
+
+BUNDLED = plugin_root() / "themes" / "clean" / "components" / "custom"
+
+
+@pytest.mark.parametrize("name", ["stat-card", "flow", "ui-mock"])
+def test_bundled_explainers_lint(tmp_path, monkeypatch, name):
+    monkeypatch.setenv("CUTMATE_HOME", str(tmp_path / "home"))
+    p = E.find_effect(name, tmp_path / "out", "clean")
+    assert p == BUNDLED / f"{name}.html"
+    E.lint_effect(p)
+
+
+def test_bundled_index_json():
+    import json
+    idx = json.loads((BUNDLED / "index.json").read_text(encoding="utf-8"))
+    assert isinstance(idx, list) and idx
+    names = [e["name"] for e in idx]
+    assert len(names) == len(set(names))
+    assert sorted(names) == sorted(p.stem for p in BUNDLED.glob("*.html"))
+    for e in idx:
+        assert set(e) >= {"name", "kind", "description", "params", "follow", "place"}, e["name"]
+        assert e["kind"] in ("explainer", "vfx", "3d")
+        assert isinstance(e["description"], str) and e["description"]
+        assert isinstance(e["params"], dict) and all(isinstance(v, str) for v in e["params"].values())
+        assert isinstance(e["follow"], bool) and isinstance(e["place"], bool)
