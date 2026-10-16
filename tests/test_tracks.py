@@ -54,7 +54,8 @@ class FakeDetector:
     def __call__(self, rgb, t):
         self.calls.append((rgb.shape, round(t, 3)))
         return {"face": (0.4 + t * 0.1, 0.3, 0.9), "hand_left": None,
-                "hand_right": (0.7, 0.6, 0.8) if t >= 1.0 else None}
+                "hand_right": (0.7, 0.6, 0.8) if t >= 1.0 else None,
+                "point_right": (0.8, 0.4, 1.0) if t >= 1.0 else None}
 
 
 def test_analyze_every_second_frame(tmp_path):
@@ -127,6 +128,7 @@ def test_pose_detector_real_footage(tmp_path):
     subprocess.run(["ffmpeg", "-nostdin", "-v", "error", "-y", "-ss", "36", "-t", "3", "-i", str(src), "-an", str(clip)], check=True)
     d = analyze(clip, PoseDetector())
     assert len(d["tracks"]["face"]) > 30
+    assert "point_left" in d["tracks"] and "point_right" in d["tracks"]
     assert all(0 < p[1] < 1 and 0 < p[2] < 0.6 for p in d["tracks"]["face"])   # face in the upper part
 
 
@@ -163,3 +165,37 @@ def test_analyze_unreadable_video_is_error(tmp_path, monkeypatch):
     with pytest.raises(CutmateError, match="bad.mp4"):
         T.analyze(bad, det)
     assert det.calls == []
+
+
+def test_pointing_target():
+    from cutmate.tracks import pointing_target
+    assert pointing_target((0.5, 0.5), (0.55, 0.5)) == pytest.approx((0.65, 0.5))
+
+
+def test_pointing_target_clamped():
+    from cutmate.tracks import pointing_target
+    assert pointing_target((0.9, 0.5), (0.97, 0.5))[0] == 0.98
+
+
+def test_is_extended():
+    from cutmate.tracks import is_extended
+    args = ((0.4, 0.3), (0.5, 0.3), (0.5, 0.7))
+    assert is_extended((0.4, 0.5), *args) is False
+    assert is_extended((0.1, 0.3), *args) is True
+
+
+def test_gesture_at():
+    from cutmate.tracks import gesture_at
+    tr = {"point_right": [[1.0, 0.8, 0.4, 1.0], [1.4, 0.82, 0.42, 1.0]], "point_left": [[1.1, 0.2, 0.5, 0.0]]}
+    assert gesture_at(tr, 1.2) == {"x": 0.82, "y": 0.42, "side": "right", "hand": "point_right"}
+    assert gesture_at(tr, 1.1)["hand"] == "point_right"
+    assert gesture_at(tr, 3.0) is None
+    assert gesture_at({"face": []}, 1.0) is None          # tracks without point keys: absent, not an error
+
+
+def test_analyze_keeps_point_tracks(tmp_path):
+    from cutmate.tracks import analyze
+    clip = make_clip(tmp_path / "a.mp4", dur=2.0, size="1920x1080", gaps=())
+    d = analyze(clip, FakeDetector())
+    pr = d["tracks"]["point_right"]
+    assert pr and all(len(p) == 4 for p in pr) and d["tracks"]["point_left"] == []

@@ -1,4 +1,4 @@
-"""Where the speaker's face and hands are over time (out/work/tracks.json), so effects can follow them.
+"""Where the speaker's face, hands and pointing are over time (out/work/tracks.json), so effects can follow them.
 
 Samples are [t, x, y, conf] with x, y as fractions of the frame; t is A-roll seconds."""
 import hashlib
@@ -15,7 +15,35 @@ from .config import home
 from .errors import CutmateError
 from .media import probe_video, require_ffmpeg
 
-TRACKS = ("face", "hand_left", "hand_right")
+TRACKS = ("face", "hand_left", "hand_right", "point_left", "point_right")
+
+
+def pointing_target(wrist: tuple, tip: tuple) -> tuple[float, float]:
+    """Where a pointing hand aims: index tip pushed 2x further along wrist -> tip, clamped to the frame."""
+    return tuple(min(0.98, max(0.02, tip[i] + 2.0 * (tip[i] - wrist[i]))) for i in (0, 1))
+
+
+def is_extended(wrist: tuple, shoulder: tuple, shoulder_mid: tuple, hip_mid: tuple) -> bool:
+    """Arm stretched out: wrist-shoulder distance > 0.6 x torso length (shoulder midpoint -> hip midpoint)."""
+    torso = float(np.hypot(shoulder_mid[0] - hip_mid[0], shoulder_mid[1] - hip_mid[1]))
+    return float(np.hypot(wrist[0] - shoulder[0], wrist[1] - shoulder[1])) > 0.6 * torso
+
+
+def gesture_at(tracks: dict, t: float, window: float = 0.5) -> dict | None:
+    """The extended pointing sample nearest t (within +-window); ties go to the one farther from centre.
+    `side` is the screen side the viewer sees (x < 0.5 -> left), not the speaker's anatomical side."""
+    best = None
+    for hand in ("point_left", "point_right"):
+        for s in tracks.get(hand, []):
+            d = abs(s[0] - t)
+            if s[3] >= 0.5 and d <= window + 1e-9:
+                key = (round(d, 6), -abs(s[1] - 0.5))
+                if best is None or key < best[0]:
+                    best = (key, s, hand)
+    if best is None:
+        return None
+    _, s, hand = best
+    return {"x": s[1], "y": s[2], "side": "left" if s[1] < 0.5 else "right", "hand": hand}
 
 
 def smooth(samples: list[list[float]], k: int = 5) -> list[list[float]]:
@@ -133,7 +161,7 @@ class PoseDetector:
         img = self._mp.Image(image_format=self._mp.ImageFormat.SRGB, data=np.ascontiguousarray(rgb))
         res = self._lm.detect_for_video(img, int(round(t * 1000)))
         if not res.pose_landmarks:
-            return {"face": None, "hand_left": None, "hand_right": None}
+            return {n: None for n in TRACKS}
         L = res.pose_landmarks[0]
 
         def pt(*ids):
@@ -141,7 +169,16 @@ class PoseDetector:
                 return None
             return (sum(L[i].x for i in ids) / len(ids), sum(L[i].y for i in ids) / len(ids),
                     min(getattr(L[i], "visibility", 1.0) for i in ids))
-        return {"face": pt(0), "hand_left": pt(15, 19), "hand_right": pt(16, 20)}
+
+        def point(wrist, tip, shoulder):
+            if any(getattr(L[i], "visibility", 1.0) < self.VIS for i in (wrist, tip, shoulder, 11, 12, 23, 24)):
+                return None
+            xy = lambda i: (L[i].x, L[i].y)
+            mid = lambda a, b: ((L[a].x + L[b].x) / 2, (L[a].y + L[b].y) / 2)
+            x, y = pointing_target(xy(wrist), xy(tip))
+            return (x, y, 1.0 if is_extended(xy(wrist), xy(shoulder), mid(11, 12), mid(23, 24)) else 0.0)
+        return {"face": pt(0), "hand_left": pt(15, 19), "hand_right": pt(16, 20),
+                "point_left": point(15, 19, 11), "point_right": point(16, 20, 12)}
 
 
 def analyze(video: Path, detector, every: int = 2, width: int = 640) -> dict:
