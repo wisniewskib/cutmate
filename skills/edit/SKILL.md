@@ -15,7 +15,7 @@ checked, run `$CM theme-check --theme <theme> --language <lang>` once (renders e
 
 **Resume:** if `out/` already has files, continue from the first missing one:
 `work/*/transcript.json` → `sheets/*.png` → `outline.md` (16:9) → `takes.md` → `edl.json` → `aroll.mp4` →
-`work/aligned_words.json` → `requests.md` (if any requests) → `work/tracks.json` (if needed) → `plan.json` → `preview.mp4` (16:9) → `composition/index.html` → `final.mp4` → `thumbnail.png` (if `steps.thumbnail`) → `EDIT_NOTES.md`.
+`work/aligned_words.json` → `work/tracks.json` (if needed) → `plan.json` → checkpoint "zrozumiałem tak" (if `requests.md` exists) → `preview.mp4` (16:9) → `composition/index.html` → `final.mp4` → `thumbnail.png` (if `steps.thumbnail`) → `EDIT_NOTES.md`.
 Resuming at `takes.md` means (re)making and READING the sheets first.
 
 ## 1. Transcribe and look
@@ -57,7 +57,7 @@ Everything else in this skill applies; these are the differences.
 
 The user can ask for things the built-in components don't cover. Collect every request, map it, show it, then build.
 
-**Collect** into `out/requests.md`, one line each: `- [<source>] <what> → <target> [@ <anchor>]`. Target = component type,
+**Collect** into `out/requests.md` early, as requests come in (it needs no EDL; `$CM requests` runs later, see Checkpoint), one line each: `- [<source>] <what> → <target> [@ <anchor>]`. Target = component type,
 `custom:<name>`, `cut` or `skip`; anchor = segment id (`S5`) or word anchor (`S7:Rasengan`). Sources:
 - `[czat]` — the user's message to you.
 - `[nagranie <clip> <time>]` — spoken director notes (polecenia) in the transcript: phrases addressed to the editor, second
@@ -87,19 +87,19 @@ components; `ROOT` in style is the effect root. Rules:
 - `U.trackAt(P.track, t)` → `[x, y]` px or null; `U.follow(el, P.track)` sticks an element to the hand / face.
 - `U.three({el, bloom:{strength,radius,threshold}, camera})` → Promise of `{THREE, scene, camera, renderer, composer, toWorld(xPx, yPx, z), render}`;
   `U.glowOrb(S, {radius, colors, swirl})` → `{group, update(t)}`; `U.particles(target, {count, seed, life, speed, spin, size, colors, emitter})`
-  → `{update(t), points?}` (canvas: px; inside `U.three`: world units, ≈171 px per unit at 1080p); `U.draw(sel, {from, dur, stagger})`;
-  `U.rough(svg, shapes, {seed})`; `U.tex(el, latex)`; `U.anime(timeline)`; `U.lottie(anim)`.
+  → `{update(t), points?}` (canvas: px; inside `U.three`: world units: frame height ÷ 6.3 px per unit, ≈171 at 1080 px tall, ≈305 at 1920); `U.draw(sel, {from, dur, stagger})`;
+  `U.rough(svg, shapes, {seed})` (shape = `{kind: "rectangle"|"circle"|"line"|"path"…, args: [...], opts: {...}}`); `U.tex(el, latex)`; `U.anime(timeline)`; `U.lottie(anim)`.
 - `P.w`, `P.h`, `P.dur`, `P.at`, `P.end`, `P.track`, plus your own params at the top level of `P`.
-- Forbidden (build rejects the file): Date.now, Math.random, performance.now, requestAnimationFrame, setTimeout, setInterval, onUpdate,
+- Forbidden (build rejects the file, even in comments or strings): Date.now, Math.random, performance.now, requestAnimationFrame, setTimeout, setInterval, onUpdate,
   setAnimationLoop, anime.utils.random, d3.transition, AfterimagePass. Libraries (GSAP plugins, Three.js, Anime.js, Lottie, KaTeX, Rough.js, D3) load automatically when used.
 
 Pattern (the energy-ball effect, abridged):
 ```html
 <style>ROOT { position: absolute; inset: 0; }</style>
-<markup><div id="fx" style="position:absolute;inset:0"></div></markup>
+<markup><div class="fx" style="position:absolute;inset:0"></div></markup>
 <script>
-const rnd = U.seed(7);
-U.three({ el: document.getElementById("fx"), bloom: { strength: 1.2, radius: 0.6, threshold: 0.1 } }).then(S => {
+// root = the effect's root element
+U.three({ el: root.querySelector(".fx"), bloom: { strength: 1.2, radius: 0.6, threshold: 0.1 } }).then(S => {
   const orb = U.glowOrb(S, { radius: P.radius || 1, colors: P.colors, swirl: 1 });
   S.scene.add(orb.group);
   U.clock(t => {
@@ -111,9 +111,9 @@ U.three({ el: document.getElementById("fx"), bloom: { strength: 1.2, radius: 0.6
 </script>
 ```
 
-**Checkpoint "zrozumiałem tak":** when `requests.md` has ≥ 1 line, run `$CM requests <folder>/out` (one line per request: OK / MISSING /
+**Checkpoint "zrozumiałem tak":** map every request into `plan.json` in §5 first (a word anchor in requests.md matches a graphic starting within ±1 s of that word). Then, right before build (16:9: together with the preview), when `requests.md` has ≥ 1 line, run `$CM requests <folder>/out` — it needs aligned_words.json, edl_timed.json and plan.json (one line per request: OK / MISSING /
 NOTE / BAD, then `requests: N ok, M missing`), fix every `MISSING` and `BAD`, then show the user the list as "zrozumiałem tak: …"
-(in 16:9 together with the preview) and wait for OK. No requests → no pause.
+and wait for OK. No requests → no pause.
 
 **After acceptance:** for each `custom` effect used, ask once "Zapisać efekt <name> w theme?" → `$CM save-effect <folder>/out <name> --description "…"`
 (`--theme T` to pick the theme, `--force` to overwrite).
