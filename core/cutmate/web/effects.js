@@ -12,15 +12,19 @@
     };
   }
 
+  // [x, y] at local time t, or null where nothing was tracked: > 0.25 s before the first / after the last sample,
+  // or between two samples > 0.5 s apart (the hand was out of view)
   function trackAt(track, t) {
     if (!track || !track.length) return null;
-    if (t <= track[0][0]) return [track[0][1], track[0][2]];
-    const last = track[track.length - 1];
-    if (t >= last[0]) return [last[1], last[2]];
+    const first = track[0], last = track[track.length - 1];
+    if (t <= first[0]) return first[0] - t > 0.25 ? null : [first[1], first[2]];
+    if (t >= last[0]) return t - last[0] > 0.25 ? null : [last[1], last[2]];
     for (let i = 1; i < track.length; i++) {
       const b = track[i];
       if (t <= b[0]) {
-        const a = track[i - 1], f = (t - a[0]) / (b[0] - a[0] || 1);
+        const a = track[i - 1];
+        if (b[0] - a[0] > 0.5) return null;
+        const f = (t - a[0]) / (b[0] - a[0] || 1);
         return [a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f];
       }
     }
