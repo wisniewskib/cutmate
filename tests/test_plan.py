@@ -364,6 +364,11 @@ def test_custom_follow_and_timing(tmp_path):
     ({"type": "custom", "name": "x"}, "needs \"at\" or \"from\"/\"to\""),
     ({"type": "bg", "from": "S2:minus", "to": "S2:koniec."}, "exactly one of \"media\" or \"effect\""),
     ({"type": "side", "from": "S2:minus", "to": "S2:koniec.", "effect": "x", "speaker": "up"}, "speaker must be"),
+    ({"type": "custom", "name": "x", "at": "S1:Mówić", "region": [0, 0, 100]}, "region must be"),
+    ({"type": "custom", "name": "x", "at": "S1:Mówić", "region": [-1, 0, 100, 100]}, "region must be"),
+    ({"type": "custom", "name": "x", "at": "S1:Mówić", "region": [0, 0, 0, 100]}, "region must be"),
+    ({"type": "custom", "name": "x", "at": "S1:Mówić", "region": [0, 0, True, 100]}, "region must be"),
+    ({"type": "custom", "name": "x", "at": "S1:Mówić", "region": "left"}, "region must be"),
 ])
 def test_effects_invalid(tmp_path, g, msg):
     out = make_out169(tmp_path, {"graphics": [g]})
@@ -386,6 +391,7 @@ def test_side_and_bg_effect_expansion(tmp_path):
     assert [(g.type, g.params.get("name")) for g in gs] == [("custom", "space"), ("bg", None),
                                                              ("custom", "diagram"), ("side", None)]
     assert gs[2].params["region"] == [60, 60, 840, 960] and "region" not in gs[0].params
+    assert gs[0].params["_fade"] == 0.3 and gs[2].params["_fade"] == 0.45
     assert gs[1].params["effect"] == "space" and gs[3].params["speaker"] == "right"
     assert gs[0].start == gs[1].start and gs[0].end == gs[1].end
     assert not any("overlaps" in w for w in pl.warnings)

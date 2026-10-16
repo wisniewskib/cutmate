@@ -464,7 +464,9 @@ def test_custom_three_injects_importmap_and_region(out169, theme):
     html = (proj / "index.html").read_text(encoding="utf-8")
     assert html.index("assets/effects.js") < html.index('type="importmap"')
     sub = (proj / "compositions" / "gx-01-custom.html").read_text(encoding="utf-8")
-    assert "left: 60px; top: 60px; width: 840px; height: 960px" in sub and '"w": 840' in sub
+    assert ('<div class="cm-region" style="position:absolute;left:60px;top:60px;width:840px;height:960px;'
+            'overflow:hidden">') in sub and '"w": 840' in sub
+    assert "left: 60px" not in sub                                           # composition root stays full frame
 
 
 def test_custom_lint_and_missing(out169, theme):
@@ -548,3 +550,73 @@ def test_build_ignores_stale_tracks(out169, theme):
     os.utime(out169 / "aroll.mp4", (t + 5, t + 5))
     cam = cfg_of((B.build(out169, theme=theme)["project"] / "index.html").read_text(encoding="utf-8"))["cam"]
     assert cam[1][2:] == [0.5, 0.4]                                           # stale: default face
+
+
+def _P(sub):
+    return json.loads(re.search(r"const P = (.*?);\n", sub).group(1).replace("<\\/", "</"))
+
+
+def test_side_effect_region_wrapper_speaker_left(out169, theme):
+    _fx(out169, "diagram")
+    write_plan(out169, {"graphics": [{"type": "side", "from": "S2:minus", "to": "S2:</script>", "effect": "diagram",
+                                      "speaker": "left"}]})
+    proj = B.build(out169, theme=theme)["project"]
+    sub = (proj / "compositions" / "gx-01-custom.html").read_text(encoding="utf-8")
+    assert ('<div id="gx-01-custom" data-composition-id="gx-01-custom" data-width="1920" data-height="1080" '
+            'data-duration="1.7"><div class="cm-region" style="position:absolute;left:1020px;top:60px;width:840px;'
+            'height:960px;overflow:hidden">') in sub
+    assert 'const root = document.querySelector("#gx-01-custom > .cm-region");' in sub
+    assert "CutmateFX.make(tl, root, " in sub and "right: auto" not in sub
+    P = _P(sub)
+    assert (P["w"], P["h"]) == (840, 960)
+
+
+def test_region_effect_track_is_offset(out169, theme):
+    _fx(out169)
+    _tracks169(out169)
+    write_plan(out169, {"graphics": [{"type": "custom", "name": "orb", "from": "S2:minus", "to": "S2:Claude'a",
+                                      "follow": "hand", "region": [1020, 60, 840, 960]}]})
+    sub = (B.build(out169, theme=theme)["project"] / "compositions" / "gx-01-custom.html").read_text(encoding="utf-8")
+    assert _P(sub)["track"] == [[0.4, -60.0, 480.0], [0.8, 420.0, 480.0]]     # (960, 540) − (1020, 60)
+
+
+def test_custom_params_cannot_override_timing(out169, theme):
+    _fx(out169)
+    write_plan(out169, {"graphics": [{"type": "custom", "name": "orb", "from": "S2:minus", "to": "S2:Claude'a",
+                                      "params": {"at": 99, "end": 99, "w": 5, "h": 5, "dur": 99, "track": [1],
+                                                 "lang": "xx", "color": "#fff"}}]})
+    P = _P((B.build(out169, theme=theme)["project"] / "compositions" / "gx-01-custom.html").read_text(encoding="utf-8"))
+    assert (P["at"], P["end"], P["w"], P["h"], P["dur"], P["track"], P["lang"], P["color"]) == \
+        (0.3, 1.3, 1920, 1080, 1.3, [], "pl", "#fff")
+
+
+def test_bg_effect_fades_and_has_no_back(out169, theme, monkeypatch):
+    def fake_cut(aroll, a, b, media):
+        (media / "bgcut-x.webm").write_bytes(b"w")
+        return "bgcut-x.webm"
+    monkeypatch.setattr(B, "bg_cutout", fake_cut)
+    _fx(out169, "space")
+    write_plan(out169, {"graphics": [{"type": "bg", "from": "S2:minus", "to": "S2:Claude'a", "effect": "space"}]})
+    proj = B.build(out169, theme=theme)["project"]
+    fx = (proj / "compositions" / "gx-01-custom.html").read_text(encoding="utf-8")
+    assert ("tl.set(root, { autoAlpha: 0 }, 0); tl.to(root, { autoAlpha: 1, duration: 0.3 }, P.at); "
+            "tl.to(root, { autoAlpha: 0, duration: 0.3, immediateRender: false }, Math.max(P.at + 0.3, P.end - 0.3));") in fx
+    assert 'const root = document.getElementById("gx-01-custom");' in fx
+    bg = (proj / "compositions" / "gx-02-bg.html").read_text(encoding="utf-8")
+    assert 'class="img"' not in bg and "m01-" not in bg and 'src="assets/media/bgcut-x.webm"' in bg
+    _fx(out169)
+    write_plan(out169, {"graphics": [{"type": "custom", "name": "orb", "at": "S2:minus"}]})
+    sub = (B.build(out169, theme=theme)["project"] / "compositions" / "gx-01-custom.html").read_text(encoding="utf-8")
+    assert "autoAlpha" not in sub                                              # hand-placed custom: no auto fade
+
+
+def test_no_effects_build_matches_2b_shape(out, theme):
+    write_plan(out, {"graphics": [{"type": "chip", "at": "S2:minus", "text": "X"}]})
+    proj = B.build(out, theme=theme)["project"]
+    html = (proj / "index.html").read_text(encoding="utf-8")
+    assert ('<script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>\n'
+            '    <link rel="stylesheet" href="assets/tokens.css" />') in html
+    assert "effects.js" not in html and "\n    \n" not in html and not (proj / "assets" / "effects.js").exists()
+    sub = (proj / "compositions" / "gx-01-chip.html").read_text(encoding="utf-8")
+    assert "CutmateFX" not in sub and "    const U = {\n" in sub and "    };\n" in sub
+    assert "pointer-events: none; }\n#gx-01-chip .band" in sub                # no extra style line

@@ -89,7 +89,12 @@ components; `ROOT` in style is the effect root. Rules:
   `U.glowOrb(S, {radius, colors, swirl})` → `{group, update(t)}`; `U.particles(target, {count, seed, life, speed, spin, size, colors, emitter})`
   → `{update(t), points?}` (canvas: px; inside `U.three`: world units: frame height ÷ 6.3 px per unit, ≈171 at 1080 px tall, ≈305 at 1920); `U.draw(sel, {from, dur, stagger})`;
   `U.rough(svg, shapes, {seed})` (shape = `{kind: "rectangle"|"circle"|"line"|"path"…, args: [...], opts: {...}}`); `U.tex(el, latex)`; `U.anime(timeline)`; `U.lottie(anim)`.
-- `P.w`, `P.h`, `P.dur`, `P.at`, `P.end`, `P.track`, plus your own params at the top level of `P`.
+- `P.w`, `P.h`, `P.dur`, `P.at`, `P.end`, `P.track`, plus your own params at the top level of `P` (they cannot override these keys).
+  Used as a `side` effect, `root` is the 840×960 panel (build clips it there), `P.w`/`P.h` are the panel size and
+  `P.track` is in panel px. Used as `bg`/`side` `"effect"`, build fades `root` in at `P.at` and out by `P.end`.
+- Hand-placed `custom` effects get no automatic fade: draw nothing before `P.at` and be gone by `P.end` —
+  gate everything with a visibility factor, as energy-ball does:
+  `const vis = Math.min(1, Math.max(0, (t - P.at) / 0.25)) * Math.min(1, Math.max(0, (P.end - t) / 0.25));`
 - Forbidden (build rejects the file, even in comments or strings): Date.now, Math.random, performance.now, requestAnimationFrame, setTimeout, setInterval, onUpdate,
   setAnimationLoop, anime.utils.random, d3.transition, AfterimagePass. Libraries (GSAP plugins, Three.js, Anime.js, Lottie, KaTeX, Rough.js, D3) load automatically when used.
 

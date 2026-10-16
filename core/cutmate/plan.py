@@ -29,6 +29,7 @@ HOLDS = {"lower-third": 4.0}      # default hold per type (s); others use HOLD
 PIP_CORNERS = ("br", "bl")
 FOLLOW = ("face", "hand_left", "hand_right", "hand")
 NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,40}$")
+FADE = {"bg": 0.3, "side": 0.45}  # entrance / exit of an effect expanded from bg / side (s), matching their components
 SIDE_PANEL = {"right": [60, 60, 840, 960], "left": [1020, 60, 840, 960]}  # x, y, w, h in 1920x1080 px
 _PUNCT = ".,!?;:…\"'„\u201c\u201d()[]–—-"
 
@@ -161,6 +162,10 @@ def _graphic(i: int, g, words: list[dict], end: float, rec: Path, fmt: str = "9:
             raise PlanError(f"{where}: follow must be one of {', '.join(FOLLOW)}")
         if "params" in g and not isinstance(g["params"], dict):
             raise PlanError(f'{where}: "params" must be an object')
+        r = g.get("region")
+        if "region" in g and not (isinstance(r, list) and len(r) == 4 and all(
+                isinstance(x, (int, float)) and not isinstance(x, bool) and x >= 0 for x in r) and r[2] > 0 and r[3] > 0):
+            raise PlanError(f"{where}: region must be [x, y, w, h] in px (non-negative numbers, w and h > 0)")
         params = {k: g[k] for k in ("name", "follow", "params", "region") if k in g}
     elif t in ("bg", "side"):
         start, stop = _range(g, words, end, where)
@@ -274,7 +279,7 @@ def _expand(gs: list[Graphic]) -> list[Graphic]:
     out = []
     for g in gs:
         if g.type in ("bg", "side") and "effect" in g.params:
-            p = {"name": g.params["effect"]}
+            p = {"name": g.params["effect"], "_fade": FADE[g.type]}
             if g.type == "side":
                 p["region"] = list(SIDE_PANEL[g.params["speaker"]])
             out.append(Graphic("custom", g.start, g.end, p, False, False, g.index))

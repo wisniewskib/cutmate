@@ -37,22 +37,26 @@ SUBCOMP = """<!doctype html>
   <link rel="stylesheet" href="assets/tokens.css" />
   <link rel="stylesheet" href="assets/theme.css" />
   <style>#{cid} {{ position: absolute; inset: 0; pointer-events: none; }}
-{extra_style}{style}</style>
+{style}</style>
   <div id="{cid}" data-composition-id="{cid}" data-width="{w}" data-height="{h}" data-duration="{dur}">{markup}</div>
   <script>(function () {{
     const tl = gsap.timeline({{ paused: true }});
-    const root = document.getElementById("{cid}");
+    const root = {root};
     const P = {params};
-    const U = Object.assign(window.CutmateFX ? window.CutmateFX.make(tl, root, "{cid}", P) : {{}}, {{
+    const U = {u_open}{{
       el(tag, cls, text, parent) {{ const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; (parent || root).appendChild(e); return e; }},
       counter(el, fmt) {{ const d = {{}}; let v = 0; Object.defineProperty(d, "v", {{ get: () => v, set: (n) => {{ v = n; el.textContent = fmt(n); }} }}); return d; }},
       out(target, t) {{ tl.to(target, {{ opacity: 0, y: -30, duration: 0.2, ease: "power2.in", immediateRender: false }}, Math.max(0, t)); }},
-    }});
-{script}
+    }}{u_close};
+{script}{fade}
     window.__timelines["{cid}"] = tl;
   }})();</script>
 </template></body></html>
 """
+FX_OPEN = 'Object.assign(window.CutmateFX.make(tl, root, "{cid}", P), '
+REGION = '<div class="cm-region" style="position:absolute;left:{x}px;top:{y}px;width:{w}px;height:{h}px;overflow:hidden">{markup}</div>'
+FADE = ("\n    tl.set(root, {{ autoAlpha: 0 }}, 0); tl.to(root, {{ autoAlpha: 1, duration: {f} }}, P.at); "
+        "tl.to(root, {{ autoAlpha: 0, duration: {f}, immediateRender: false }}, Math.max(P.at + {f}, P.end - {f}));")
 
 INDEX = """<!doctype html>
 <html lang="{lang}" class="{fcls}">
@@ -60,9 +64,7 @@ INDEX = """<!doctype html>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width={w}, height={h}" />
     <title>cutmate</title>
-    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
-    <script src="assets/effects.js"></script>
-    {libs}
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>{fx_head}
     <link rel="stylesheet" href="assets/tokens.css" />
     <link rel="stylesheet" href="assets/theme.css" />
   </head>
@@ -84,6 +86,14 @@ INDEX = """<!doctype html>
   </body>
 </html>
 """
+
+
+def _fx_head(effect_texts: list[str]) -> str:
+    """effects.js + the libraries the project's custom effects use; nothing at all without custom effects."""
+    if not effect_texts:
+        return ""
+    libs = libs_head(effect_texts)
+    return '\n    <script src="assets/effects.js"></script>' + (f"\n    {libs}" if libs else "")
 
 
 def _js(obj) -> str:
@@ -276,7 +286,7 @@ def _media_tag(cid: str, g: Graphic, P: dict) -> str:
 
 def subcomp(cid: str, g: Graphic, host_start: float, theme: Path, assets: Path, media_map: dict, lang: str,
             size: tuple = (1080, 1920), extra_tags: dict | None = None, comp_path: Path | None = None,
-            tracks: dict | None = None) -> str:
+            tracks: dict | None = None, assets_url: str | None = None) -> str:
     sec = _sections(comp_path or theme / "components" / f"{g.type}.html")
     W, H = size
     loc = lambda t: round(max(0.0, t - host_start), 3)  # noqa: E731
@@ -289,21 +299,27 @@ def subcomp(cid: str, g: Graphic, host_start: float, theme: Path, assets: Path, 
     for k in ("media", "image", "logo", "icon"):
         if k in P:
             P[k] = _copy_media(g.params[k], assets, media_map)
-    extra_style = ""
+    root, u_open, u_close, fade = f'document.getElementById("{cid}")', "", "", ""
+    region = None
     if g.type == "custom":
-        P = {"name": g.params["name"]}
-        P.update(at=loc(g.start), end=loc(g.end), lang=lang)
+        region = g.params.get("region")
+        rx, ry, rw, rh = region or [0, 0, W, H]
         follow = g.params.get("follow")
         track = []
         if follow and tracks:
             tn = pick_hand(tracks["tracks"], g.start, g.end) if follow == "hand" else follow
-            track = track_slice(tracks["tracks"].get(tn, []), g.start, g.end, host_start, W, H)
-        rx, ry, rw, rh = g.params.get("region") or [0, 0, W, H]
-        P.update(g.params.get("params") or {})
-        P.update(w=rw, h=rh, dur=round(g.end - host_start, 3), track=track)
-        if g.params.get("region"):
-            extra_style = (f"#{cid} {{ left: {rx}px; top: {ry}px; width: {rw}px; height: {rh}px; "
-                           f"right: auto; bottom: auto; overflow: hidden; }}\n")
+            track = [[t, round(x - rx, 1), round(y - ry, 1)]
+                     for t, x, y in track_slice(tracks["tracks"].get(tn, []), g.start, g.end, host_start, W, H)]
+        P = dict(g.params.get("params") or {})          # user params first: timing / size keys always win
+        P.update(name=g.params["name"], at=loc(g.start), end=loc(g.end), lang=lang, w=rw, h=rh,
+                 dur=round(g.end - host_start, 3), track=track)
+        if assets_url:
+            P["assets"] = assets_url
+        u_open, u_close = FX_OPEN.format(cid=cid), ")"
+        if region:
+            root = f'document.querySelector("#{cid} > .cm-region")'
+        if g.params.get("_fade"):
+            fade = FADE.format(f=g.params["_fade"])
     media_tag = ""
     if g.type in ("split", "pip"):
         P["fit"] = g.params.get("fit", "contain")
@@ -319,10 +335,11 @@ def subcomp(cid: str, g: Graphic, host_start: float, theme: Path, assets: Path, 
     tags = {"media_tag": media_tag, "back_tag": back_tag, **(extra_tags or {})}
     markup = _PLACEHOLDER.sub(lambda m: tags[m.group(1)] if m.group(1) in tags
                               else _html.escape(str(P.get(m.group(1), ""))), sec.get("markup", ""))
-    w, h = size
-    return SUBCOMP.format(lang=lang, cid=cid, w=w, h=h, dur=round(g.end - host_start, 3), extra_style=extra_style,
-                          style=sec.get("style", "").replace("ROOT", f"#{cid}"), markup=markup,
-                          params=_js(P), script=sec["script"])
+    if region:
+        markup = REGION.format(x=region[0], y=region[1], w=region[2], h=region[3], markup=markup)
+    return SUBCOMP.format(lang=lang, cid=cid, w=W, h=H, dur=round(g.end - host_start, 3), root=root, u_open=u_open,
+                          u_close=u_close, fade=fade, style=sec.get("style", "").replace("ROOT", f"#{cid}"),
+                          markup=markup, params=_js(P), script=sec["script"])
 
 
 def _sfx_cues(g: Graphic, meta: dict) -> list[tuple]:
@@ -391,7 +408,6 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
     for f in (th / "fonts").glob("*.ttf"):
         shutil.copy2(f, A / "fonts" / f.name)
     shutil.copy2(web_dir() / "cutmate.js", A / "cutmate.js")
-    shutil.copy2(web_dir() / "effects.js", A / "effects.js")
 
     words = json.loads((out / "work" / "aligned_words.json").read_text(encoding="utf-8"))
     timed = load_timed(out)
@@ -435,6 +451,10 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
                      f'data-width="{W}" data-height="{H}"></div>')
         cues += _sfx_cues(g, meta)
     _prune(A / "media", {Path(v).name for v in media_map.values()} | keep_media)
+    if effect_texts:
+        shutil.copy2(web_dir() / "effects.js", A / "effects.js")
+    else:
+        (A / "effects.js").unlink(missing_ok=True)
     for f in (proj / "compositions").glob("gx-*.html"):
         if f.stem not in ids:
             f.unlink()
@@ -476,7 +496,7 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
     vdur = round(min(end, duration(A / "aroll.mp4")), 3)
     (proj / "index.html").write_text(INDEX.format(lang=language, fcls="f169" if fmt == "16:9" else "f916", w=W, h=H, end=round(end, 3), vdur=vdur,
                                                   hosts="\n".join(hosts), audio="\n".join(audio), cfg=_js(cfg),
-                                                  libs=libs_head(effect_texts)),
+                                                  fx_head=_fx_head(effect_texts)),
                                      encoding="utf-8")
     if src and not carve(proj):
         half = round(vol * 0.5, 3)
