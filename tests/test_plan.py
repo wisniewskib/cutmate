@@ -338,3 +338,77 @@ def test_chapter_one_late_warning(tmp_path):
     assert "WARN chapter 1 starts at 0.9s — it is listed as 00:00" in load_plan(out).warnings
     out = make_out169(tmp_path / "x", {"chapters": [{"at": "S1:Mówić", "title": "A"}, {"at": "S2:minus", "title": "B"}]})
     assert not any("chapter 1 starts" in w for w in load_plan(out).warnings)
+
+
+def _tracks(out, face=(0.45, 0.3)):
+    (out / "work" / "tracks.json").write_text(json.dumps({"fps": 15, "w": 1920, "h": 1080, "tracks": {
+        "face": [[t / 10, face[0], face[1], 0.9] for t in range(0, 100)],
+        "hand_left": [], "hand_right": [[4.0, 0.7, 0.6, 0.9], [4.5, 0.72, 0.6, 0.9]]}}), encoding="utf-8")
+
+
+def test_custom_follow_and_timing(tmp_path):
+    out = make_out169(tmp_path, {"graphics": [
+        {"type": "custom", "name": "energy-ball", "from": "S2:minus", "to": "S2:Claude'a", "follow": "hand",
+         "params": {"color": "#7dd3fc"}},
+        {"type": "custom", "name": "logo-3d", "at": "S1:Mówić", "until": "S1:mniej"}]})
+    _tracks(out)
+    g1, g2 = load_plan(out).graphics
+    assert (g1.type, g1.start) == ("custom", 0.1) and g1.params["name"] == "logo-3d"
+    assert g2.params == {"name": "energy-ball", "follow": "hand", "params": {"color": "#7dd3fc"}}
+    assert (g2.start, g2.end) == (4.0, 5.6)
+
+
+@pytest.mark.parametrize("g, msg", [
+    ({"type": "custom", "name": "Bad Name", "at": "S1:Mówić"}, "name must be"),
+    ({"type": "custom", "name": "x", "at": "S1:Mówić", "follow": "elbow"}, "follow must be one of"),
+    ({"type": "custom", "name": "x"}, "needs \"at\" or \"from\"/\"to\""),
+    ({"type": "bg", "from": "S2:minus", "to": "S2:koniec."}, "exactly one of \"media\" or \"effect\""),
+    ({"type": "side", "from": "S2:minus", "to": "S2:koniec.", "effect": "x", "speaker": "up"}, "speaker must be"),
+])
+def test_effects_invalid(tmp_path, g, msg):
+    out = make_out169(tmp_path, {"graphics": [g]})
+    with pytest.raises(PlanError, match=msg):
+        load_plan(out)
+
+
+def test_follow_needs_tracks(tmp_path):
+    out = make_out169(tmp_path, {"graphics": [{"type": "custom", "name": "x", "at": "S1:Mówić", "follow": "face"}]})
+    with pytest.raises(PlanError, match="cutmate track"):
+        load_plan(out)
+
+
+def test_side_and_bg_effect_expansion(tmp_path):
+    out = make_out169(tmp_path, {"graphics": [
+        {"type": "side", "from": "S2:minus", "to": "S2:koniec.", "effect": "diagram", "speaker": "right"},
+        {"type": "bg", "from": "S1:Mówić", "to": "S1:mniej#2", "effect": "space"}]})
+    pl = load_plan(out)
+    gs = pl.graphics
+    assert [(g.type, g.params.get("name")) for g in gs] == [("custom", "space"), ("bg", None),
+                                                             ("custom", "diagram"), ("side", None)]
+    assert gs[2].params["region"] == [60, 60, 840, 960] and "region" not in gs[0].params
+    assert gs[1].params["effect"] == "space" and gs[3].params["speaker"] == "right"
+    assert gs[0].start == gs[1].start and gs[0].end == gs[1].end
+    assert not any("overlaps" in w for w in pl.warnings)
+
+
+def test_side_only_169(tmp_path):
+    out = make_out(tmp_path, {"graphics": [{"type": "side", "from": "S2:minus", "to": "S2:koniec.", "effect": "x"}]})
+    with pytest.raises(PlanError, match="not available in 9:16"):
+        load_plan(out)
+
+
+def test_auto_face_from_tracks(tmp_path):
+    out = make_out169(tmp_path, {"face": {"S1": [0.2, 0.2]}})
+    _tracks(out, face=(0.45, 0.3))
+    assert load_plan(out).face == {"S1": [0.2, 0.2], "S2": [0.45, 0.3]}
+
+
+def test_bg_budget_warning(tmp_path):
+    words = WORDS + [{"seg": "S2", "word": "dalej", "start": 45.0, "end": 45.5}]
+    out = make_out169(tmp_path, {"graphics": [{"type": "bg", "from": "S2:minus", "to": "S2:dalej", "media": "broll/k.png"}]},
+                      words=words)
+    (out / "work" / "edl_timed.json").write_text(json.dumps(
+        [{"id": "S1", "start": 0.0, "end": 3.5}, {"id": "S2", "start": 3.5, "end": 50.0}]), encoding="utf-8")
+    (out.parent / "broll").mkdir()
+    (out.parent / "broll" / "k.png").write_bytes(b"x")
+    assert any("bg covers 42s" in w for w in load_plan(out).warnings)

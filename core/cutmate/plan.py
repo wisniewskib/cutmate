@@ -11,19 +11,25 @@ from pathlib import Path
 from .cut import load_timed
 from .errors import PlanError
 from .formats import format_of
+from .tracks import face_median, load_tracks
 
-TYPES = ("title", "counter", "list", "chip", "stamp", "bars", "point", "split", "pip", "lower-third")
+TYPES = ("title", "counter", "list", "chip", "stamp", "bars", "point", "split", "pip", "lower-third", "custom", "bg", "side")
 REQUIRED = {"title": ("at", "text"), "counter": ("at", "to", "label"), "list": ("items",), "chip": ("at", "text"),
             "stamp": ("at", "text"), "bars": ("at", "head", "rows"), "point": ("at", "image", "corner"),
-            "split": ("from", "to", "media"), "pip": ("from", "to", "media"), "lower-third": ("at", "name")}
+            "split": ("from", "to", "media"), "pip": ("from", "to", "media"), "lower-third": ("at", "name"),
+            "custom": ("name",), "bg": ("from", "to"), "side": ("from", "to")}
 TIMING_KEYS = ("type", "at", "from", "until", "hit", "sfx")
 CORNERS = ("tl", "tr", "bl", "br")
 HOLD = 2.5
 PLATE = 1.5                       # chapter plate length (s)
-ONLY = {"split": "9:16", "pip": "16:9", "lower-third": "16:9"}  # component → the only format it exists in
-HINT = {"split": "in 16:9 use pip", "pip": "in 9:16 use split", "lower-third": "use chip or title in 9:16"}
+ONLY = {"split": "9:16", "pip": "16:9", "lower-third": "16:9", "side": "16:9"}  # component → the only format it exists in
+HINT = {"split": "in 16:9 use pip", "pip": "in 9:16 use split", "lower-third": "use chip or title in 9:16",
+        "side": "in 9:16 use split"}
 HOLDS = {"lower-third": 4.0}      # default hold per type (s); others use HOLD
 PIP_CORNERS = ("br", "bl")
+FOLLOW = ("face", "hand_left", "hand_right", "hand")
+NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,40}$")
+SIDE_PANEL = {"right": [60, 60, 840, 960], "left": [1020, 60, 840, 960]}  # x, y, w, h in 1920x1080 px
 _PUNCT = ".,!?;:…\"'„\u201c\u201d()[]–—-"
 
 
@@ -89,6 +95,16 @@ def _media(rel, rec: Path, where: str) -> str:
     return str(p)
 
 
+def _range(g: dict, words: list[dict], end: float, where: str) -> tuple[float, float]:
+    if "to" not in g:
+        raise PlanError(f'{where}: missing "to"')
+    start = resolve_anchor(g["from"], words, end)[0]
+    stop = resolve_anchor(g["to"], words, end)[1]
+    if stop <= start:
+        raise PlanError(f"{where}: \"to\" is before the start")
+    return start, stop
+
+
 def _graphic(i: int, g, words: list[dict], end: float, rec: Path, fmt: str = "9:16") -> Graphic:
     where = f"graphic #{i + 1}"
     if not isinstance(g, dict) or "type" not in g:
@@ -105,10 +121,7 @@ def _graphic(i: int, g, words: list[dict], end: float, rec: Path, fmt: str = "9:
     params = {k: v for k, v in g.items() if k not in TIMING_KEYS}
     stop = None
     if t in ("split", "pip"):
-        start = resolve_anchor(g["from"], words, end)[0]
-        stop = resolve_anchor(g["to"], words, end)[1]
-        if stop <= start:
-            raise PlanError(f"{where}: \"to\" is before the start")
+        start, stop = _range(g, words, end, where)
         params["media"] = _media(g["media"], rec, where)
         fit = g.get("fit", "cover" if t == "pip" else "contain")
         if fit not in ("contain", "cover"):
@@ -134,6 +147,35 @@ def _graphic(i: int, g, words: list[dict], end: float, rec: Path, fmt: str = "9:
         params["items"] = items
         start = min(x["at"] for x in items)
         stop = max(x["at"] for x in items) + HOLD
+    elif t == "custom":
+        if not NAME_RE.match(str(g["name"])):
+            raise PlanError(f"{where}: name must be lowercase letters, digits and dashes (e.g. energy-ball)")
+        if "from" in g:
+            start, stop = _range(g, words, end, where)
+        elif "at" in g:
+            start = resolve_anchor(g["at"], words, end)[0]
+        else:
+            raise PlanError(f'{where}: needs "at" or "from"/"to"')
+        if "follow" in g and g["follow"] not in FOLLOW:
+            raise PlanError(f"{where}: follow must be one of {', '.join(FOLLOW)}")
+        if "params" in g and not isinstance(g["params"], dict):
+            raise PlanError(f'{where}: "params" must be an object')
+        params = {k: g[k] for k in ("name", "follow", "params", "region") if k in g}
+    elif t in ("bg", "side"):
+        start, stop = _range(g, words, end, where)
+        if ("media" in g) == ("effect" in g):
+            raise PlanError(f'{where}: needs exactly one of "media" or "effect"')
+        if "media" in g:
+            params["media"] = _media(g["media"], rec, where)
+        elif not NAME_RE.match(str(g["effect"])):
+            raise PlanError(f"{where}: effect must be an effect name (e.g. space-bg)")
+        if t == "side":
+            sp = g.get("speaker", "right")
+            if sp not in ("right", "left"):
+                raise PlanError(f"{where}: speaker must be right or left")
+            params["speaker"] = sp
+        params.pop("from", None)
+        params.pop("to", None)
     else:
         start = resolve_anchor(g["at"], words, end)[0]
     if t == "counter" and (isinstance(g["to"], bool) or not isinstance(g["to"], (int, float))):
@@ -227,8 +269,28 @@ def _face(raw: dict, words: list[dict]) -> dict:
     return out
 
 
+def _expand(gs: list[Graphic]) -> list[Graphic]:
+    out = []
+    for g in gs:
+        if g.type in ("bg", "side") and "effect" in g.params:
+            p = {"name": g.params["effect"]}
+            if g.type == "side":
+                p["region"] = list(SIDE_PANEL[g.params["speaker"]])
+            out.append(Graphic("custom", g.start, g.end, p, False, False, g.index))
+        out.append(g)
+    return out
+
+
+def _expanded_pair(a: Graphic, b: Graphic) -> bool:
+    return (a.type == "custom" and b.type in ("bg", "side") and b.params.get("effect") == a.params.get("name")
+            and a.start == b.start and a.end == b.end)
+
+
 def _budget(gs: list[Graphic]) -> list[str]:
     w = []
+    bg = sum(g.end - g.start for g in gs if g.type == "bg")
+    if bg > 30:
+        w.append(f"WARN bg covers {bg:.0f}s — background removal takes ~{17 * bg / 60:.0f} min on CPU")
     hits = [g for g in gs if g.hit]
     if len(hits) > 2:
         w.append(f"WARN {len(hits)} graphics with \"hit\" (budget 2) at " + ", ".join(f"{g.start:.1f}s" for g in hits))
@@ -236,7 +298,7 @@ def _budget(gs: list[Graphic]) -> list[str]:
     if len(titles) > 1:
         w.append(f"WARN {len(titles)} titles (budget 1)")
     for a, b in zip(gs, gs[1:]):
-        if b.start < a.end:
+        if b.start < a.end and not _expanded_pair(a, b):
             w.append(f"WARN {a.type} ({a.start:.1f}–{a.end:.1f}s) overlaps {b.type} at {b.start:.1f}s")
     return w
 
@@ -295,6 +357,9 @@ def load_plan(out_dir: Path, factcheck: bool = False) -> Plan:
         raise PlanError(f"{p}: \"graphics\" must be a list")
     gs = sorted((_graphic(i, g, words, end, out.parent, fmt) for i, g in enumerate(graphics_list or [])),
                 key=lambda g: g.start)
+    if any(g.params.get("follow") for g in gs) and load_tracks(out) is None:
+        raise PlanError("follow needs out/work/tracks.json — run `cutmate track`")
+    gs = _expand(gs)
     for i, g in enumerate(gs):
         if g.end is None:
             nxt = gs[i + 1].start - 0.05 if i + 1 < len(gs) else end
@@ -304,6 +369,14 @@ def load_plan(out_dir: Path, factcheck: bool = False) -> Plan:
             raise PlanError(f"graphic #{g.index + 1} ({g.type}) starts at {g.start:.2f}s, too close to the end ({end:.2f}s)")
     chapters = _chapters(raw, words, end)
     face = _face(raw, words)
+    tr = load_tracks(out)
+    if tr:
+        for s in load_timed(out):
+            sid = str(s["id"])
+            if sid not in face:
+                fm = face_median(tr["tracks"], float(s["start"]), float(s["end"]))
+                if fm:
+                    face[sid] = fm
     warnings = _budget(gs) + _chapter_warnings(chapters, gs, end, min((w['start'] for w in words), default=0.0)) + (_factcheck(out, gs) if factcheck else [])
     cap = raw.get("captions") or {}
     if not isinstance(cap, dict):
