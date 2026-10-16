@@ -36,3 +36,11 @@ def test_skill_covers_169():
     for s in ("cutmate formats", "$CM formats", "outline.md", "$CM preview", "chapters.txt", "captions.srt",
               "\"chapters\"", "\"face\"", "pip", "lower-third", "--side", "subagent", "1280×720"):
         assert s in md, s
+
+
+def test_skill_covers_effects():
+    md = (paths.plugin_root() / "skills" / "edit" / "SKILL.md").read_text(encoding="utf-8")
+    for s in ("requests.md", "$CM requests", "$CM track", "$CM save-effect", "\"custom\"", "\"follow\"", "\"bg\"",
+              "\"side\"", "U.clock", "U.three", "U.trackAt", "U.seed", "energy-ball", "out/custom/",
+              "zrozumiałem tak", "polecenia"):
+        assert s in md, s

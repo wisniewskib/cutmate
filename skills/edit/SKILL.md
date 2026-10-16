@@ -15,7 +15,7 @@ checked, run `$CM theme-check --theme <theme> --language <lang>` once (renders e
 
 **Resume:** if `out/` already has files, continue from the first missing one:
 `work/*/transcript.json` → `sheets/*.png` → `outline.md` (16:9) → `takes.md` → `edl.json` → `aroll.mp4` →
-`work/aligned_words.json` → `plan.json` → `preview.mp4` (16:9) → `composition/index.html` → `final.mp4` → `thumbnail.png` (if `steps.thumbnail`) → `EDIT_NOTES.md`.
+`work/aligned_words.json` → `requests.md` (if any requests) → `work/tracks.json` (if needed) → `plan.json` → `preview.mp4` (16:9) → `composition/index.html` → `final.mp4` → `thumbnail.png` (if `steps.thumbnail`) → `EDIT_NOTES.md`.
 Resuming at `takes.md` means (re)making and READING the sheets first.
 
 ## 1. Transcribe and look
@@ -53,6 +53,71 @@ Everything else in this skill applies; these are the differences.
   `$CM thumb <folder>/out --at <t> --title "…" --hook "…" --side left|right`.
 - Custom theme: `$CM theme-check --theme <theme> --language <lang> --format 16:9`.
 
+## 1c. Effects on request
+
+The user can ask for things the built-in components don't cover. Collect every request, map it, show it, then build.
+
+**Collect** into `out/requests.md`, one line each: `- [<source>] <what> → <target> [@ <anchor>]`. Target = component type,
+`custom:<name>`, `cut` or `skip`; anchor = segment id (`S5`) or word anchor (`S7:Rasengan`). Sources:
+- `[czat]` — the user's message to you.
+- `[nagranie <clip> <time>]` — spoken director notes (polecenia) in the transcript: phrases addressed to the editor, second
+  person ("tutaj ma być", "dodaj", "przenosisz mnie", "zrób"). These segments never go into the EDL unless they are
+  also content. Jokes / filler with no content ("Test.", "Twerk.") are cut like false starts and listed as `→ cut`.
+- `[uwagi <mm:ss>]` — feedback after a render.
+
+**Map:** a built-in component when one fits; `bg` for "inne tło / przenieś mnie gdzie indziej"; `side` for "na połowie
+ekranu" (16:9 only); otherwise `custom`. Check saved effects first: `~/.cutmate/themes/<theme>/components/custom/index.json`
+and the bundled `energy-ball` (params `radius`, `colors`; use with `"follow": "hand"`).
+
+**Plan types** (in `plan.json` graphics):
+- `{"type": "custom", "name": "<lowercase-dashes>", "from": …, "to": …}` or `"at"` (+ `until`); `"follow": "face"|"hand_left"|"hand_right"|"hand"`
+  (needs tracks.json); `"params": {…}` land at the top level of `P` in the effect.
+- `{"type": "bg", "from", "to", "media": "broll/…"}` or `"effect": "<name>"`. Media = a file in `broll/`, or an AI image:
+  `npx --yes hyperframes@0.8.157 media-use resolve --type image --intent "<what>" --project <folder>/out/composition` when signed in
+  (copy it to `broll/`). `bg` removes the background from the A-roll: ~17× the duration on CPU. Total `bg` > 30 s → build WARN: ask the user before building.
+- `{"type": "side", "from", "to", "media"|"effect", "speaker": "right"|"left"}` — speaker on one half, graphic on the other (16:9 only).
+- `face` per segment is filled automatically from tracks.json when missing.
+
+**Tracking:** if any graphic uses `"follow"`, or you want face-centred punch-ins without reading sheets, run
+`$CM track <folder>/out` after `cut` (cached by A-roll mtime; `--force` redoes it). Needs mediapipe; otherwise tell the user to run `/cutmate:setup`.
+
+**Writing a custom effect** in `out/custom/<name>.html`: the same `<style>` / `<markup>` / `<script>` sections as theme
+components; `ROOT` in style is the effect root. Rules:
+- `U.clock(fn)` is the only per-frame driver (`fn(t)`, local time) — never `onUpdate`, timers or rAF. `U.seed(n)` is the only randomness.
+- `U.trackAt(P.track, t)` → `[x, y]` px or null; `U.follow(el, P.track)` sticks an element to the hand / face.
+- `U.three({el, bloom:{strength,radius,threshold}, camera})` → Promise of `{THREE, scene, camera, renderer, composer, toWorld(xPx, yPx, z), render}`;
+  `U.glowOrb(S, {radius, colors, swirl})` → `{group, update(t)}`; `U.particles(target, {count, seed, life, speed, spin, size, colors, emitter})`
+  → `{update(t), points?}` (canvas: px; inside `U.three`: world units, ≈171 px per unit at 1080p); `U.draw(sel, {from, dur, stagger})`;
+  `U.rough(svg, shapes, {seed})`; `U.tex(el, latex)`; `U.anime(timeline)`; `U.lottie(anim)`.
+- `P.w`, `P.h`, `P.dur`, `P.at`, `P.end`, `P.track`, plus your own params at the top level of `P`.
+- Forbidden (build rejects the file): Date.now, Math.random, performance.now, requestAnimationFrame, setTimeout, setInterval, onUpdate,
+  setAnimationLoop, anime.utils.random, d3.transition, AfterimagePass. Libraries (GSAP plugins, Three.js, Anime.js, Lottie, KaTeX, Rough.js, D3) load automatically when used.
+
+Pattern (the energy-ball effect, abridged):
+```html
+<style>ROOT { position: absolute; inset: 0; }</style>
+<markup><div id="fx" style="position:absolute;inset:0"></div></markup>
+<script>
+const rnd = U.seed(7);
+U.three({ el: document.getElementById("fx"), bloom: { strength: 1.2, radius: 0.6, threshold: 0.1 } }).then(S => {
+  const orb = U.glowOrb(S, { radius: P.radius || 1, colors: P.colors, swirl: 1 });
+  S.scene.add(orb.group);
+  U.clock(t => {
+    const p = U.trackAt(P.track, t);
+    if (p) orb.group.position.copy(S.toWorld(p[0], p[1], 0));
+    orb.update(t); S.render();
+  });
+});
+</script>
+```
+
+**Checkpoint "zrozumiałem tak":** when `requests.md` has ≥ 1 line, run `$CM requests <folder>/out` (one line per request: OK / MISSING /
+NOTE / BAD, then `requests: N ok, M missing`), fix every `MISSING` and `BAD`, then show the user the list as "zrozumiałem tak: …"
+(in 16:9 together with the preview) and wait for OK. No requests → no pause.
+
+**After acceptance:** for each `custom` effect used, ask once "Zapisać efekt <name> w theme?" → `$CM save-effect <folder>/out <name> --description "…"`
+(`--theme T` to pick the theme, `--force` to overwrite).
+
 ## 2. Pick takes (the most important step — be an editor, not a transcriber)
 
 The transcript lies: whisper drops false starts and merges a stumble + retake into one long word. For EVERY segment you
@@ -84,6 +149,7 @@ Write `out/edl.json`:
  "spoken": {"Claude": "klod", "75%": "siedemdziesiąt pięć procent"}}
 ```
 - Strongest line first as the hook; end on a closing line.
+- Spoken director notes (§1c) are not segments: cut around them, unless they are also content.
 - Cut on silence bounds (`work/<clip>/silences.json`): `in ≈ speech start − 0.06`, `out ≈ speech end + 0.08`.
   Keep ≥ 0.2 s after the last loud bin of a word ending in a quiet consonant (ć, ś, t, k).
 - `text` is the caption source of truth: fix spelling of names, never change what was said.
@@ -119,6 +185,7 @@ Follow `frame.md`. Write `out/plan.json`:
 - Components: `title` (at, text, kicker?, logo?), `counter` (at, to, prefix?, suffix?, label), `list` (items[{text, at}],
   head?), `chip` (at, text, logo?/icon?), `stamp` (at, one-word text), `bars` (at, head, rows[{label, value}],
   illustrative), `point` (at, image, corner tl/tr/bl/br), `split` (from, to, media).
+- Effects on request (`custom`, `bg`, `side`, `"follow"`): §1c.
 - Limits enforced by the planner: a `list` has at most 4 items, `bars` at most 3 rows, `stamp` is exactly one word,
   `counter.to` is a number. Budgets (warnings): at most 2 graphics with `hit`, 1 `title`, no overlapping graphics.
 - B-roll: files in `<folder>/broll/`; for a web page the speaker talks about: `$CM shot <url> -o <folder>/broll/<name>.png`
@@ -134,7 +201,7 @@ Follow `frame.md`. Write `out/plan.json`:
 `$CM build <folder>/out` — fix every `cutmate:` error (it names the bad anchor and lists the segment's words) and think
 about every `WARN`. The last line prints `checkpoints: t1,t2,...`. Then, from the project dir (no path argument):
 `( cd <folder>/out/composition && rm -rf ../snapshots && npx --yes hyperframes@0.8.157 snapshot --at <checkpoints> --no-end --describe false -o ../snapshots )`
-(skip the snapshot when build printed no checkpoints) and READ every frame: overlaps, text wrapping, safe zones, captions readable, split panel shows the media. Fix
+(skip the snapshot when build printed no checkpoints; for every custom effect add at least two checkpoints, start and middle, and READ those frames — effects are new code) and READ every frame: overlaps, text wrapping, safe zones, captions readable, split panel shows the media. Fix
 `plan.json` and rebuild until clean.
 
 ## 7. Render and QA
@@ -156,5 +223,5 @@ question. Keep the title short (it wraps to at most 3 lines) and the hook to 2 l
 Write `out/EDIT_NOTES.md`: final structure (segments in order with times), which graphic is where and why, music,
 commands used. Send the user `final.mp4` (and the thumbnail).
 16:9: also hand over `chapters.txt` and, if it was written, `captions.srt`.
-When they reply with timestamps, batch all changes into
+When they reply with timestamps, log each as `[uwagi <mm:ss>]` in `requests.md` (§1c) and batch all changes into
 one rebuild + one render.
