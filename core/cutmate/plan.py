@@ -11,12 +11,12 @@ from pathlib import Path
 from .cut import load_timed
 from .errors import PlanError
 from .formats import format_of
-from .tracks import face_median, load_tracks, tracks_fresh
+from .tracks import face_median, gesture_at, load_tracks, tracks_fresh
 
 TYPES = ("title", "counter", "list", "chip", "stamp", "bars", "point", "split", "pip", "lower-third", "custom", "bg", "side")
 REQUIRED = {"title": ("at", "text"), "counter": ("at", "to", "label"), "list": ("items",), "chip": ("at", "text"),
             "stamp": ("at", "text"), "bars": ("at", "head", "rows"), "point": ("at", "image", "corner"),
-            "split": ("from", "to", "media"), "pip": ("from", "to", "media"), "lower-third": ("at", "name"),
+            "split": ("from", "to"), "pip": ("from", "to", "media"), "lower-third": ("at", "name"),
             "custom": ("name",), "bg": ("from", "to"), "side": ("from", "to")}
 TIMING_KEYS = ("type", "at", "from", "until", "hit", "sfx")
 CORNERS = ("tl", "tr", "bl", "br")
@@ -29,8 +29,9 @@ HOLDS = {"lower-third": 4.0}      # default hold per type (s); others use HOLD
 PIP_CORNERS = ("br", "bl")
 FOLLOW = ("face", "hand_left", "hand_right", "hand")
 NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,40}$")
-FADE = {"bg": 0.3, "side": 0.45}  # entrance / exit of an effect expanded from bg / side (s), matching their components
+FADE = {"bg": 0.3, "side": 0.45, "split": 0.45}  # entrance / exit of an effect expanded from bg / side (s), matching their components
 SIDE_PANEL = {"right": [60, 60, 840, 960], "left": [1020, 60, 840, 960]}  # x, y, w, h in 1920x1080 px
+SPLIT_PANEL = [40, 40, 1000, 820]  # x, y, w, h in 1080x1920 px (the .split-panel .media box)
 _PUNCT = ".,!?;:…\"'„\u201c\u201d()[]–—-"
 
 
@@ -97,6 +98,15 @@ def _media(rel, rec: Path, where: str) -> str:
     return str(p)
 
 
+def _media_or_effect(g: dict, params: dict, rec: Path, where: str) -> None:
+    if ("media" in g) == ("effect" in g):
+        raise PlanError(f'{where}: needs exactly one of "media" or "effect"')
+    if "media" in g:
+        params["media"] = _media(g["media"], rec, where)
+    elif not NAME_RE.match(str(g["effect"])):
+        raise PlanError(f"{where}: effect must be an effect name (e.g. space-bg)")
+
+
 def _range(g: dict, words: list[dict], end: float, where: str) -> tuple[float, float]:
     if "to" not in g:
         raise PlanError(f'{where}: missing "to"')
@@ -124,7 +134,10 @@ def _graphic(i: int, g, words: list[dict], end: float, rec: Path, fmt: str = "9:
     stop = None
     if t in ("split", "pip"):
         start, stop = _range(g, words, end, where)
-        params["media"] = _media(g["media"], rec, where)
+        if t == "split":
+            _media_or_effect(g, params, rec, where)
+        else:
+            params["media"] = _media(g["media"], rec, where)
         fit = g.get("fit", "cover" if t == "pip" else "contain")
         if fit not in ("contain", "cover"):
             raise PlanError(f"{where}: fit must be contain or cover")
@@ -166,19 +179,18 @@ def _graphic(i: int, g, words: list[dict], end: float, rec: Path, fmt: str = "9:
         if "region" in g and not (isinstance(r, list) and len(r) == 4 and all(
                 isinstance(x, (int, float)) and not isinstance(x, bool) and x >= 0 for x in r) and r[2] > 0 and r[3] > 0):
             raise PlanError(f"{where}: region must be [x, y, w, h] in px (non-negative numbers, w and h > 0)")
-        params = {k: g[k] for k in ("name", "follow", "params", "region") if k in g}
+        params = {k: g[k] for k in ("name", "follow", "params", "region", "place") if k in g}
+        if "media" in g:
+            if not isinstance(g["media"], str):
+                raise PlanError(f'{where}: "media" must be a file path')
+            params["media"] = _media(g["media"], rec, where)
     elif t in ("bg", "side"):
         start, stop = _range(g, words, end, where)
-        if ("media" in g) == ("effect" in g):
-            raise PlanError(f'{where}: needs exactly one of "media" or "effect"')
-        if "media" in g:
-            params["media"] = _media(g["media"], rec, where)
-        elif not NAME_RE.match(str(g["effect"])):
-            raise PlanError(f"{where}: effect must be an effect name (e.g. space-bg)")
+        _media_or_effect(g, params, rec, where)
         if t == "side":
             sp = g.get("speaker", "right")
-            if sp not in ("right", "left"):
-                raise PlanError(f"{where}: speaker must be right or left")
+            if sp not in ("right", "left", "gesture"):
+                raise PlanError(f"{where}: speaker must be right, left or gesture")
             params["speaker"] = sp
         params.pop("from", None)
         params.pop("to", None)
@@ -275,9 +287,37 @@ def _face(raw: dict, words: list[dict]) -> dict:
     return out
 
 
+def _resolve_gestures(gs: list[Graphic], tr: dict | None) -> list[str]:
+    """place/speaker "gesture" -> concrete values from the pointing tracks (before _expand, so regions follow)."""
+    uses = [g for g in gs if g.params.get("place") == "gesture" or g.params.get("speaker") == "gesture"]
+    if uses and tr is None:
+        g = uses[0]
+        raise PlanError(f"graphic #{g.index + 1} ({g.type}): gesture needs out/work/tracks.json (fresh) — run `cutmate track`")
+    w = []
+    for g in uses:
+        hit = gesture_at(tr["tracks"], g.start)
+        if g.params.get("place") == "gesture" and g.type in ("custom", "chip"):
+            if hit:
+                g.params["place_xy"] = [hit["x"], hit["y"]]
+            else:
+                w.append(f"WARN {g.type} at {g.start:.1f}s: no pointing gesture near the anchor — default position")
+        if g.params.get("speaker") == "gesture":
+            if hit:
+                g.params["speaker"] = "right" if hit["side"] == "left" else "left"
+            else:
+                g.params["speaker"] = "right"
+                w.append(f"WARN {g.type} at {g.start:.1f}s: no pointing gesture near the anchor — speaker right")
+    return w
+
+
 def _expand(gs: list[Graphic]) -> list[Graphic]:
     out = []
     for g in gs:
+        if g.type == "split" and "effect" in g.params:
+            out.append(g)
+            p = {"name": g.params["effect"], "_fade": FADE["split"], "region": list(SPLIT_PANEL)}
+            out.append(Graphic("custom", g.start, g.end, p, False, False, g.index))
+            continue
         if g.type in ("bg", "side") and "effect" in g.params:
             p = {"name": g.params["effect"], "_fade": FADE[g.type]}
             if g.type == "side":
@@ -288,8 +328,11 @@ def _expand(gs: list[Graphic]) -> list[Graphic]:
 
 
 def _expanded_pair(a: Graphic, b: Graphic) -> bool:
-    return (a.type == "custom" and b.type in ("bg", "side") and b.params.get("effect") == a.params.get("name")
-            and a.start == b.start and a.end == b.end)
+    if a.start != b.start or a.end != b.end:
+        return False
+    if a.type == "custom" and b.type in ("bg", "side"):
+        return b.params.get("effect") == a.params.get("name")
+    return a.type == "split" and b.type == "custom" and a.params.get("effect") == b.params.get("name")
 
 
 def _budget(gs: list[Graphic]) -> list[str]:
@@ -370,6 +413,7 @@ def load_plan(out_dir: Path, factcheck: bool = False) -> Plan:
         tr = None
     if any(g.params.get("follow") for g in gs) and tr is None:
         raise PlanError("follow needs out/work/tracks.json — run `cutmate track`")
+    gesture_warns = _resolve_gestures(gs, tr)
     gs = _expand(gs)
     for i, g in enumerate(gs):
         if g.end is None:
@@ -387,7 +431,7 @@ def load_plan(out_dir: Path, factcheck: bool = False) -> Plan:
                 fm = face_median(tr["tracks"], float(s["start"]), float(s["end"]))
                 if fm:
                     face[sid] = fm
-    warnings = _budget(gs) + _chapter_warnings(chapters, gs, end, min((w['start'] for w in words), default=0.0)) + (_factcheck(out, gs) if factcheck else [])
+    warnings = gesture_warns + _budget(gs) + _chapter_warnings(chapters, gs, end, min((w['start'] for w in words), default=0.0)) + (_factcheck(out, gs) if factcheck else [])
     cap = raw.get("captions") or {}
     if not isinstance(cap, dict):
         raise PlanError(f"{p}: \"captions\" must be a dict")

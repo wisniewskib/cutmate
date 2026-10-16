@@ -453,3 +453,80 @@ def test_load_plan_relative_out(tmp_path, monkeypatch):
     monkeypatch.chdir(out)
     g = load_plan(Path(".")).graphics[0]
     assert g.params["media"] == str((out.parent / "broll" / "x.png").resolve())
+
+
+def _point_tracks(out, x=0.8, y=0.4, t0=3.8, t1=4.6):
+    (out / "work" / "tracks.json").write_text(json.dumps({"fps": 15, "w": 1920, "h": 1080, "tracks": {
+        "face": [[t / 10, 0.45, 0.3, 0.9] for t in range(0, 100)],
+        "point_right": [[round(t0 + i * 0.1, 2), x, y, 0.9] for i in range(int((t1 - t0) * 10) + 1)]}}), encoding="utf-8")
+
+
+def test_split_effect_expansion(tmp_path):
+    out = make_out(tmp_path, {"graphics": [{"type": "split", "from": "S2:minus", "to": "S2:koniec.", "effect": "diagram"}]})
+    pl = load_plan(out)
+    a, b = pl.graphics
+    assert (a.type, b.type) == ("split", "custom")
+    assert a.params["effect"] == "diagram" and "media" not in a.params
+    assert b.params == {"name": "diagram", "_fade": 0.45, "region": [40, 40, 1000, 820]}
+    assert (a.start, a.end) == (b.start, b.end)
+    assert not any("overlaps" in w for w in pl.warnings)
+
+
+def test_split_media_and_effect_exclusive(tmp_path):
+    for extra in ({}, {"media": "x.png", "effect": "d"}):
+        out = make_out(tmp_path / str(len(extra)), {"graphics": [dict({"type": "split", "from": "S2:minus", "to": "S2:koniec."}, **extra)]})
+        with pytest.raises(PlanError, match='exactly one of "media" or "effect"'):
+            load_plan(out)
+
+
+def test_place_gesture_resolves(tmp_path):
+    out = make_out169(tmp_path, {"graphics": [{"type": "custom", "name": "arrow", "at": "S2:minus", "place": "gesture"}]})
+    _point_tracks(out)
+    g = load_plan(out).graphics[0]
+    assert g.params["place_xy"] == [0.8, 0.4]
+
+
+def test_place_gesture_without_gesture_warns(tmp_path):
+    out = make_out169(tmp_path, {"graphics": [{"type": "chip", "text": "tu", "at": "S2:minus", "place": "gesture"}]})
+    _point_tracks(out, t0=8.0, t1=8.5)
+    pl = load_plan(out)
+    assert "place_xy" not in pl.graphics[0].params
+    assert "WARN chip at 4.0s: no pointing gesture near the anchor — default position" in pl.warnings
+
+
+def test_place_gesture_needs_fresh_tracks(tmp_path):
+    g = {"graphics": [{"type": "custom", "name": "arrow", "at": "S2:minus", "place": "gesture"}]}
+    out = make_out169(tmp_path / "a", g)
+    with pytest.raises(PlanError, match=r"needs out/work/tracks.json \(fresh\) — run `cutmate track`"):
+        load_plan(out)
+    out = make_out169(tmp_path / "b", g)
+    _point_tracks(out)
+    _stale(out)
+    with pytest.raises(PlanError, match=r"needs out/work/tracks.json \(fresh\) — run `cutmate track`"):
+        load_plan(out)
+
+
+def test_side_speaker_gesture(tmp_path):
+    g = {"type": "side", "from": "S2:minus", "to": "S2:koniec.", "effect": "diagram", "speaker": "gesture"}
+    out = make_out169(tmp_path / "a", {"graphics": [g]})
+    _point_tracks(out, x=0.2)
+    gs = load_plan(out).graphics
+    assert gs[1].params["speaker"] == "right" and gs[0].params["region"] == [60, 60, 840, 960]
+    out = make_out169(tmp_path / "b", {"graphics": [g]})
+    _point_tracks(out, x=0.8)
+    gs = load_plan(out).graphics
+    assert gs[1].params["speaker"] == "left" and gs[0].params["region"] == [1020, 60, 840, 960]
+    out = make_out169(tmp_path / "c", {"graphics": [g]})
+    _point_tracks(out, t0=8.0, t1=8.5)
+    pl = load_plan(out)
+    assert pl.graphics[1].params["speaker"] == "right"
+    assert any(w.startswith("WARN side at 4.0s: no pointing gesture") for w in pl.warnings)
+
+
+def test_custom_media_param_resolved(tmp_path):
+    out = make_out169(tmp_path, {"graphics": [{"type": "custom", "name": "card", "at": "S2:minus", "media": "broll/a.png"}]})
+    with pytest.raises(PlanError, match=r"media not found: .*broll/a.png"):
+        load_plan(out)
+    (out.parent / "broll").mkdir()
+    (out.parent / "broll" / "a.png").write_bytes(b"x")
+    assert load_plan(out).graphics[0].params["media"] == str(out.parent / "broll" / "a.png")
