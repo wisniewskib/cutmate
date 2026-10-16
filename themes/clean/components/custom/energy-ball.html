@@ -1,20 +1,151 @@
 <markup><div class="fx-orb"></div></markup>
 <script>
+// Rasengan-style orb on the speaker's hand: swirling core + rotating spiral bands + wind rings + sparks spiralling out.
+// Enters with a flash (scale 0 -> 1.2 -> 1 in 0.3 s, bloom spike, shockwave), leaves by imploding into a point.
+// Follows P.track; without a track it sits at P.place, else params x / y (px), else the frame centre.
 const box = root.querySelector(".fx-orb");
-U.three({ el: box, bloom: { strength: 1.0, radius: 0.4, threshold: 0.15 } }).then((S) => {
-  const orb = U.glowOrb(S, { radius: P.radius || 0.45, colors: P.colors || ["#e0f7ff", "#38bdf8"], swirl: 1 });
-  const sparks = U.particles(S, { count: 180, seed: 7, life: 0.9, speed: 1.1, spin: 6, size: 0.08,
-                                  colors: ["#bae6fd"], emitter: () => [0, 0] });
+U.three({ el: box, bloom: { strength: 0.75, radius: 0.5, threshold: 0.3 } }).then((S) => {
+  const { THREE } = S;
+  const r = P.radius || 0.45;
+  const colors = P.colors || ["#e0f7ff", "#38bdf8"];
+  const cIn = new THREE.Color(colors[0]), cOut = new THREE.Color(colors[1] || colors[0]);
+  const clamp = (v) => Math.min(1, Math.max(0, v));
+  const out3 = (x) => 1 - Math.pow(1 - x, 3);
+  const add = { transparent: true, depthWrite: false, blending: THREE.AdditiveBlending };
+  const bloom = S.composer && S.composer.passes.find((p) => p.strength !== undefined);
+  const dotC = document.createElement("canvas"); dotC.width = dotC.height = 64;
+  const dg = dotC.getContext("2d"), gr = dg.createRadialGradient(32, 32, 0, 32, 32, 32);
+  gr.addColorStop(0, "rgba(255,255,255,1)"); gr.addColorStop(0.3, "rgba(255,255,255,0.5)"); gr.addColorStop(1, "rgba(255,255,255,0)");
+  dg.fillStyle = gr; dg.fillRect(0, 0, 64, 64);
+  const dot = new THREE.CanvasTexture(dotC);
+
+  const ball = new THREE.Group(); S.scene.add(ball);
+  // core: white-hot centre, fbm wind streaks wound into a spiral, coloured rim; kept dim so the bands read on top
+  const NOISE = [
+    "float h(vec3 p){ return fract(sin(dot(p, vec3(12.9898,78.233,37.719)))*43758.5453); }",
+    "float n(vec3 p){ vec3 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f);",
+    " return mix(mix(mix(h(i),h(i+vec3(1,0,0)),f.x),mix(h(i+vec3(0,1,0)),h(i+vec3(1,1,0)),f.x),f.y),",
+    "            mix(mix(h(i+vec3(0,0,1)),h(i+vec3(1,0,1)),f.x),mix(h(i+vec3(0,1,1)),h(i+vec3(1,1,1)),f.x),f.y),f.z); }",
+    "float fbm(vec3 p){ float s=0.0, a=0.5; for(int k=0;k<4;k++){ s+=a*n(p); p*=2.03; a*=0.5; } return s; }"].join("\n");
+  const coreMat = new THREE.ShaderMaterial(Object.assign({
+    uniforms: { uTime: { value: 0 }, uIn: { value: cIn }, uOut: { value: cOut }, uA: { value: 1 } },
+    vertexShader: "varying vec3 vP; varying vec3 vN; varying vec3 vV; void main(){ vP=normalize(position); vec4 mv=modelViewMatrix*vec4(position,1.0);"
+      + " vN=normalize(normalMatrix*normal); vV=normalize(-mv.xyz); gl_Position=projectionMatrix*mv; }",
+    fragmentShader: ["uniform float uTime; uniform vec3 uIn; uniform vec3 uOut; uniform float uA; varying vec3 vP; varying vec3 vN; varying vec3 vV;", NOISE,
+      "void main(){ float ndv=clamp(dot(normalize(vN), normalize(vV)),0.0,1.0);",
+      " float ph=atan(vP.z, vP.x), y=vP.y;",
+      " vec3 q=vec3(cos(ph*2.0 + y*4.0 - uTime*9.0), sin(ph*2.0 + y*4.0 - uTime*9.0), y*2.5 + uTime*0.7);",
+      " float st=smoothstep(0.48, 0.78, fbm(q*1.6 + vec3(0.0, 0.0, uTime*1.3)));",
+      " float hot=pow(ndv, 5.0);",
+      " vec3 c = mix(uIn, vec3(1.0), 0.4)*hot*0.6 + mix(uOut, uIn, 0.35)*st*0.75 + uOut*0.12*ndv + uOut*pow(1.0-ndv, 2.5)*0.75;",
+      " gl_FragColor=vec4(c*uA, 1.0); }"].join("\n"),
+  }, add));
+  const core = new THREE.Mesh(new THREE.SphereGeometry(r, 64, 48), coreMat); ball.add(core);
+
+  // spiral bands: bright stripes wound round the sphere, two sets turning against each other
+  const bandMat = new THREE.ShaderMaterial(Object.assign({
+    uniforms: { uTime: { value: 0 }, uIn: { value: cIn }, uOut: { value: cOut }, uA: { value: 1 } },
+    vertexShader: "varying vec3 vP; varying vec3 vN; void main(){ vP=normalize(position); vN=normalize(normalMatrix*normal); gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }",
+    fragmentShader: [
+      "uniform float uTime; uniform vec3 uIn; uniform vec3 uOut; uniform float uA; varying vec3 vP; varying vec3 vN;",
+      "void main(){ float ph=atan(vP.z, vP.x); float th=acos(clamp(vP.y,-1.0,1.0));",
+      " float b1=pow(0.5+0.5*sin(ph*3.0 + th*7.0 - uTime*13.0), 18.0);",
+      " float b2=pow(0.5+0.5*sin(ph*2.0 - th*5.0 + uTime*9.0), 24.0);",
+      " float fr=pow(1.0-abs(dot(vN, vec3(0.0,0.0,1.0))), 1.5);",
+      " float k=(b1*0.8 + b2*0.5) * (0.25 + 0.75*fr);",
+      " gl_FragColor=vec4(mix(uOut, uIn, b1*b1) * k * 0.9 * uA, 1.0); }"].join("\n"),
+  }, add));
+  const bands = new THREE.Mesh(new THREE.SphereGeometry(r * 1.06, 64, 48), bandMat); bands.material.side = THREE.DoubleSide; ball.add(bands);
+
+  // wind rings: thin tori whose bright arcs race round them
+  const ringMat = (sp) => new THREE.ShaderMaterial(Object.assign({
+    uniforms: { uTime: { value: 0 }, uC: { value: cOut.clone().lerp(cIn, 0.5) }, uA: { value: 1 }, uS: { value: sp } },
+    vertexShader: "varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }",
+    fragmentShader: "uniform float uTime; uniform vec3 uC; uniform float uA; uniform float uS; varying vec2 vUv;"
+      + " void main(){ float f=fract(vUv.x*2.0 - uTime*uS); float arc=smoothstep(0.0,0.55,f)*smoothstep(1.0,0.6,f); arc=pow(arc,2.0);"
+      + " gl_FragColor=vec4(uC*arc*0.9*uA, 1.0); }",
+  }, add));
+  const winds = [[1.32, 0.022, 1.1, 0.3, 2.4], [1.5, 0.016, -0.6, 1.2, -1.9], [1.22, 0.014, 0.2, -0.9, 3.1]].map(([k, th, rx, rz, sp]) => {
+    const m = new THREE.Mesh(new THREE.TorusGeometry(r * k, r * th, 8, 128), ringMat(sp));
+    m.userData = { rx, rz }; ball.add(m); return m;
+  });
+
+  // halo + entrance shockwave (in screen plane)
+  const halo = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial(Object.assign({ map: dot, color: cOut }, add)));
+  halo.scale.setScalar(r * 6); ball.add(halo);
+  const shock = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.ShaderMaterial(Object.assign({
+    uniforms: { uR: { value: 0 }, uA: { value: 0 }, uC: { value: cIn } },
+    vertexShader: "varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }",
+    fragmentShader: "uniform float uR; uniform float uA; uniform vec3 uC; varying vec2 vUv;"
+      + " void main(){ float d=length(vUv-0.5)*2.0; float k=exp(-pow((d-uR)/0.03,2.0)); gl_FragColor=vec4(uC*k*uA,1.0); }",
+  }, add)));
+  shock.scale.setScalar(r * 7); S.scene.add(shock);
+  const flash = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial(Object.assign({ map: dot, color: new THREE.Color(1, 1, 1) }, add)));
+  S.scene.add(flash);
+
+  // sparks spiralling out (stateless particles, world units)
+  const sparks = U.particles(S, { count: 220, seed: 7, life: 0.8, speed: r * 2.6, spin: 6, size: r * 0.16, colors: [colors[0]], emitter: () => [0, 0] });
+  sparks.points.material.map = dot; sparks.points.material.needsUpdate = true;
+  S.scene.remove(sparks.points); ball.add(sparks.points);
+
+  // implosion: motes sucked in on curved paths during the last 0.35 s
+  const NI = 70, ipos = new Float32Array(NI * 3), igeo = new THREE.BufferGeometry();
+  igeo.setAttribute("position", new THREE.BufferAttribute(ipos, 3));
+  const imp = new THREE.Points(igeo, new THREE.PointsMaterial(Object.assign({ map: dot, size: r * 0.2, color: cIn }, add)));
+  const rnd = U.seed(23);
+  const motes = Array.from({ length: NI }, () => ({ a: rnd() * 6.283, d: r * (1.8 + rnd() * 2.2), w: 2 + rnd() * 3, o: rnd() * 0.3 }));
+  S.scene.add(imp);
+
+  const fallback = P.place || (P.x != null && P.y != null ? [P.x, P.y] : [P.w / 2, P.h / 2]);
+  const hasTrack = P.track && P.track.length;
+  const lift = P.h * 0.037;                                  // sit just above the tracked hand point
+  const ENTER = 0.3, EXIT = 0.35;
   U.clock((t) => {
-    const p = U.trackAt(P.track, t);
-    const vis = p ? Math.min(1, Math.max(0, (t - P.at) / 0.25)) * Math.min(1, Math.max(0, (P.end - t) / 0.25)) : 0;
-    const w = p ? S.toWorld(p[0], p[1] - 40) : S.toWorld(P.w / 2, P.h / 2);
-    orb.group.position.copy(w);
-    orb.group.scale.setScalar(Math.max(0.001, vis));
-    sparks.points.position.copy(w);
-    sparks.points.material.opacity = vis;
-    orb.update(t);
-    sparks.update(t);
+    const p = hasTrack ? U.trackAt(P.track, t) : fallback;
+    const a = t - P.at, b = P.end - t;
+    const live = p && a >= 0 && b > 0;
+    ball.visible = shock.visible = flash.visible = imp.visible = !!live;
+    let spike = 0;
+    if (live) {
+      const w = S.toWorld(p[0], p[1] - (hasTrack ? lift : 0));
+      ball.position.copy(w); shock.position.copy(w); flash.position.copy(w); imp.position.copy(w);
+      let s = 1, body = 1;
+      if (a < ENTER) {                                        // 0 -> 1.2 (0.2 s) -> 1 (0.1 s)
+        s = a < 0.2 ? 1.2 * out3(a / 0.2) : 1.2 - 0.2 * out3((a - 0.2) / 0.1);
+        spike = 1 - a / ENTER;
+      }
+      const ex = clamp(1 - b / EXIT);                         // 0 -> 1 over the last EXIT seconds
+      if (ex > 0) {                                           // swell a little, then collapse to a point
+        s *= ex < 0.35 ? 1 + 0.15 * out3(ex / 0.35) : 1.15 * Math.pow(1 - (ex - 0.35) / 0.65, 2.2);
+        body = 1 - clamp((ex - 0.75) / 0.25);
+      }
+      ball.scale.setScalar(Math.max(0.001, s));
+      const se = clamp(a / 0.45);
+      shock.material.uniforms.uR.value = 0.1 + 0.85 * out3(se);
+      shock.material.uniforms.uA.value = a < 0.45 ? 0.9 * Math.pow(1 - se, 1.5) : 0;
+      const fIn = a < 0.25 ? Math.pow(1 - a / 0.25, 2) : 0;
+      const fOut = ex > 0.8 ? Math.sin(((ex - 0.8) / 0.2) * Math.PI) : 0;   // pop as it vanishes, dark again by P.end
+      flash.material.opacity = Math.max(fIn, fOut) * 0.8;
+      flash.scale.setScalar(r * (2 + 2.5 * Math.max(fIn, fOut)));
+      coreMat.uniforms.uTime.value = t; coreMat.uniforms.uA.value = body; core.rotation.set(0.3, t * 0.6, 0.2);
+      bandMat.uniforms.uTime.value = t; bandMat.uniforms.uA.value = body;
+      bands.rotation.set(t * 0.8, t * 1.9, 0);
+      winds.forEach((m, i) => {
+        m.rotation.set(m.userData.rx + Math.sin(t * 1.3 + i) * 0.25, t * (i % 2 ? -2.1 : 2.6), m.userData.rz);
+        m.material.uniforms.uTime.value = t; m.material.uniforms.uA.value = body * clamp((a - 0.08) / 0.2);
+      });
+      halo.material.opacity = 0.13 * body * (1 + 0.15 * Math.sin(t * 17));
+      sparks.update(t);
+      sparks.points.material.opacity = body * clamp((a - 0.05) / 0.2) * (1 - ex);
+      imp.visible = ex > 0;
+      motes.forEach((m, i) => {
+        const u = clamp((ex - m.o) / (1 - m.o)), d = m.d * Math.pow(1 - u, 1.6), ang = m.a + u * m.w;
+        ipos[i * 3] = Math.cos(ang) * d; ipos[i * 3 + 1] = Math.sin(ang) * d; ipos[i * 3 + 2] = 0;
+      });
+      igeo.attributes.position.needsUpdate = true;
+      imp.material.opacity = clamp(ex * 4) * (1 - clamp((ex - 0.85) / 0.15));
+    }
+    if (bloom) bloom.strength = 0.75 + 1.1 * spike;
     S.render();
   });
 });

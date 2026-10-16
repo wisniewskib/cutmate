@@ -173,3 +173,21 @@ def test_iso_machine_lint_and_index(tmp_path, monkeypatch):
     idx = {e["name"]: e for e in json.loads((BUNDLED / "index.json").read_text(encoding="utf-8"))}
     assert idx["iso-machine"]["kind"] == "explainer"
     assert {"parts", "token", "counter", "title"} <= set(idx["iso-machine"]["params"])
+
+
+@pytest.mark.parametrize("name,kind,params", [
+    ("energy-ball", "3d", {"radius", "colors"}),
+    ("showcase-3d", "3d", {"shape", "text", "model", "color", "x", "y"}),
+    ("burst", "vfx", {"colors", "x", "y"}),
+])
+def test_vfx_lint_and_index(tmp_path, monkeypatch, name, kind, params):
+    import json
+    monkeypatch.setenv("CUTMATE_HOME", str(tmp_path / "home"))
+    p = E.find_effect(name, tmp_path / "out", "clean")
+    assert p == BUNDLED / f"{name}.html"
+    E.lint_effect(p)
+    idx = {e["name"]: e for e in json.loads((BUNDLED / "index.json").read_text(encoding="utf-8"))}
+    assert idx[name]["kind"] == kind
+    assert params <= set(idx[name]["params"])
+    assert idx[name]["follow"] is (name == "energy-ball")
+    assert idx[name]["place"] is (name != "energy-ball")

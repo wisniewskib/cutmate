@@ -1,0 +1,190 @@
+<style>
+ROOT .fx-show { position: absolute; inset: 0; }
+</style>
+<markup><div class="fx-show"></div></markup>
+<script>
+// Hero 3D object next to the speaker: flies in on a curve from off-screen, turns, flies out.
+// shape "torus-knot" | "icosahedron" | "text" (TextGeometry) | "glb" (P.assets + model). Studio light: key + two rims +
+// hemisphere + RoomEnvironment reflections on a clearcoat physical material; fresnel rim glow, soft halo, dust motes.
+const box = root.querySelector(".fx-show");
+const cid = (root.closest("[data-composition-id]") || root).getAttribute("data-composition-id");
+const FONTS = "https://cdn.jsdelivr.net/npm/three@0.181.2/examples/fonts/";
+// the model: the graphic's "media" (copied by build, P.media), else P.model inside the effect folder (P.assets)
+const modelUrl = P.media && /\.(glb|gltf)$/i.test(P.media) ? P.media : P.model ? (P.assets || "") + P.model : null;
+const shape = ["torus-knot", "icosahedron", "text", "glb"].includes(P.shape) ? P.shape : (P.text ? "text" : modelUrl ? "glb" : "torus-knot");
+const ready = U.three({ el: box, bloom: { strength: 0.7, radius: 0.4, threshold: 1.6, alpha: "keep" } }).then(async (S) => {
+  const { THREE, scene, renderer } = S;
+  const clamp = (v) => Math.min(1, Math.max(0, v));
+  const out3 = (x) => 1 - Math.pow(1 - x, 3), in3 = (x) => x * x * x;
+  const UPX = 6.3 / P.h;                                       // world units per px at z 0
+  const base = new THREE.Color(P.color || "#7c3aed");
+  const hsl = {}; base.getHSL(hsl);
+  const rimA = new THREE.Color().setHSL((hsl.h + 0.5) % 1, 0.9, 0.6), rimB = new THREE.Color().setHSL((hsl.h + 0.08) % 1, 0.95, 0.65);
+
+  // bloom with alpha "keep" alone paints the whole frame black (the bloom composite writes alpha 1 everywhere), so keep
+  // a copy of the clean render and rebuild alpha after the bloom: object pixels keep their own alpha, the added glow
+  // gets alpha from its brightness and lands on the video like light
+  const { SavePass } = await import("three/addons/postprocessing/SavePass.js");
+  const { ShaderPass } = await import("three/addons/postprocessing/ShaderPass.js");
+  const save = new SavePass();
+  S.composer.insertPass(save, 1);
+  const merge = new ShaderPass({ uniforms: { tDiffuse: { value: null }, tBase: { value: null } },
+    vertexShader: "varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }",
+    fragmentShader: "uniform sampler2D tDiffuse; uniform sampler2D tBase; varying vec2 vUv; void main(){ vec4 b=texture2D(tBase,vUv);"
+      + " vec3 g=max(texture2D(tDiffuse,vUv).rgb-b.rgb,0.0); float ga=clamp(max(g.r,max(g.g,g.b)),0.0,1.0); gl_FragColor=vec4(b.rgb+g, max(b.a,ga)); }",
+  });
+  merge.uniforms.tBase.value = save.renderTarget.texture;     // after construction: ShaderPass clones its uniforms
+  S.composer.insertPass(merge, 3);
+  renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 0.8;
+  const { RoomEnvironment } = await import("three/addons/environments/RoomEnvironment.js");
+  const pm = new THREE.PMREMGenerator(renderer);
+  scene.environment = pm.fromScene(new RoomEnvironment(), 0.04).texture; scene.environmentIntensity = 0.55;
+  scene.add(new THREE.HemisphereLight(0xdbeafe, 0x1e1b4b, 0.45));
+  const key = new THREE.DirectionalLight(0xfff4e6, 1.8); key.position.set(-4, 5, 6); scene.add(key);
+  const rim1 = new THREE.DirectionalLight(rimA, 5); rim1.position.set(5, 2, -6); scene.add(rim1);
+  const rim2 = new THREE.DirectionalLight(rimB, 4); rim2.position.set(-6, -1, -5); scene.add(rim2);
+
+  // geometry
+  let obj, isText = false;
+  const phys = (o) => new THREE.MeshPhysicalMaterial(Object.assign({ color: base, metalness: 0.5, roughness: 0.2, clearcoat: 1,
+    clearcoatRoughness: 0.06, iridescence: 0.45, iridescenceIOR: 1.4, envMapIntensity: 0.8 }, o || {}));
+  async function textMesh(str) {
+    const { FontLoader } = await import("three/addons/loaders/FontLoader.js");
+    const { TextGeometry } = await import("three/addons/geometries/TextGeometry.js");
+    // helvetiker has no Polish letters: anything outside it uses Droid Sans Bold (has ąćęłńóśźż); glyphs neither has
+    // are reduced to ASCII (diacritics stripped) or dropped
+    const ascii = /^[\x20-\x7e]*$/.test(str);
+    const font = await new FontLoader().loadAsync(FONTS + (ascii ? "helvetiker_bold" : "droid/droid_sans_bold") + ".typeface.json");
+    const g = font.data.glyphs;
+    const safe = Array.from(str).map((ch) => (g[ch] || ch === " " ? ch : (ch.normalize("NFD").replace(/[̀-ͯ]/g, "")
+      .replace("ł", "l").replace("Ł", "L")))).filter((ch) => g[ch] || ch === " ").join("");
+    const geo = new TextGeometry(safe || "?", { font, size: 1, depth: 0.32, curveSegments: 10, bevelEnabled: true,
+                                                bevelThickness: 0.05, bevelSize: 0.035, bevelSegments: 5 });
+    geo.computeBoundingBox(); geo.center();
+    return new THREE.Mesh(geo, phys({ metalness: 0.45, roughness: 0.38, clearcoat: 0.35, clearcoatRoughness: 0.25, iridescence: 0.15 }));
+  }
+  if (shape === "glb" && modelUrl) {
+    try {
+      const { GLTFLoader } = await import("three/addons/loaders/GLTFLoader.js");
+      const gl = await new GLTFLoader().loadAsync(modelUrl);
+      obj = gl.scene;
+      const bb = new THREE.Box3().setFromObject(obj), c = bb.getCenter(new THREE.Vector3());
+      obj.position.sub(c);
+      const wrap = new THREE.Group(); wrap.add(obj); obj = wrap;
+    } catch (e) { obj = null; }
+  }
+  if (!obj && shape === "text") { obj = await textMesh(String(P.text || "3D")); isText = true; rim1.intensity = 1.6; rim2.intensity = 1.2; }
+  if (!obj && shape === "icosahedron") {                      // faceted metal gem, glowing edge struts, spinning core
+    const geo = new THREE.IcosahedronGeometry(1, 0);
+    obj = new THREE.Group();
+    obj.add(new THREE.Mesh(geo, phys({ flatShading: true, metalness: 0.9, roughness: 0.14, iridescence: 0.6, envMapIntensity: 1.1 })));
+    const edgeMat = new THREE.MeshBasicMaterial({ color: rimB.clone().lerp(new THREE.Color(1, 1, 1), 0.35).multiplyScalar(2.4), toneMapped: false });
+    const ep = new THREE.EdgesGeometry(geo).attributes.position, A = new THREE.Vector3(), B = new THREE.Vector3(), Y = new THREE.Vector3(0, 1, 0);
+    for (let i = 0; i < ep.count; i += 2) {
+      A.fromBufferAttribute(ep, i); B.fromBufferAttribute(ep, i + 1);
+      const strut = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, A.distanceTo(B), 6), edgeMat);
+      strut.position.copy(A).add(B).multiplyScalar(0.5);
+      strut.quaternion.setFromUnitVectors(Y, B.clone().sub(A).normalize());
+      strut.userData.noRim = true; obj.add(strut);
+    }
+    const vtx = new THREE.SphereGeometry(0.04, 12, 8), vp = geo.attributes.position, seen = new Set();
+    for (let i = 0; i < vp.count; i++) {
+      A.fromBufferAttribute(vp, i); const k = A.toArray().map((v) => v.toFixed(3)).join();
+      if (seen.has(k)) continue; seen.add(k);
+      const nub = new THREE.Mesh(vtx, edgeMat); nub.position.copy(A); nub.userData.noRim = true; obj.add(nub);
+    }
+  }
+  if (!obj) obj = new THREE.Mesh(new THREE.TorusKnotGeometry(1, 0.34, 320, 48, 2, 3), phys());
+
+  // fresnel rim glow on every mesh (additive overlay on the same geometry)
+  const rimMat = new THREE.ShaderMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+    polygonOffset: true, polygonOffsetFactor: -1, uniforms: { uA: { value: rimA }, uB: { value: rimB }, uK: { value: 1 } },
+    vertexShader: "varying vec3 vN; varying vec3 vV; void main(){ vec4 mv=modelViewMatrix*vec4(position,1.0); vN=normalize(normalMatrix*normal); vV=normalize(-mv.xyz); gl_Position=projectionMatrix*mv; }",
+    fragmentShader: "uniform vec3 uA; uniform vec3 uB; uniform float uK; varying vec3 vN; varying vec3 vV;"
+      + " void main(){ float f=pow(1.0-clamp(abs(dot(normalize(vN),normalize(vV))),0.0,1.0),3.0); vec3 c=mix(uB,uA,clamp(vN.x*0.5+0.5,0.0,1.0)); gl_FragColor=vec4(c*f*2.6*uK,1.0); }" });
+  const meshes = []; obj.traverse((m) => { if (m.isMesh) meshes.push(m); });
+  meshes.forEach((m) => { if (!m.userData.noRim) { const r = new THREE.Mesh(m.geometry, rimMat); m.add(r); } });
+
+  // fit: size param = fraction of the shorter frame side (default 0.4; text fits its width instead)
+  const bb = new THREE.Box3().setFromObject(obj), sz = bb.getSize(new THREE.Vector3());
+  const minWH = Math.min(P.w, P.h);
+  let scale;
+  if (isText) {
+    const twPx = Math.min(P.w * 0.86, Math.max(minWH * 0.45, minWH * 0.095 * Math.max(3, String(P.text || "").length)));
+    scale = (twPx * UPX * (P.size ? P.size / 0.4 : 1)) / sz.x;
+  } else {
+    scale = ((P.size || 0.4) * minWH * UPX) / Math.max(sz.x, sz.y, sz.z);
+  }
+  const holder = new THREE.Group(); holder.add(obj); obj.scale.setScalar(scale); scene.add(holder);
+  const halfPx = Math.max(sz.x, sz.y) * scale / UPX / 2;
+
+  // where: gesture place > x/y params > right third; kept inside the frame
+  let px = P.place ? P.place[0] : P.x != null ? P.x : P.w * 0.75;
+  let py = P.place ? P.place[1] : P.y != null ? P.y : P.h * 0.45;
+  const mx = Math.min(P.w / 2, sz.x * scale / UPX / 2 + P.w * 0.03), my = Math.min(P.h / 2, sz.y * scale / UPX / 2 + P.h * 0.03);
+  px = Math.min(P.w - mx, Math.max(mx, px)); py = Math.min(P.h - my, Math.max(my, py));
+  const home = S.toWorld(px, py);
+  const side = px >= P.w / 2 ? 1 : -1;                         // enter from the near edge, leave over the top
+  const p0 = S.toWorld(px + side * (P.w * 0.5 + halfPx * 2), py + P.h * 0.35, -3);
+  const c0 = S.toWorld(px + side * P.w * 0.18, py + P.h * 0.12, 1.5);
+  const p2 = S.toWorld(px - side * P.w * 0.1, -halfPx * 2.5 - P.h * 0.2, 2);
+  const c2 = S.toWorld(px + side * P.w * 0.05, py - P.h * 0.15, 1);
+  const bez = (a, c, b, u) => new THREE.Vector3().copy(a).multiplyScalar((1 - u) * (1 - u)).addScaledVector(c, 2 * u * (1 - u)).addScaledVector(b, u * u);
+
+  // soft halo behind + dust motes
+  const dotC = document.createElement("canvas"); dotC.width = dotC.height = 64;
+  const dg = dotC.getContext("2d"), gr = dg.createRadialGradient(32, 32, 0, 32, 32, 32);
+  gr.addColorStop(0, "rgba(255,255,255,1)"); gr.addColorStop(0.3, "rgba(255,255,255,0.5)"); gr.addColorStop(1, "rgba(255,255,255,0)");
+  dg.fillStyle = gr; dg.fillRect(0, 0, 64, 64);
+  const dot = new THREE.CanvasTexture(dotC);
+  const R = halfPx * UPX;
+  const halo = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: dot, color: rimA.clone().lerp(base, 0.5),
+    transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
+  halo.scale.setScalar(R * 3.4); halo.position.z = -R * 1.2; holder.add(halo);
+  const rnd = U.seed(P.seed || 5);
+  const ND = 90, dpos = new Float32Array(ND * 3), dcol = new Float32Array(ND * 3);
+  const dgeo = new THREE.BufferGeometry();
+  dgeo.setAttribute("position", new THREE.BufferAttribute(dpos, 3)); dgeo.setAttribute("color", new THREE.BufferAttribute(dcol, 3));
+  const dust = new THREE.Points(dgeo, new THREE.PointsMaterial({ map: dot, size: minWH * 0.009 * UPX, vertexColors: true, transparent: true,
+    blending: THREE.AdditiveBlending, depthWrite: false }));
+  const motes = Array.from({ length: ND }, () => ({ r: R * (1.1 + rnd() * 1.6), a: rnd() * 6.283, y: (rnd() - 0.5) * R * 2.6,
+    w: (0.15 + rnd() * 0.35) * (rnd() < 0.5 ? -1 : 1), z: (rnd() - 0.5) * R * 2, tw: 1 + rnd() * 3, ph: rnd() * 6.283,
+    c: rnd() < 0.5 ? rimA : rimB }));
+  scene.add(dust);
+
+  const span = Math.max(0.6, P.end - P.at);
+  const tin = Math.min(0.8, span * 0.32), tout = Math.min(0.55, span * 0.25);
+  const col = new THREE.Color();
+  U.clock((t) => {
+    const a = t - P.at, b = P.end - t;
+    const on = a >= 0 && b > 0;
+    holder.visible = dust.visible = on;
+    if (on) {
+      let pos, extra = 0, k = 1;
+      if (a < tin) { const u = out3(a / tin); pos = bez(p0, c0, home, u); extra = (1 - u) * 5; k = clamp(a / (tin * 0.4)); }
+      else if (b < tout) { const u = in3(1 - b / tout); pos = bez(home, c2, p2, u); extra = -u * 3; }
+      else pos = home.clone();
+      const idle = a;
+      pos.y += Math.sin(idle * 1.7) * R * 0.05;
+      holder.position.copy(pos);
+      if (isText) { obj.rotation.set(Math.sin(idle * 0.9) * 0.08, Math.sin(idle * 0.75) * 0.35 + extra * side * 0.5, Math.sin(idle * 1.1) * 0.03); }
+      else { obj.rotation.set(0.35 + Math.sin(idle * 0.7) * 0.3 + extra * 0.3, idle * 0.9 + extra * side, Math.sin(idle * 0.5) * 0.15); }
+      holder.scale.setScalar(Math.max(0.001, k));
+      const settle = clamp((a - tin * 0.6) / 0.5) * clamp(b / tout);
+      halo.material.opacity = (isText ? 0.05 : 0.09) * settle;
+      rimMat.uniforms.uK.value = (0.7 + 0.3 * Math.sin(idle * 2.2)) * (isText ? 0.3 : 1);   // bevels catch too much rim
+      const dv = clamp((a - tin * 0.5) / 0.6) * clamp(b / (tout * 0.8));
+      motes.forEach((m, i) => {
+        const ang = m.a + idle * m.w;
+        dpos[i * 3] = home.x + Math.cos(ang) * m.r; dpos[i * 3 + 1] = home.y + m.y + Math.sin(idle * 0.6 + m.ph) * R * 0.15;
+        dpos[i * 3 + 2] = home.z + Math.sin(ang) * m.r * 0.6 + m.z * 0.3;
+        col.copy(m.c).multiplyScalar(dv * (0.35 + 0.65 * Math.pow(0.5 + 0.5 * Math.sin(idle * m.tw + m.ph), 2)));
+        dcol[i * 3] = col.r; dcol[i * 3 + 1] = col.g; dcol[i * 3 + 2] = col.b;
+      });
+      dgeo.attributes.position.needsUpdate = true; dgeo.attributes.color.needsUpdate = true;
+    }
+    S.render();
+  });
+});
+window.__hf.buildReady[cid] = ready;                          // fonts / models load before the first frame is taken
+</script>

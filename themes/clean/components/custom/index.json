@@ -2,10 +2,12 @@
   {
     "name": "energy-ball",
     "kind": "3d",
-    "description": "Glowing energy orb with sparks that sits on the speaker's hand (Rasengan-style).",
+    "description": "Rasengan-style energy orb on the speaker's hand: swirling core, spiral bands, wind rings and sparks spiralling out; enters with a flash and shockwave, implodes at the end.",
     "params": {
       "radius": "orb radius in world units (default 0.45)",
-      "colors": "[inner, outer] colours (default [\"#e0f7ff\", \"#38bdf8\"])"
+      "colors": "[inner, outer] colours (default [\"#e0f7ff\", \"#38bdf8\"])",
+      "x": "optional px position when there is no hand track (else gesture place, else centre)",
+      "y": "optional px position when there is no hand track"
     },
     "follow": true,
     "place": false
@@ -68,5 +70,34 @@
     },
     "follow": false,
     "place": false
+  },
+  {
+    "name": "showcase-3d",
+    "kind": "3d",
+    "description": "Hero 3D object beside the speaker: flies in on a curve from off-screen, turns slowly and flies out. Glossy clearcoat material under studio light (key, two coloured rims, reflections), rim glow, halo and floating dust. Shapes: torus knot, faceted gem, 3D text or your own GLB model.",
+    "params": {
+      "shape": "\"torus-knot\" (default), \"icosahedron\" (faceted gem with glowing edges), \"text\" or \"glb\"",
+      "text": "the word for shape \"text\" (extruded; Polish letters use Droid Sans Bold)",
+      "model": "GLB file for shape \"glb\": put the graphic-level \"media\": \"broll/<file>.glb\" (build copies it), or a file name inside the effect folder (P.assets); falls back to the torus knot if it cannot load",
+      "color": "base colour (default \"#7c3aed\"); rim lights use its complement",
+      "size": "object size as a fraction of the shorter frame side (default 0.4)",
+      "x": "optional px x of the centre (default: gesture place, else the right third)",
+      "y": "optional px y of the centre (default: gesture place, else 45% down)"
+    },
+    "follow": false,
+    "place": true
+  },
+  {
+    "name": "burst",
+    "kind": "vfx",
+    "description": "One-shot impact (0.6-1.0 s): white flash, double shockwave ring, streak sparks with drag and gravity, falling embers.",
+    "params": {
+      "colors": "[core, sparks, ring] colours (default [\"#ffffff\", \"#fde68a\", \"#fb923c\"])",
+      "size": "reach multiplier (default 1 = 20% of the shorter frame side)",
+      "x": "optional px x (default: gesture place, else centre)",
+      "y": "optional px y (default: gesture place, else centre)"
+    },
+    "follow": false,
+    "place": true
   }
 ]
