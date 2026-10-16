@@ -1,9 +1,10 @@
 """Contract test for a theme pack: every component renders in a real HyperFrames build.
 
-Builds a synthetic video in the given format (test-pattern A-roll, synthetic words; 9:16 24 s, 16:9 36 s) with one
-graphic per component type of that format (9:16: + a video split; 16:9: + a video pip, a chapter plate and a third
-segment with the stock energy-ball effect on a synthetic hand track, a bg and a side), runs `hyperframes check`,
-snapshots each graphic and tiles a contact sheet.
+Builds a synthetic video in the given format (test-pattern A-roll, synthetic words; 9:16 24 s, 16:9 48 s) with one
+graphic per component type of that format (9:16: + a video split; 16:9: + a video pip, a chapter plate, a third
+segment with the stock energy-ball effect on a synthetic hand track, a bg and a side, and a fourth (punched-in)
+segment with a bg and a side drawn by a small DOM effect), runs `hyperframes check`, snapshots each graphic and tiles
+a contact sheet.
 """
 import json
 import math
@@ -52,7 +53,19 @@ GRAPHICS_169 = [
     {"type": "custom", "name": "energy-ball", "from": "S3:słowo1", "to": "S3:słowo6", "follow": "hand"},
     {"type": "bg", "from": "S3:słowo8", "to": "S3:słowo11", "media": "broll/page.png"},
     {"type": "side", "from": "S3:słowo13", "to": "S3:słowo17", "media": "broll/page.png", "speaker": "right"},
+    {"type": "bg", "from": "S4:słowo1", "to": "S4:słowo2", "effect": "tc-fx"},              # ~1 s: bg removal is slow
+    {"type": "side", "from": "S4:słowo6", "to": "S4:słowo9", "effect": "tc-fx", "speaker": "left"},
 ]
+# a DOM effect for the bg / side "effect" path: a full-size gradient and a dot that starts half outside the left edge
+# (in the side panel it must be clipped at the panel's edge)
+TC_FX = """<style>ROOT .tc { position: absolute; inset: 0; background: linear-gradient(135deg, #0f172a, #1d4ed8 60%, #7dd3fc); }
+ROOT .tc-dot { position: absolute; left: -120px; top: 40%; width: 240px; height: 240px; border-radius: 50%; background: #f472b6; }</style>
+<markup><div class="tc"><div class="tc-dot"></div></div></markup>
+<script>
+const dot = root.querySelector(".tc-dot");
+tl.fromTo(dot, { x: 0 }, { x: P.w, duration: Math.max(0.3, P.end - P.at), ease: "none" }, P.at);
+</script>
+"""
 CHAPTERS_169 = [{"at": "S1:0%", "title": "Intro"}, {"at": "S2:0%", "title": "Drugi rozdział ąę"}]
 SEG = 12.0
 
@@ -70,7 +83,7 @@ def _synthetic_rec(root: Path, fmt: str = "9:16") -> Path:
     (out / "work").mkdir(parents=True, exist_ok=True)
     (rec / "broll").mkdir(exist_ok=True)
     aroll_size = "1920x1080" if fmt == "16:9" else "1080x1920"
-    nseg = 3 if fmt == "16:9" else 2
+    nseg = 4 if fmt == "16:9" else 2
     (out / "edl.json").write_text(json.dumps({"format": fmt, "segments": []}), encoding="utf-8")
     for dst, size, d in ((out / "aroll.mp4", aroll_size, round(nseg * SEG)), (rec / "broll" / "clip.mp4", "1280x720", 3)):
         r = run(["ffmpeg", "-nostdin", "-v", "error", "-y", "-f", "lavfi", "-i", f"testsrc2=size={size}:rate=30:duration={d}",
@@ -93,7 +106,9 @@ def _synthetic_rec(root: Path, fmt: str = "9:16") -> Path:
     plan = {"captions": {"key": ["SŁOWO3"]}, "graphics": GRAPHICS_169 if fmt == "16:9" else GRAPHICS_916}
     if fmt == "16:9":
         plan["chapters"] = CHAPTERS_169
-        plan["face"] = {"S1": [0.5, 0.35], "S2": [0.45, 0.35], "S3": [0.5, 0.35]}
+        plan["face"] = {"S1": [0.5, 0.35], "S2": [0.45, 0.35], "S3": [0.5, 0.35], "S4": [0.5, 0.35]}
+        (out / "custom").mkdir(exist_ok=True)
+        (out / "custom" / "tc-fx.html").write_text(TC_FX, encoding="utf-8")
         tracks = {"tracks": {"hand_right": _hand_track(2 * SEG + 0.6, 2 * SEG + 4.2)}}
         (out / "work" / "tracks.json").write_text(json.dumps(tracks), encoding="utf-8")
     (out / "plan.json").write_text(json.dumps(plan, ensure_ascii=False), encoding="utf-8")
