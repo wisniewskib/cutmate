@@ -37,7 +37,9 @@
     const ang = r() * Math.PI * 2, sp = (o.speed || 100) * (0.4 + r() * 0.6), size = (o.size || 4) * (0.5 + r());
     const life = o.life || 1, born = (i / o.count) * life;
     const age = ((t - born) % life + life) % life;
-    const [ex, ey] = o.emitter(t - age);
+    const e = o.emitter(t - age);
+    if (!e) return { x: 0, y: 0, alpha: 0, size, color: (o.colors || ["#ffffff"])[0] };
+    const [ex, ey] = e;
     const a2 = ang + (o.spin || 0) * age;
     return { x: ex + Math.cos(a2) * sp * age, y: ey + Math.sin(a2) * sp * age, alpha: 1 - age / life, size,
              color: (o.colors || ["#ffffff"])[Math.floor(r() * (o.colors || [1]).length)] };

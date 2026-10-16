@@ -390,7 +390,7 @@ def subcomp(cid: str, g: Graphic, host_start: float, theme: Path, assets: Path, 
         # hyperframes lint checks each composition for a Three.js import; ours comes from the importmap in index.html
         script = '// import("three") is resolved by the importmap in index.html (U.three)\n' + script
     return SUBCOMP.format(lang=lang, cid=cid, w=W, h=H, dur=round(g.end - host_start, 3), root=root, u_open=u_open,
-                          u_close=u_close, fade=fade, style=sec.get("style", "").replace("ROOT", f"#{cid}"),
+                          u_close=u_close, fade=fade, style=sec.get("style", "").replace("ROOT", f"#{cid} > .cm-region" if region else f"#{cid}"),
                           markup=markup, params=_js(P), script=script)
 
 

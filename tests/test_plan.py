@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 import pytest
 
@@ -442,3 +443,13 @@ def test_auto_face_ignores_stale_tracks(tmp_path):
     _stale(out)
     pl = load_plan(out)
     assert pl.face == {"S1": [0.2, 0.2]} and pl.tracks is None
+
+
+def test_load_plan_relative_out(tmp_path, monkeypatch):
+    out = make_out(tmp_path, {"graphics": [
+        {"type": "split", "from": "S2:minus", "to": "S2:Claude'a", "media": "broll/x.png"}]})
+    (out.parent / "broll").mkdir()
+    (out.parent / "broll" / "x.png").write_bytes(b"x")
+    monkeypatch.chdir(out)
+    g = load_plan(Path(".")).graphics[0]
+    assert g.params["media"] == str((out.parent / "broll" / "x.png").resolve())

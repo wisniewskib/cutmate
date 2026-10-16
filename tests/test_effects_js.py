@@ -17,6 +17,7 @@ console.log(JSON.stringify({
   farBefore: F.trackAt(tr, -1), farAfter: F.trackAt(tr, 9), inGap: F.trackAt(gap, 0.6), gapEdge: F.trackAt(gap, 1.1),
   p1: F.particleState(3, 1.25, {count: 10, seed: 4, life: 1, speed: 100, spin: 2, emitter: (t) => [0, 0]}),
   p2: F.particleState(3, 1.25, {count: 10, seed: 4, life: 1, speed: 100, spin: 2, emitter: (t) => [0, 0]}),
+  pn: F.particleState(0, 1.0, {count: 1, seed: 1, life: 1, emitter: () => null}),
 }));
 """
 
@@ -29,6 +30,7 @@ def test_pure_helpers():
     assert d["mid"] == [200, 300] and d["before"] == [100, 200] and d["after"] == [300, 400] and d["empty"] is None
     assert d["farBefore"] is None and d["farAfter"] is None                  # > 0.25 s outside the samples
     assert d["inGap"] is None and d["gapEdge"] == [300, 400]                 # samples > 0.5 s apart: no position
+    assert d["pn"]["alpha"] == 0                                  # null emitter: invisible, no throw
     assert d["p1"] == d["p2"] and 0 <= d["p1"]["alpha"] <= 1      # stateless: same t → same particle
 
 

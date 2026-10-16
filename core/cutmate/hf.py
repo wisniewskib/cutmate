@@ -27,7 +27,24 @@ def ensure_project(proj: Path, fmt: str = "9:16") -> None:
     proj.parent.mkdir(parents=True, exist_ok=True)
     env = {**os.environ, "HYPERFRAMES_SKIP_SKILLS": "1"}
     res = "landscape" if fmt == "16:9" else "portrait"
-    r = run(hf("init", proj.name, "--non-interactive", "--example=blank", f"--resolution={res}"), cwd=proj.parent, env=env)
-    if r.returncode or not (proj / "hyperframes.json").exists():
-        tail = " ".join((r.stdout + r.stderr).split())[-300:]
-        raise CutmateError(f"hyperframes init failed in {proj.parent}: {tail}")
+    tmp = proj.parent / f".cm-init-{proj.name}"
+    shutil.rmtree(tmp, ignore_errors=True)
+    try:
+        r = run(hf("init", tmp.name, "--non-interactive", "--example=blank", f"--resolution={res}"), cwd=proj.parent, env=env)
+        if r.returncode or not (tmp / "hyperframes.json").exists():
+            tail = " ".join((r.stdout + r.stderr).split())[-300:]
+            raise CutmateError(f"hyperframes init failed in {proj.parent}: {tail}")
+        _merge(tmp, proj)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def _merge(src: Path, dst: Path) -> None:
+    """Move src's entries into dst, never overwriting existing files."""
+    dst.mkdir(parents=True, exist_ok=True)
+    for e in src.iterdir():
+        t = dst / e.name
+        if e.is_dir() and t.is_dir():
+            _merge(e, t)
+        elif not t.exists():
+            shutil.move(str(e), str(t))

@@ -1,6 +1,7 @@
 import json
 import re
 import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -709,3 +710,32 @@ def test_three_effect_has_lint_visible_import(out169, theme):
     write_plan(out169, {"graphics": [{"type": "custom", "name": "cube", "at": "S2:minus"}]})
     sub = (B.build(out169, theme=theme)["project"] / "compositions" / "gx-01-custom.html").read_text(encoding="utf-8")
     assert re.search(r"\b(?:import|from)\s*[^;\n]*['\"][^'\"]*three[^'\"]*['\"]", sub)   # hyperframes missing_three_script rule
+
+
+def test_region_root_css(out169, theme):
+    _fx(out169, "diagram", "<style>ROOT .x { color: red; }</style>\n<markup><div class=\"x\"></div></markup>\n<script>U.clock(() => {});</script>")
+    write_plan(out169, {"graphics": [{"type": "side", "from": "S2:minus", "to": "S2:</script>", "effect": "diagram"}]})
+    proj = B.build(out169, theme=theme)["project"]
+    sub = (proj / "compositions" / "gx-01-custom.html").read_text(encoding="utf-8")
+    assert "#gx-01-custom > .cm-region .x" in sub
+    assert "#gx-01-custom .x" not in sub
+
+
+def test_ensure_project_with_existing_dir(tmp_path, monkeypatch):
+    from cutmate import hf as H
+    proj = tmp_path / "out" / "composition"
+    (proj / ".media" / "images").mkdir(parents=True)
+    (proj / ".media" / "images" / "a.jpg").write_bytes(b"jpg")
+
+    def fake_run(cmd, cwd=None, env=None, **kw):
+        target = Path(cwd) / cmd[cmd.index("init") + 1]
+        assert not target.exists()
+        target.mkdir()
+        (target / "hyperframes.json").write_text("{}")
+        (target / "index.html").write_text("<html>")
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+    monkeypatch.setattr(H, "run", fake_run)
+    H.ensure_project(proj)
+    assert (proj / "hyperframes.json").exists() and (proj / "index.html").exists()
+    assert (proj / ".media" / "images" / "a.jpg").read_bytes() == b"jpg"
+    assert [p.name for p in proj.parent.iterdir()] == ["composition"]

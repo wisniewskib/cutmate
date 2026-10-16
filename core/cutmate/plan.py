@@ -332,7 +332,7 @@ def _factcheck(out: Path, gs: list[Graphic]) -> list[str]:
 
 
 def load_plan(out_dir: Path, factcheck: bool = False) -> Plan:
-    out = Path(out_dir)
+    out = Path(out_dir).resolve()
     p = out / "plan.json"
     if not p.exists():
         raise PlanError(f"{p} not found — write the plan first")
