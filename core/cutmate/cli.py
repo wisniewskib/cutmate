@@ -124,6 +124,8 @@ def _parser() -> argparse.ArgumentParser:
     se.add_argument("--theme")
     se.add_argument("--description", default="")
     se.add_argument("--force", action="store_true")
+    rq = sub.add_parser("requests", help="match out/requests.md (\"zrozumiałem tak\") against the plan")
+    rq.add_argument("out")
     return ap
 
 
@@ -228,6 +230,13 @@ def _dispatch(args) -> int:
     elif args.cmd == "save-effect":
         from .effects import save_effect
         print(save_effect(Path(args.out), args.name, args.theme or cfg.theme, args.description, args.force))
+    elif args.cmd == "requests":
+        from .asks import check_requests
+        lines = check_requests(Path(args.out))
+        for ln in lines:
+            print(ln)
+        print(f"requests: {sum(ln.startswith('OK') for ln in lines)} ok, "
+              f"{sum(ln.startswith('MISSING') for ln in lines)} missing")
     return 0
 
 
