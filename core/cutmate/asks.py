@@ -68,7 +68,11 @@ def check_requests(out_dir: Path) -> list[str]:
         if not r["anchor"]:
             lines.append(f"BAD  {label} (no anchor)")
             continue
-        lo, hi = _range(r["anchor"], timed, words, end)
+        try:
+            lo, hi = _range(r["anchor"], timed, words, end)
+        except CutmateError as e:
+            lines.append(f"BAD  {label} ({' '.join(str(e).split())})")
+            continue
         found = any((g.type == r["target"] or r["target"] == f"custom:{g.params.get('name')}")
                     and lo <= g.start <= hi for g in plan.graphics)
         lines.append((f"OK   {label}" if found else f"MISSING {label}"))

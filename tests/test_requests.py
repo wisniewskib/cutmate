@@ -54,3 +54,30 @@ def test_corrupt_plan_is_one_line_error(tmp_path, capsys):
     (tmp_path / "plan.json").write_text("{nope")
     assert main(["requests", str(tmp_path)]) == 2
     assert capsys.readouterr().err.startswith("cutmate: ")
+
+
+def _setup(tmp_path, md):
+    out = tmp_path / "rec" / "out"
+    (out / "work").mkdir(parents=True)
+    words = [{"seg": "S1", "word": "a", "start": 0.1, "end": 0.4}, {"seg": "S2", "word": "75%", "start": 4.4, "end": 5.0}]
+    (out / "work" / "aligned_words.json").write_text(json.dumps(words), encoding="utf-8")
+    (out / "work" / "edl_timed.json").write_text(json.dumps([{"id": "S1", "start": 0, "end": 3.5}, {"id": "S2", "start": 3.5, "end": 10}]))
+    (out / "edl.json").write_text('{"format": "16:9", "segments": []}')
+    (out / "custom").mkdir()
+    (out / "plan.json").write_text(json.dumps({"graphics": [
+        {"type": "pip", "from": "S2:75%", "to": "S2:75%", "media": "b.png"}]}))
+    (out.parent / "b.png").write_bytes(b"x")
+    (out / "requests.md").write_text(md, encoding="utf-8")
+    return out
+
+
+def test_unresolvable_anchors_are_bad_lines(tmp_path):
+    out = _setup(tmp_path, "- [c] a → pip @ S9\n- [c] b → pip @ S2:nonexistent\n- [c] c → pip @ S2\n")
+    lines = check_requests(out)
+    assert lines[0].startswith("BAD") and lines[1].startswith("BAD")
+    assert lines[2].startswith("OK")
+
+
+def test_graphic_outside_window_is_missing(tmp_path):
+    out = _setup(tmp_path, "- [c] a → pip @ S1\n")
+    assert check_requests(out)[0].startswith("MISSING")
