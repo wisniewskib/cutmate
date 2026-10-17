@@ -131,6 +131,10 @@ def _parser() -> argparse.ArgumentParser:
     cs.add_parser("show", help="print the effective config as JSON")
     cst = cs.add_parser("set", help="set KEY=VALUE pairs (e.g. language=en music.volume=0.3)")
     cst.add_argument("pairs", nargs="+", metavar="PAIR")
+    st = sub.add_parser("selftest", help="transcription test with word timestamps on your own clip")
+    st.add_argument("--clip", type=Path)
+    st.add_argument("--backend", choices=config.BACKENDS)
+    st.add_argument("--language", choices=config.LANGUAGES)
     sub.add_parser("doctor", help="health report (JSON): packages, models, GPU, keys, config")
     md = sub.add_parser("models", help="download the local models (alignment, whisper, face/hand tracking)")
     md.add_argument("--language", choices=config.LANGUAGES)
@@ -238,6 +242,13 @@ def _dispatch(args) -> int:
         t = transcribe_window(get_backend(args.backend or cfg.transcription), Path(args.wav), args.start, args.end,
                               language, args.prompt)
         print(" ".join(f"{w.word}@{w.start:.2f}-{w.end:.2f}" for w in t.words))
+    elif args.cmd == "selftest":
+        from .selftest import selftest
+        r = selftest(get_backend(args.backend or cfg.transcription), language, args.clip)
+        comp = f" · compute: {r['compute']}" if r["compute"] else ""
+        print(f"backend: {r['backend']} · device: {r['device']}{comp}")
+        print(f"words: {len(r['words'])} in {r['seconds']:.1f} s for {r['audio']:.1f} s of audio")
+        print("first: " + " ".join(f"{w.word}@{w.start:.2f}-{w.end:.2f}" for w in r["words"][:8]))
     elif args.cmd == "track":
         from .tracks import load_tracks, track
         p = track(Path(args.out), force=args.force)
