@@ -96,3 +96,57 @@ def test_detect_ps1_runs():
     out = subprocess.run([shutil.which("pwsh"), "-NoProfile", "-File", str(ROOT / "install/detect.ps1")],
                          capture_output=True, text=True, check=True).stdout
     assert set(json.loads(out)) == TOP
+
+
+def run_setup(tmp_path, *args):
+    env = {**os.environ, "CUTMATE_HOME": str(tmp_path / "cm")}
+    return subprocess.run(["bash", str(ROOT / "install" / "setup.sh"), *args],
+                          capture_output=True, text=True, env=env)
+
+
+def test_setup_sh_dry_run_nvidia(tmp_path):
+    r = run_setup(tmp_path, "--gpu", "nvidia", "--local", "--dry-run")
+    assert r.returncode == 0, r.stderr
+    venv = tmp_path / "cm" / "venv"
+    assert f"-m venv {venv}" in r.stdout
+    assert "download.pytorch.org/whl/cpu" in r.stdout
+    assert "[align,track,faster]" in r.stdout
+    assert "nvidia-cublas-cu12" in r.stdout
+    assert "nvidia-cudnn-cu12==9.*" in r.stdout
+    assert r.stdout.splitlines()[-1] == f"cutmate: {venv}/bin/cutmate"
+    assert not (tmp_path / "cm").exists()
+
+
+def test_setup_sh_dry_run_api(tmp_path):
+    r = run_setup(tmp_path, "--gpu", "none", "--dry-run")
+    assert r.returncode == 0, r.stderr
+    assert "[align,track]" in r.stdout
+    assert "faster" not in r.stdout
+    assert "nvidia-" not in r.stdout
+
+
+def test_setup_sh_dry_run_apple(tmp_path):
+    r = run_setup(tmp_path, "--gpu", "apple", "--local", "--dry-run")
+    assert r.returncode == 0, r.stderr
+    assert "[align,track,mlx]" in r.stdout
+    assert "whl/cpu" not in r.stdout
+
+
+def test_setup_sh_bad_arg(tmp_path):
+    assert run_setup(tmp_path, "--gpu", "amd").returncode == 2
+
+
+def test_setup_ps1_parity():
+    t = (ROOT / "install" / "setup.ps1").read_text(encoding="utf-8")
+    for s in ["nvidia-cublas-cu12", "nvidia-cudnn-cu12==9.*", "download.pytorch.org/whl/cpu",
+              "align,track", "faster", "-DryRun", "CUTMATE_HOME"]:
+        assert s in t
+
+
+@pytest.mark.skipif(not shutil.which("pwsh"), reason="pwsh not installed")
+def test_setup_ps1_dry_run(tmp_path):
+    env = {**os.environ, "CUTMATE_HOME": str(tmp_path / "cm")}
+    r = subprocess.run([shutil.which("pwsh"), "-NoProfile", "-File", str(ROOT / "install" / "setup.ps1"),
+                        "-Gpu", "nvidia", "-Local", "-DryRun"],
+                       capture_output=True, text=True, env=env)
+    assert "nvidia-cudnn-cu12==9.*" in r.stdout
