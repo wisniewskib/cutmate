@@ -235,8 +235,9 @@ def _dispatch(args) -> int:
         lines = check_requests(Path(args.out))
         for ln in lines:
             print(ln)
-        print(f"requests: {sum(ln.startswith('OK') for ln in lines)} ok, "
-              f"{sum(ln.startswith('MISSING') for ln in lines)} missing, {sum(ln.startswith('BAD') for ln in lines)} bad")
+        body = [ln.removeprefix("SURPRISE ") for ln in lines]      # surprises count like any other request
+        print(f"requests: {sum(ln.startswith('OK') for ln in body)} ok, "
+              f"{sum(ln.startswith('MISSING') for ln in body)} missing, {sum(ln.startswith('BAD') for ln in body)} bad")
     return 0
 
 

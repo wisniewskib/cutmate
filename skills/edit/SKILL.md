@@ -64,7 +64,7 @@ The user can ask for things the built-in components don't cover. Collect every r
   person ("tutaj ma być", "dodaj", "przenosisz mnie", "zrób"). These segments never go into the EDL unless they are
   also content. Jokes / filler with no content ("Test.", "Twerk.") are cut like false starts and listed as `→ cut`.
 - `[uwagi <mm:ss>]` — feedback after a render.
-- `[niespodzianka]` — your own surprises (see "Zaskocz mnie" below); `$CM requests` lists them as `SURPRISE OK|MISSING`.
+- `[niespodzianka]` — your own surprises (see "Zaskocz mnie" below); `$CM requests` lists them with a `SURPRISE` prefix (`SURPRISE OK|MISSING|BAD|NOTE`; the summary counts them like other lines).
 
 Film-wide request "chcę explainery" → `- [czat] explainery → explainers` (a NOTE; the explainers themselves are `→ explainer @ S3`, matched by a `split`/`side` graphic with an `effect`).
 
@@ -92,7 +92,7 @@ Templates (params; `?` = optional):
 - `flow`: nodes (2–6), edges?, style (`clean`|`rough`), title?, seed?, accent?
 - `ui-mock`: kind (`chat`|`terminal`|`post`), lines [{who: `user`|`ai`|`cmd`, text}], title?, accent?
 - `iso-machine`: parts (2–5) [{label, shape: `box`|`cylinder`|`funnel`|`screen`|`gear`, color?}], token?, counter? {to, label}, title?, theme (`light`|`dark`), accent?
-VFX/3D: `showcase-3d` (shape `torus-knot`|`icosahedron`|`text`|`glb`, text?, color?, x?, y?, place; GLB via graphic-level `"media": "broll/x.glb"`), `burst` (x?, y?, place).
+VFX/3D (both support `"place": "gesture"`): `showcase-3d` (shape `torus-knot`|`icosahedron`|`text`|`glb`, text?, model?, color?, size?, x?, y?; GLB via graphic-level `"media": "broll/x.glb"`; default spot: right third), `burst` (colors?, size?, x?, y?; default spot: frame CENTRE, i.e. over the face — for surprises always pass x/y or place).
 
 **Gesture placement:** when a spoken command says "tutaj / tu / tam / w tym miejscu" without naming a place, write `"place": "gesture"` (custom / chip) or `"speaker": "gesture"` (side: the panel goes to the screen side the speaker points to). A named place ("w prawym dolnym rogu", "po lewej") always wins — then do NOT write gesture. Run `$CM track <folder>/out` first (fresh tracks needed; stale → build error, no pointing gesture near the word → build WARN and the default position).
 

@@ -116,3 +116,27 @@ def test_explainer_targets(tmp_path):
     assert lines[1].startswith("OK") and lines[2].startswith("MISSING")
     assert lines[3].startswith("SURPRISE OK")
     assert lines[4].startswith("SURPRISE MISSING")
+
+
+def test_surprise_bad_note_and_summary(tmp_path, capsys):
+    from cutmate.cli import main
+    out = _setup(tmp_path, "- [niespodzianka] a → custom:x @ S1\n- [niespodzianka] b → cut\n"
+                           "- [niespodzianka] c → pip @ S9\n- [niespodzianka] d → pip @ S2\n")
+    lines = check_requests(out)
+    assert [ln.split()[:2] for ln in lines] == [["SURPRISE", "MISSING"], ["SURPRISE", "NOTE"],
+                                                ["SURPRISE", "BAD"], ["SURPRISE", "OK"]]
+    assert main(["requests", str(out)]) == 0
+    assert capsys.readouterr().out.strip().splitlines()[-1] == "requests: 1 ok, 1 missing, 1 bad"
+
+
+def test_explainer_split_916(tmp_path):
+    out = _setup(tmp_path, "- [czat] a → explainer @ S2\n- [czat] b → explainer @ S2:75%\n")
+    (out / "edl.json").write_text('{"format": "9:16", "segments": []}')
+    (out / "plan.json").write_text(json.dumps({"graphics": [
+        {"type": "split", "from": "S1:a", "to": "S1:a", "effect": "flow", "params": {}},
+        {"type": "split", "from": "S2:75%", "to": "S2:75%", "media": "b.png"}]}))
+    lines = check_requests(out)
+    assert lines[0].startswith("MISSING") and lines[1].startswith("MISSING")
+    (out / "plan.json").write_text(json.dumps({"graphics": [
+        {"type": "split", "from": "S2:75%", "to": "S2:75%", "effect": "flow", "params": {}}]}))
+    assert all(ln.startswith("OK") for ln in check_requests(out))

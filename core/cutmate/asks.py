@@ -78,19 +78,19 @@ def check_requests(out_dir: Path) -> list[str]:
             lines.append(f"BAD  {r['error']}")
             continue
         label = f"[{r['source']}] {r['what']} → {r['target']}" + (f" @ {r['anchor']}" if r["anchor"] else "")
-        surprise = r["source"] == "niespodzianka"
+        pre = "SURPRISE " if r["source"] == "niespodzianka" else ""
         if r["target"] in _NOTES or r["target"] == "explainers":
-            lines.append(f"NOTE {label}")
+            lines.append(f"{pre}NOTE {label}")
             continue
         if not r["anchor"]:
-            lines.append(f"BAD  {label} (no anchor)")
+            lines.append(f"{pre}BAD  {label} (no anchor)")
             continue
         try:
             lo, hi = _range(r["anchor"], timed, words, end)
         except CutmateError as e:
-            lines.append(f"BAD  {label} ({' '.join(str(e).split())})")
+            lines.append(f"{pre}BAD  {label} ({' '.join(str(e).split())})")
             continue
         found = any(_matches(g, r["target"]) and lo <= g.start <= hi for g in plan.graphics)
         status = "OK  " if found else "MISSING"
-        lines.append(f"SURPRISE {status.strip()} {label}" if surprise else f"{status} {label}")
+        lines.append(f"{pre}{status} {label}")
     return lines
