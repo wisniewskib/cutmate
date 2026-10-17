@@ -81,6 +81,48 @@ def test_setup_skill_pauses_for_api_key():
         assert s in md, s
 
 
+def _music_examples(md):
+    return re.findall(r'"music":\s*\{[^}]*\}', md)
+
+
+def test_edit_skill_example_keeps_config_music_volume():
+    md = _skill("edit")
+    assert _music_examples(md)
+    assert all('"volume": 0.45' not in m for m in _music_examples(md))
+    assert "omit `volume` to use the config `music.volume`" in md
+
+
+def test_edit_skill_heygen_resolve_json():
+    md = _skill("edit")
+    resolves = [l for l in re.findall(r"media-use resolve --type bgm[^`\n]*", md)]
+    assert resolves and all("--json" in r for r in resolves)
+    assert "take the local audio file path from the JSON; check it exists" in md
+
+
+def test_setup_skill_finished_marker():
+    md = _skill("setup")
+    marker = "${CUTMATE_HOME:-$HOME/.cutmate}/smoke/rec/out/final.mp4"
+    assert marker in md
+    step0 = md[md.index("## 0. Re-run"):md.index("## 1. Detect")]
+    assert marker in step0 and "steps 7–10" in step0 and "Którą sekcję zmienić?" in step0
+
+
+def test_setup_skill_windows_path_restart():
+    md = _skill("setup")
+    sec = md[md.index("## 2. System dependencies"):md.index("## 3. Transcription")]
+    assert "winget" in sec and "restart Claude Code and run /cutmate:setup again" in sec
+
+
+def test_setup_skill_translate_labels():
+    assert "the labels below are Polish; translate them to the user's language, keep the mapping" in _skill("setup")
+
+
+def test_setup_skill_stale_editable_install():
+    md = _skill("setup")
+    step0 = md[md.index("## 0. Re-run"):md.index("## 1. Detect")]
+    assert "plugin_root" in step0 and "${CLAUDE_PLUGIN_ROOT}" in step0 and "setup.sh" in step0
+
+
 def test_edit_skill_uses_setup_venv():
     md = _skill("edit")
     assert "${CUTMATE_HOME:-$HOME/.cutmate}/venv/bin/cutmate" in md

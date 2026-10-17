@@ -218,8 +218,9 @@ Follow `frame.md`. Write `out/plan.json`:
  "graphics": [
    {"type": "counter", "at": "S2:75", "to": 75, "prefix": "-", "suffix": "%", "label": "TOKENÓW", "hit": true},
    {"type": "split", "from": "S5:Po", "to": "S5:zwięźle.", "media": "broll/caveman-repo.png"}],
- "music": {"volume": 0.45}}
+ "music": {"src": "/abs/path/bed.mp3"}}
 ```
+- `music`: only for a heygen bed (`src`, see Music below; folder music is automatic — then leave `music` out); omit `volume` to use the config `music.volume` (a `volume` here overrides it).
 - Anchors: `"S2:word"` (first occurrence in segment S2), `"S2:word#2"` (second), or seconds into the video. `"S2:75"`
   also matches the spoken `75%`. Optional on any graphic: `until` (anchor or seconds), `hit`, `sfx`.
 - Components: `title` (at, text, kicker?, logo?), `counter` (at, to, prefix?, suffix?, label), `list` (items[{text, at}],
@@ -233,8 +234,8 @@ Follow `frame.md`. Write `out/plan.json`:
 - Music: config `music.source` = `folder` → automatic (first audio file in config `music.folder`); `heygen` → check
   sign-in with `npx --yes hyperframes@0.8.157 media-use resolve --doctor`; if not signed in, use no music and note it
   in EDIT_NOTES (never sign in for them, no extra pause); if signed in:
-  `npx --yes hyperframes@0.8.157 media-use resolve --type bgm --intent "<mood>" --project <folder>/out/composition`
-  and put the file's ABSOLUTE path in `plan.music.src`; `none` → no music.
+  `npx --yes hyperframes@0.8.157 media-use resolve --type bgm --intent "<mood>" --project <folder>/out/composition --json`;
+  take the local audio file path from the JSON; check it exists, and put its ABSOLUTE path in `plan.music.src`; `none` → no music.
 
 ## 6. Build and look
 
