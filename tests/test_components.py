@@ -25,7 +25,7 @@ def test_split_uses_media_tag():
 
 
 @pytest.mark.hf
-@pytest.mark.parametrize("fmt, n", [("9:16", 9), ("16:9", 16)])
+@pytest.mark.parametrize("fmt, n", [("9:16", 19), ("16:9", 21)])
 def test_theme_check_clean(tmp_path, fmt, n):
     from PIL import Image
     from cutmate.theme_check import theme_check

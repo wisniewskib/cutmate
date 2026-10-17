@@ -1,10 +1,10 @@
 """Contract test for a theme pack: every component renders in a real HyperFrames build.
 
-Builds a synthetic video in the given format (test-pattern A-roll, synthetic words; 9:16 24 s, 16:9 48 s) with one
-graphic per component type of that format (9:16: + a video split; 16:9: + a video pip, a chapter plate, a third
+Builds a synthetic video in the given format (test-pattern A-roll, synthetic words, 48 s) with one graphic per
+component type of that format (9:16: + a video split, the four stock explainers in split panels and a burst; 16:9: + a video pip, a chapter plate, a third
 segment with the stock energy-ball effect on a synthetic hand track, a bg and a side, and a fourth (punched-in)
-segment with a bg and a side drawn by a small DOM effect), runs `hyperframes check`, snapshots each graphic and tiles
-a contact sheet.
+segment with a bg and a side drawn by a small DOM effect and a showcase-3d), runs `hyperframes check`, snapshots each
+graphic (custom effects also at their middle, as the edit skill asks) and tiles a contact sheet.
 """
 import json
 import math
@@ -17,6 +17,7 @@ from .build import build
 from .errors import CutmateError
 from .hf import hf
 from .media import run
+from .plan import load_plan
 
 WORDS_PER_SEG = 20
 
@@ -34,6 +35,19 @@ GRAPHICS_916 = [
     {"type": "point", "at": "S2:słowo7", "until": "S2:słowo8", "image": "broll/page.png", "corner": "tr"},
     {"type": "split", "from": "S2:słowo11", "to": "S2:słowo13", "media": "broll/page.png"},
     {"type": "split", "from": "S2:słowo16", "to": "S2:słowo18", "media": "broll/clip.mp4"},
+    # stock explainers in the split panel, and a one-shot burst at a fixed point
+    {"type": "split", "from": "S3:słowo1", "to": "S3:słowo6", "effect": "stat-card",
+     "params": {"value": 75, "suffix": "%", "label": "mniej tokenów w każdej odpowiedzi", "note": "dane przykładowe"}},
+    {"type": "split", "from": "S3:słowo11", "to": "S3:słowo16", "effect": "flow",
+     "params": {"title": "Jak to działa", "nodes": ["Nagranie", "Transkrypcja", "Plan", "Gotowy film"]}},
+    {"type": "custom", "name": "burst", "from": "S3:słowo18", "to": "S3:słowo19", "params": {"x": 760, "y": 1240}},
+    {"type": "split", "from": "S4:słowo1", "to": "S4:słowo6", "effect": "ui-mock",
+     "params": {"kind": "chat", "title": "Asystent", "lines": [
+         {"who": "user", "text": "Wytnij pauzy z nagrania"}, {"who": "ai", "text": "Gotowe: usunąłem 14 pauz, film jest krótszy o 38 s."}]}},
+    {"type": "split", "from": "S4:słowo11", "to": "S4:słowo16", "effect": "iso-machine",
+     "params": {"title": "Od nagrania do filmu", "token": "cube", "counter": {"to": 12, "label": "klipów"}, "parts": [
+         {"label": "Wejście", "shape": "funnel"}, {"label": "Cięcie", "shape": "cylinder"},
+         {"label": "Podgląd", "shape": "screen"}, {"label": "Napęd", "shape": "gear"}]}},
 ]
 GRAPHICS_169 = [
     {"type": "title", "at": "S1:słowo1", "until": "S1:słowo3", "kicker": "Kicker", "text": "Tytuł ąę"},
@@ -55,6 +69,7 @@ GRAPHICS_169 = [
     {"type": "side", "from": "S3:słowo13", "to": "S3:słowo17", "media": "broll/page.png", "speaker": "right"},
     {"type": "bg", "from": "S4:słowo1", "to": "S4:słowo2", "effect": "tc-fx"},              # ~1 s: bg removal is slow
     {"type": "side", "from": "S4:słowo6", "to": "S4:słowo9", "effect": "tc-fx", "speaker": "left"},
+    {"type": "custom", "name": "showcase-3d", "from": "S4:słowo12", "to": "S4:słowo18", "params": {"shape": "torus-knot"}},
 ]
 # a DOM effect for the bg / side "effect" path: a full-size gradient and a dot that starts half outside the left edge
 # (in the side panel it must be clipped at the panel's edge)
@@ -83,7 +98,7 @@ def _synthetic_rec(root: Path, fmt: str = "9:16") -> Path:
     (out / "work").mkdir(parents=True, exist_ok=True)
     (rec / "broll").mkdir(exist_ok=True)
     aroll_size = "1920x1080" if fmt == "16:9" else "1080x1920"
-    nseg = 4 if fmt == "16:9" else 2
+    nseg = 4
     (out / "edl.json").write_text(json.dumps({"format": fmt, "segments": []}), encoding="utf-8")
     for dst, size, d in ((out / "aroll.mp4", aroll_size, round(nseg * SEG)), (rec / "broll" / "clip.mp4", "1280x720", 3)):
         r = run(["ffmpeg", "-nostdin", "-v", "error", "-y", "-f", "lavfi", "-i", f"testsrc2=size={size}:rate=30:duration={d}",
@@ -126,8 +141,9 @@ def theme_check(theme: str = "clean", workdir: Path | None = None, language: str
     snaps = proj / "snapshots"
     for old in snaps.glob("frame-*.png"):
         old.unlink()
-    cps = list(r["checkpoints"])
-    at = ",".join(f"{t:.2f}" for t in sorted(cps))
+    mids = {round((g.start + g.end) / 2, 2) for g in load_plan(out).graphics if g.type == "custom"}
+    cps = sorted(set(r["checkpoints"]) | mids)
+    at = ",".join(f"{t:.2f}" for t in cps)
     snap = run(hf("snapshot", "--at", at, "--no-end", "--describe", "false", "-o", "snapshots"), cwd=proj)
     shots = sorted(snaps.glob("frame-*.png"))
     if snap.returncode or len(shots) != len(cps):
@@ -139,4 +155,4 @@ def theme_check(theme: str = "clean", workdir: Path | None = None, language: str
         sheet.paste(t, ((i % 5) * tw, (i // 5) * th))
     sheet_path = out / f"theme-check-{theme}-{fmt.replace(':', 'x')}.png"
     sheet.save(sheet_path)
-    return {"project": proj, "sheet": sheet_path, "snapshots": shots}
+    return {"project": proj, "sheet": sheet_path, "snapshots": shots, "times": cps}

@@ -105,6 +105,8 @@ def _media_or_effect(g: dict, params: dict, rec: Path, where: str) -> None:
         params["media"] = _media(g["media"], rec, where)
     elif not NAME_RE.match(str(g["effect"])):
         raise PlanError(f"{where}: effect must be an effect name (e.g. space-bg)")
+    elif "params" in g and not isinstance(g["params"], dict):
+        raise PlanError(f'{where}: "params" must be an object')
 
 
 def _range(g: dict, words: list[dict], end: float, where: str) -> tuple[float, float]:
@@ -316,10 +318,14 @@ def _expand(gs: list[Graphic]) -> list[Graphic]:
         if g.type == "split" and "effect" in g.params:
             out.append(g)
             p = {"name": g.params["effect"], "_fade": FADE["split"], "region": list(SPLIT_PANEL)}
+            if "params" in g.params:
+                p["params"] = g.params["params"]
             out.append(Graphic("custom", g.start, g.end, p, False, False, g.index))
             continue
         if g.type in ("bg", "side") and "effect" in g.params:
             p = {"name": g.params["effect"], "_fade": FADE[g.type]}
+            if "params" in g.params:
+                p["params"] = g.params["params"]
             if g.type == "side":
                 p["region"] = list(SIDE_PANEL[g.params["speaker"]])
             out.append(Graphic("custom", g.start, g.end, p, False, False, g.index))

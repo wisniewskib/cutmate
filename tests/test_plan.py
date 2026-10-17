@@ -530,3 +530,11 @@ def test_custom_media_param_resolved(tmp_path):
     (out.parent / "broll").mkdir()
     (out.parent / "broll" / "a.png").write_bytes(b"x")
     assert load_plan(out).graphics[0].params["media"] == str(out.parent / "broll" / "a.png")
+
+
+def test_effect_params_forwarded_to_expanded_custom(tmp_path):
+    gs = [{"type": "split", "from": "S2:minus", "to": "S2:koniec.", "effect": "stat-card", "params": {"value": 75}}]
+    custom = load_plan(make_out(tmp_path / "a", {"graphics": gs})).graphics[1]
+    assert custom.params["params"] == {"value": 75}
+    with pytest.raises(PlanError, match='"params" must be an object'):
+        load_plan(make_out(tmp_path / "b", {"graphics": [dict(gs[0], params=[1])]}))

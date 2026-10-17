@@ -45,11 +45,11 @@ U.three({ el: box, bloom: { strength: 0.8, radius: 0.5, threshold: 0.25 } }).the
   const rings = [0, 1].map(() => { const m = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), ringMat()); group.add(m); return m; });
 
   const rnd = U.seed(P.seed || 11);
-  const N = 54;
+  const N = 84;
   const sparks = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial(Object.assign({ map: streak }, add)), N);
   sparks.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   const sp = Array.from({ length: N }, () => ({ a: rnd() * Math.PI * 2, v: R * (3.0 + rnd() * 4.5), k: 3.0 + rnd() * 2.0,
-                                                life: LEN * (0.45 + rnd() * 0.5), w: 0.6 + rnd() * 0.8, hot: rnd() }));
+                                                life: LEN * (0.6 + rnd() * 0.4), w: 0.7 + rnd() * 0.9, hot: rnd() }));
   for (let i = 0; i < N; i++) sparks.setColorAt(i, cCore);
   group.add(sparks);
   const NE = 36, epos = new Float32Array(NE * 3), ecol = new Float32Array(NE * 3);
@@ -83,13 +83,13 @@ U.three({ el: box, bloom: { strength: 0.8, radius: 0.5, threshold: 0.25 } }).the
         const d = (s.v / k) * (1 - Math.exp(-k * age)), vel = s.v * Math.exp(-k * age);
         const x = Math.cos(s.a) * d, y = Math.sin(s.a) * d - 0.5 * g * age * age;
         const vx = Math.cos(s.a) * vel, vy = Math.sin(s.a) * vel - g * age;
-        const len = Math.max(R * 0.06, Math.hypot(vx, vy) * 0.11), ang = Math.atan2(vy, vx);
+        const len = Math.max(R * 0.12, Math.hypot(vx, vy) * 0.13), ang = Math.atan2(vy, vx);
         q.setFromAxisAngle(Z, ang);
         v3.set(x - Math.cos(ang) * len / 2, y - Math.sin(ang) * len / 2, 0);
-        s3.set(life >= 1 ? 0.0001 : len, R * 0.045 * s.w, 1);
+        s3.set(life >= 1 ? 0.0001 : len, R * 0.06 * s.w, 1);
         m4.compose(v3, q, s3); sparks.setMatrixAt(i, m4);
-        const fade = Math.pow(1 - life, 1.4);
-        col.copy(cCore).lerp(cSpark, clamp(life * 1.6 + s.hot * 0.3)).multiplyScalar(fade * 1.1);
+        const fade = Math.pow(1 - life, 0.8);
+        col.copy(cCore).lerp(cSpark, clamp(life * 1.6 + s.hot * 0.3)).multiplyScalar(fade * 1.4);
         sparks.setColorAt(i, col);
       });
       sparks.instanceMatrix.needsUpdate = true; if (sparks.instanceColor) sparks.instanceColor.needsUpdate = true;

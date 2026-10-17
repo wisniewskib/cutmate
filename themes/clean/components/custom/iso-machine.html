@@ -635,7 +635,7 @@ U.three({ el: stage }).then((S) => {
       Lb.line.setAttribute("x2", Lb.ax + (Lb.ex - Lb.ax) * e);
       Lb.line.setAttribute("y2", Lb.ay + (Lb.ey - Lb.ay) * e);
       Lb.line.style.opacity = q > 0 ? 1 : 0;
-      Lb.dot.setAttribute("r", 7 * s * backOut(clamp(q * 2)));
+      Lb.dot.setAttribute("r", Math.max(0, 7 * s * backOut(clamp(q * 2))));
       Lb.dot.style.opacity = q > 0 ? 1 : 0;
       const c = clamp((t - Lb.t0 - 0.15) / 0.35);
       Lb.el.style.opacity = c;
