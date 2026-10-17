@@ -33,5 +33,6 @@ def selftest(backend, language: str, clip: Path | None = None, limit: float = 30
     if not words or any(w.start >= w.end for w in words):
         raise BackendError(f"{backend.name} returned no word timestamps for {src} — is there speech in the first 30 s? "
                            "Try another clip or backend (/cutmate:setup)")
-    return {"backend": backend.name, "device": getattr(backend, "device", "api"),
+    device = getattr(backend, "device", "api") or getattr(backend, "engine", None) or "unknown"  # mlx: device None
+    return {"backend": backend.name, "device": device,
             "compute": getattr(backend, "compute", None), "words": words, "seconds": seconds, "audio": audio}

@@ -136,6 +136,15 @@ def test_set_values_unknown_key_hides_value(tmp_path):
     assert not p.exists()
 
 
+def test_set_values_pair_without_equals_hides_text(tmp_path):
+    p = tmp_path / "config.json"
+    with pytest.raises(ConfigError) as e:
+        config.set_values(["gsk_secret123"], p)
+    msg = str(e.value)
+    assert "config set expects KEY=VALUE pairs" in msg and "gsk_secret123" not in msg
+    assert not p.exists()
+
+
 def test_set_values_folder_needs_audio(tmp_path, monkeypatch):
     p = tmp_path / "config.json"
     empty = tmp_path / "empty"

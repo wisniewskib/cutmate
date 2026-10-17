@@ -108,7 +108,9 @@ def set_values(pairs: list[str], path: Path | None = None) -> Config:
         cfg = Config()
     for pair in pairs:
         key, sep, value = pair.partition("=")
-        if not sep or key not in SETTABLE:
+        if not sep:  # never echo the text: it may be a pasted API key
+            raise ConfigError("config set expects KEY=VALUE pairs")
+        if key not in SETTABLE:
             raise ConfigError(f"unknown config key {key!r} (settable: {', '.join(SETTABLE)}). API keys belong in environment "
                               "variables (GROQ_API_KEY, OPENAI_API_KEY, ELEVENLABS_API_KEY), never in the config")
         parsed = _parse(key, value)

@@ -65,3 +65,18 @@ def test_selftest_cli_output(tmp_path, monkeypatch, capsys):
     assert lines[0] == "backend: fake · device: cuda · compute: float16"
     assert lines[1].startswith("words: 2 in ")
     assert lines[2] == "first: Cześć@0.12-0.40 świecie@0.50-0.90"
+
+
+class MlxFake(ApiFake):
+    name = "local"
+    engine = "mlx"
+    device = None
+    compute = None
+
+
+def test_selftest_mlx_device(tmp_path, monkeypatch, capsys):
+    clip = make_clip(tmp_path / "a.mp4", dur=3)
+    assert st.selftest(MlxFake(), "pl", clip)["device"] == "mlx"
+    monkeypatch.setattr(cli, "get_backend", lambda name: MlxFake())
+    assert cli.main(["selftest", "--clip", str(clip)]) == 0
+    assert capsys.readouterr().out.splitlines()[0] == "backend: local · device: mlx"
