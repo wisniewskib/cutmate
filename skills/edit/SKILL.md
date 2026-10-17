@@ -10,7 +10,7 @@ Talk to the user in their language (config `language`). Never modify source clip
 Set the CLI once per session: `CM="$(ls "${CUTMATE_HOME:-$HOME/.cutmate}/venv/bin/cutmate" "${CUTMATE_HOME:-$HOME/.cutmate}/venv/Scripts/cutmate.exe" 2>/dev/null | head -1)"; [ -n "$CM" ] || CM="$(command -v cutmate)"`; if it doesn't run, tell
 the user to run `/cutmate:setup` and stop. Read the config with `$CM config show` (transcription, language, theme,
 steps.factcheck / qa / thumbnail, music, captions). Read the theme rules: `${CLAUDE_PLUGIN_ROOT}/themes/<theme>/frame.md` (or
-`~/.cutmate/themes/<theme>/frame.md`) BEFORE writing plan.json. If the user uses a custom theme and it was never
+`${CUTMATE_HOME:-$HOME/.cutmate}/themes/<theme>/frame.md`) BEFORE writing plan.json. If the user uses a custom theme and it was never
 checked, run `$CM theme-check --theme <theme> --language <lang>` once (renders every component and reports problems).
 
 **Resume:** if `out/` already has files, continue from the first missing one:
@@ -69,7 +69,7 @@ The user can ask for things the built-in components don't cover. Collect every r
 Film-wide request "chcę explainery" → `- [czat] explainery → explainers` (a NOTE; the explainers themselves are `→ explainer @ S3`, matched by a `split`/`side` graphic with an `effect`).
 
 **Map:** a built-in component when one fits; `bg` for "inne tło / przenieś mnie gdzie indziej"; `side` for "na połowie
-ekranu" (16:9 only); otherwise `custom`. Check saved effects first: `~/.cutmate/themes/<theme>/components/custom/index.json`
+ekranu" (16:9 only); otherwise `custom`. Check saved effects first: `${CUTMATE_HOME:-$HOME/.cutmate}/themes/<theme>/components/custom/index.json`
 and the bundled ones in `${CLAUDE_PLUGIN_ROOT}/themes/<theme>/components/custom/index.json` — read BOTH `index.json` files; their formats differ (bundled: `params` = {name: description}, `follow`/`place` booleans, `kind`; user file from `save-effect`: `params` = list, `follow` = string|null).
 Bundled: `energy-ball` (params `radius`, `colors`; `"follow": "hand"`; hidden without hand samples), explainers `stat-card`, `flow`, `ui-mock`, `iso-machine`, VFX/3D `showcase-3d`, `burst`, `hand-sparks`.
 

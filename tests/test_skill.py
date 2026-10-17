@@ -64,6 +64,23 @@ def test_setup_skill_config_keys_valid():
     assert keys and keys <= set(config.SETTABLE), keys - set(config.SETTABLE)
 
 
+def test_setup_skill_long_running_guidance():
+    md = _skill("setup")
+    guide = "Bash timeout 600000 or run_in_background: true; on timeout re-run — downloads resume"
+    sections = {p.split("\n", 1)[0]: p for p in md.split("\n## ")}
+    for title, cmd in (("5. Backend and language", "$CM models"), ("6. Transcription test", "$CM selftest"),
+                       ("10. Smoke render (5 s)", "$CM smoke")):
+        sec = sections[title]
+        assert cmd in sec and guide in sec, title
+
+
+def test_setup_skill_pauses_for_api_key():
+    md = _skill("setup")
+    for s in ("zrestartuj Claude Code ze zmienną ustawioną i uruchom /cutmate:setup", "Paused for an API key",
+              "needs a terminal", "--json", "LUFS", "tracking"):
+        assert s in md, s
+
+
 def test_edit_skill_uses_setup_venv():
     md = _skill("edit")
     assert "${CUTMATE_HOME:-$HOME/.cutmate}/venv/bin/cutmate" in md

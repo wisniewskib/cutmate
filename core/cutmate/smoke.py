@@ -49,7 +49,7 @@ def smoke(workdir: Path, cfg: Config, clip: Path | None = None, fmt: str = "9:16
     if clip:
         have = media.duration(Path(clip))
         if have < 2.0:
-            raise CutmateError(f"clip too short for the smoke test ({have:.1f} s) — pass a recording of at least 5 s")
+            raise CutmateError(f"clip too short for the smoke test ({have:.1f} s) — pass a recording of at least 2 s")
         dur = min(SMOKE_DUR, have)
     _make_aroll(out / "aroll.mp4", Path(clip) if clip else None, fmt, dur)
     words = None

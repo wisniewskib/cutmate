@@ -92,5 +92,5 @@ def test_smoke_short_clip(tmp_path, calls):
 def test_smoke_clip_too_short(tmp_path, calls):
     from cutmate.errors import CutmateError
     src = make_clip(tmp_path / "in.mp4", dur=1.5, size="1920x1080")
-    with pytest.raises(CutmateError, match="clip too short"):
+    with pytest.raises(CutmateError, match=r"clip too short .* at least 2 s"):
         sm.smoke(tmp_path / "w", config.Config(), clip=src)
