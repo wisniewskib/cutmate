@@ -7,9 +7,9 @@ description: Edit a talking-head short (9:16) or a YouTube long-form video (16:9
 
 Talk to the user in their language (config `language`). Never modify source clips. Everything goes to `<folder>/out/`.
 
-Set the CLI once per session: `CM="$(command -v cutmate || ls ~/.cutmate/venv/bin/cutmate ~/.cutmate/venv/Scripts/cutmate.exe 2>/dev/null | head -1)"`; if it doesn't run, tell
-the user to run `/cutmate:setup` and stop. Read the config with `cat ~/.cutmate/config.json` (backend, language, theme,
-steps.factcheck / qa / thumbnail, music). Read the theme rules: `${CLAUDE_PLUGIN_ROOT}/themes/<theme>/frame.md` (or
+Set the CLI once per session: `CM="$(ls "${CUTMATE_HOME:-$HOME/.cutmate}/venv/bin/cutmate" "${CUTMATE_HOME:-$HOME/.cutmate}/venv/Scripts/cutmate.exe" 2>/dev/null | head -1)"; [ -n "$CM" ] || CM="$(command -v cutmate)"`; if it doesn't run, tell
+the user to run `/cutmate:setup` and stop. Read the config with `$CM config show` (transcription, language, theme,
+steps.factcheck / qa / thumbnail, music, captions). Read the theme rules: `${CLAUDE_PLUGIN_ROOT}/themes/<theme>/frame.md` (or
 `~/.cutmate/themes/<theme>/frame.md`) BEFORE writing plan.json. If the user uses a custom theme and it was never
 checked, run `$CM theme-check --theme <theme> --language <lang>` once (renders every component and reports problems).
 

@@ -1,34 +1,74 @@
 import re
 
-from cutmate import paths
+from cutmate import config, paths
 from cutmate.cli import _parser
 
 
-def test_skill_frontmatter_and_commands():
-    text = (paths.plugin_root() / "skills" / "edit" / "SKILL.md").read_text(encoding="utf-8")
-    assert text.startswith("---\nname: edit\ndescription: ")
+def _skill(name):
+    return (paths.plugin_root() / "skills" / name / "SKILL.md").read_text(encoding="utf-8")
+
+
+def check_cli_calls(text):
     sub = next(a for a in _parser()._actions if a.dest == "cmd")
     known = set(sub.choices)
     used = set(re.findall(r"\$CM (\w[\w-]*)", text))
     assert used and used <= known, used - known
-    for step in ("takes.md", "edl.json", "plan.json", "factcheck.md", "EDIT_NOTES.md", "frame.md"):
-        assert step in text
-
-
-def test_skill_flags_and_pinned_hyperframes():
-    text = (paths.plugin_root() / "skills" / "edit" / "SKILL.md").read_text(encoding="utf-8")
-    sub = next(a for a in _parser()._actions if a.dest == "cmd")
     calls = re.findall(r"\$CM (\w[\w-]*)([^`\n]*)", text)
     assert calls
     for cmd, rest in calls:
-        known = {s for a in sub.choices[cmd]._actions for s in a.option_strings}
+        parser = sub.choices[cmd]
+        nested = next((a for a in parser._actions if a.choices and not a.option_strings), None)
+        first = rest.split()[0] if rest.split() else ""
+        if nested is not None and first in nested.choices:
+            parser = nested.choices[first]
+        flags = {s for a in parser._actions for s in a.option_strings}
         for flag in re.findall(r"(?<!\S)(--?[A-Za-z][\w-]*)", rest):
-            assert flag in known, (cmd, flag)
+            assert flag in flags, (cmd, flag)
     npx = re.findall(r"npx\b[^`\n]*", text)
     assert npx
     for call in npx:
         if "hyperframes" in call:
             assert "hyperframes@0.8.157" in call, call
+
+
+def test_skill_frontmatter_and_commands():
+    text = _skill("edit")
+    assert text.startswith("---\nname: edit\ndescription: ")
+    for step in ("takes.md", "edl.json", "plan.json", "factcheck.md", "EDIT_NOTES.md", "frame.md"):
+        assert step in text
+
+
+def test_skill_cli_calls_known():
+    for name in ("edit", "setup"):
+        check_cli_calls(_skill(name))
+
+
+def test_setup_skill_frontmatter():
+    assert _skill("setup").startswith("---\nname: setup\ndescription: ")
+
+
+def test_setup_skill_covers_3a():
+    md = _skill("setup")
+    for s in ("detect.sh", "detect.ps1", "setup.sh", "setup.ps1", "AskUserQuestion", "GROQ_API_KEY", "OPENAI_API_KEY",
+              "ELEVENLABS_API_KEY", "Never ask for an API key", "heygen auth login --oauth", "media-use resolve --doctor",
+              "Którą sekcję zmienić?", "0.45", "$CM selftest", "$CM smoke", "$CM models", "$CM doctor", "device: cuda",
+              "sudo", "CUTMATE_HOME"):
+        assert s in md, s
+
+
+def test_setup_skill_config_keys_valid():
+    md = _skill("setup")
+    sets = re.findall(r"\$CM config set ([^`\n]*)", md)
+    assert sets
+    keys = {k for rest in sets for k in re.findall(r"([\w.:]+)=", rest)}
+    assert keys and keys <= set(config.SETTABLE), keys - set(config.SETTABLE)
+
+
+def test_edit_skill_uses_setup_venv():
+    md = _skill("edit")
+    assert "${CUTMATE_HOME:-$HOME/.cutmate}/venv/bin/cutmate" in md
+    assert "$CM config show" in md
+    assert "cat ~/.cutmate/config.json" not in md
 
 
 def test_skill_covers_169():
