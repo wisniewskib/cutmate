@@ -4,7 +4,7 @@ import sys
 import pytest
 
 from cutmate import doctor as dr
-from cutmate import tracks
+from cutmate import paths, tracks
 from cutmate.cli import main
 from cutmate.errors import CutmateError
 
@@ -17,7 +17,9 @@ def home(tmp_path, monkeypatch):
 
 def test_doctor_shape():
     d = dr.doctor()
-    assert set(d) == {"python", "venv", "ffmpeg", "node", "packages", "cuda", "models", "keys", "carve", "config"}
+    assert set(d) == {"python", "venv", "ffmpeg", "node", "packages", "cuda", "models", "keys", "carve", "config",
+                      "plugin_root"}
+    assert d["plugin_root"] == str(paths.plugin_root())
     assert set(d["packages"]) == {"faster_whisper", "mlx_whisper", "align", "track"}
     assert set(d["models"]) == {"whisper", "align_pl", "align_en", "pose", "hand"}
     assert all(isinstance(v, bool) for v in d["packages"].values())

@@ -5,7 +5,7 @@ import shutil
 import subprocess
 import sys
 
-from . import align, tracks
+from . import align, paths, tracks
 from .backends.local import LocalBackend
 from .config import ConfigError, home
 from .config import load as load_config
@@ -105,6 +105,7 @@ def doctor() -> dict:
         "keys": {k: bool(os.environ.get(k)) for k in KEY_ENVS},
         "carve": bool(_guard(music._carve_script, None)),
         "config": cfg,
+        "plugin_root": str(paths.plugin_root()),
     }
 
 
