@@ -135,6 +135,11 @@ def _parser() -> argparse.ArgumentParser:
     st.add_argument("--clip", type=Path)
     st.add_argument("--backend", choices=config.BACKENDS)
     st.add_argument("--language", choices=config.LANGUAGES)
+    sm = sub.add_parser("smoke", help="5 s smoke render (title + captions, optional music bed)")
+    sm.add_argument("--clip", type=Path)
+    sm.add_argument("--music", type=Path)
+    sm.add_argument("--format", choices=list(FORMATS), default="9:16")
+    sm.add_argument("--workdir", type=Path)
     sub.add_parser("doctor", help="health report (JSON): packages, models, GPU, keys, config")
     md = sub.add_parser("models", help="download the local models (alignment, whisper, face/hand tracking)")
     md.add_argument("--language", choices=config.LANGUAGES)
@@ -249,6 +254,13 @@ def _dispatch(args) -> int:
         print(f"backend: {r['backend']} · device: {r['device']}{comp}")
         print(f"words: {len(r['words'])} in {r['seconds']:.1f} s for {r['audio']:.1f} s of audio")
         print("first: " + " ".join(f"{w.word}@{w.start:.2f}-{w.end:.2f}" for w in r["words"][:8]))
+    elif args.cmd == "smoke":
+        from .smoke import smoke
+        backend = get_backend(cfg.transcription) if args.clip else None
+        r = smoke(args.workdir or config.home() / "smoke", cfg, args.clip, args.format, args.music, backend)
+        print(f"final: {r['final']}")
+        print(f"frame: {r['frame']}")
+        return 0 if r["ok"] else 1
     elif args.cmd == "track":
         from .tracks import load_tracks, track
         p = track(Path(args.out), force=args.force)
