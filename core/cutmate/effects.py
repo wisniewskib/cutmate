@@ -63,8 +63,10 @@ def libs_head(texts: list[str]) -> str:
     return "\n    ".join(parts)
 
 
-def track_slice(samples, a: float, b: float, host_start: float, W: int, H: int) -> list[list[float]]:
-    return [[round(t - host_start, 3), round(x * W, 1), round(y * H, 1)] for t, x, y, *_ in samples if a <= t <= b]
+def track_slice(samples, a: float, b: float, host_start: float, W: int, H: int, to_px=None) -> list[list[float]]:
+    """Samples in [a, b] as [local t, x px, y px]; to_px(x, y, t) maps a frame point to screen px (camera, offsets)."""
+    to_px = to_px or (lambda x, y, t: (round(x * W, 1), round(y * H, 1)))
+    return [[round(t - host_start, 3), *to_px(x, y, t)] for t, x, y, *_ in samples if a <= t <= b]
 
 
 THEME_RE = re.compile(r"^[A-Za-z0-9_-]+$")

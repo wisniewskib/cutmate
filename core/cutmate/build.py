@@ -178,6 +178,31 @@ def cam_from_cuts(timed: list[dict], fmt: str = "9:16", face: dict | None = None
     return [out[t] for t in sorted(out)]
 
 
+CAM_ORIGIN = (0.5, 0.46)      # theme.css: #cam { transform-origin: 50% 46%; } (9:16 cam entries carry no origin)
+SPLIT_DY = 300                # #split moves the A-roll this far down while a split panel is on screen (cutmate.js)
+SAFE = {(1080, 1920): [60, 192, 960, 1344], (1920, 1080): [60, 60, 1800, 800]}  # x, y, w, h a placed chip stays in
+
+
+def screen_point(x: float, y: float, t: float, cam: list, splits: list, sides: list, W: int, H: int) -> tuple:
+    """Where a tracked point (fractions of the A-roll frame at A-roll time t) is on screen, in px: through the active
+    camera entry (16:9 [t, s, ox, oy] about the face, 9:16 [t, s] about #cam's origin), the settled split / side
+    offsets of #split (from the move in until the move out ends), then clamped into the frame."""
+    s, ox, oy = 1.0, *CAM_ORIGIN
+    for c in cam:
+        if c[0] <= t + 1e-9:
+            s = c[1]
+            if len(c) >= 4:
+                ox, oy = c[2], c[3]
+    px = (ox + (x - ox) * s) * W
+    py = (oy + (y - oy) * s) * H
+    if any(a - 1e-9 <= t <= b + 0.4 + 1e-9 for a, b in splits):
+        py += SPLIT_DY
+    for a, b, dx in sides:
+        if a - 1e-9 <= t <= b + 0.4 + 1e-9:
+            px += dx
+    return round(min(W, max(0.0, px)), 1), round(min(H, max(0.0, py)), 1)
+
+
 def _scale_at(cam: list[list[float]], t: float) -> float:
     s = 1.0
     for c in cam:
@@ -334,9 +359,10 @@ def _media_tag(cid: str, g: Graphic, P: dict) -> str:
 
 def subcomp(cid: str, g: Graphic, host_start: float, theme: Path, assets: Path, media_map: dict, lang: str,
             size: tuple = (1080, 1920), extra_tags: dict | None = None, comp_path: Path | None = None,
-            tracks: dict | None = None, assets_url: str | None = None) -> str:
+            tracks: dict | None = None, assets_url: str | None = None, screen=None) -> str:
     sec = _sections(comp_path or theme / "components" / f"{g.type}.html")
     W, H = size
+    screen = screen or (lambda x, y, t: (round(x * W, 1), round(y * H, 1)))  # noqa: E731  tracked point -> screen px
     loc = lambda t: round(max(0.0, t - host_start), 3)  # noqa: E731
     P = {k: v for k, v in g.params.items()}
     P.update(at=loc(g.start), end=loc(g.end), lang=lang)
@@ -347,6 +373,12 @@ def subcomp(cid: str, g: Graphic, host_start: float, theme: Path, assets: Path, 
     for k in ("media", "image", "logo", "icon"):
         if k in P:
             P[k] = _copy_media(g.params[k], assets, media_map)
+    if g.type == "chip":
+        P.pop("place", None)
+        xy = P.pop("place_xy", None)
+        if xy:                                           # place: gesture -> centre on the pointed spot, in frame px
+            P["place"] = list(screen(xy[0], xy[1], g.start))
+            P["safe"] = SAFE.get((W, H), [0, 0, W, H])
     root, u_open, u_close, fade = f'document.getElementById("{cid}")', "", "", ""
     region = None
     if g.type == "custom":
@@ -357,8 +389,11 @@ def subcomp(cid: str, g: Graphic, host_start: float, theme: Path, assets: Path, 
         if follow and tracks:
             tn = pick_hand(tracks["tracks"], g.start, g.end) if follow == "hand" else follow
             track = [[t, round(x - rx, 1), round(y - ry, 1)]
-                     for t, x, y in track_slice(tracks["tracks"].get(tn, []), g.start, g.end, host_start, W, H)]
+                     for t, x, y in track_slice(tracks["tracks"].get(tn, []), g.start, g.end, host_start, W, H, screen)]
         P = dict(g.params.get("params") or {})          # user params first: timing / size keys always win
+        m = P.get("media")
+        if isinstance(m, str) and Path(m).is_absolute() and Path(m).exists():
+            P["media"] = _copy_media(m, assets, media_map)   # params.media (resolved by the plan) -> asset URL
         P.update(name=g.params["name"], at=loc(g.start), end=loc(g.end), lang=lang, w=rw, h=rh,
                  dur=round(g.end - host_start, 3), track=track)
         if follow:
@@ -366,7 +401,8 @@ def subcomp(cid: str, g: Graphic, host_start: float, theme: Path, assets: Path, 
         if assets_url:
             P["assets"] = assets_url
         if g.params.get("place_xy"):
-            P["place"] = [round(g.params["place_xy"][0] * W - rx, 1), round(g.params["place_xy"][1] * H - ry, 1)]
+            px, py = screen(g.params["place_xy"][0], g.params["place_xy"][1], g.start)
+            P["place"] = [round(px - rx, 1), round(py - ry, 1)]
         if "media" in g.params:
             P["media"] = _copy_media(g.params["media"], assets, media_map)
         u_open, u_close = FX_OPEN.format(cid=cid), ")"
@@ -477,6 +513,14 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
     tr = plan.tracks
     effect_texts, warned, fx_used = [], set(), set()
     found = {}
+    cam = cam_from_cuts(timed, fmt, plan.face, [(g.start, g.end) for g in plan.graphics if g.type == "bg"])
+    splits = [[g.start, round(max(g.start + 0.45, g.end - 0.4), 3)] for g in plan.graphics if g.type == "split"]
+    sides = [[g.start, round(max(g.start + 0.45, g.end - 0.4), 3),
+              round((1440 if g.params["speaker"] == "right" else 480) - plan.face.get(_seg_at(timed, g.start), FACE_DEFAULT)[0] * W)]
+             for g in plan.graphics if g.type == "side"]
+
+    def screen(x, y, t):
+        return screen_point(x, y, t, cam, splits, sides, W, H)
     for g in items:                                    # resolve + lint every effect first: a failure writes nothing
         if g.type == "custom" and g.params["name"] not in found:
             found[g.params["name"]] = find_effect(g.params["name"], out, theme)
@@ -515,7 +559,7 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
             comp_path = _component(th, g.type, theme, warned)
         (proj / "compositions" / f"{cid}.html").write_text(
             subcomp(cid, g, hs, th, A, media_map, language, size=(W, H), extra_tags=extra, comp_path=comp_path,
-                    tracks=tr, assets_url=assets_url), encoding="utf-8")
+                    tracks=tr, assets_url=assets_url, screen=screen), encoding="utf-8")
         hosts.append(f'      <div id="{cid}-slot" data-composition-id="{cid}" data-composition-src="compositions/{cid}.html" '
                      f'data-start="{hs}" data-duration="{round(g.end - hs, 3)}" data-track-index="{2 + i % 2}" '
                      f'data-width="{W}" data-height="{H}"></div>')
@@ -534,15 +578,10 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
     for f in (proj / "compositions").glob("gx-*.html"):
         if f.stem not in ids:
             f.unlink()
-    cam = cam_from_cuts(timed, fmt, plan.face, [(g.start, g.end) for g in plan.graphics if g.type == "bg"])
     hits = hits_for(plan.graphics, cam, timed, end)
     hit_name, hit_vol = meta["hit_sfx"]
     cues += [(hit_name, h[0], hit_vol) for h in hits]
-    splits = [[g.start, round(max(g.start + 0.45, g.end - 0.4), 3)] for g in plan.graphics if g.type == "split"]
     pages = caption_pages(words, end, plan.captions["key"], plan.captions["max_words"])
-    sides = [[g.start, round(max(g.start + 0.45, g.end - 0.4), 3),
-              round((1440 if g.params["speaker"] == "right" else 480) - plan.face.get(_seg_at(timed, g.start), FACE_DEFAULT)[0] * W)]
-             for g in plan.graphics if g.type == "side"]
     cfg = {"end": end, "pages": pages if mode in ("burn", "both") else [], "cam": cam, "hits": hits, "splits": splits}
     if sides:
         cfg["sides"] = sides

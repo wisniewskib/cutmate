@@ -442,7 +442,7 @@ def test_custom_host_with_follow(out169, theme):
     sub = (proj / "compositions" / "gx-01-custom.html").read_text(encoding="utf-8")
     P = json.loads(re.search(r"const P = (.*?);\n", sub).group(1).replace("<\\/", "</"))
     assert P["color"] == "#fff" and (P["w"], P["h"]) == (1920, 1080)
-    assert P["track"] == [[0.4, 960.0, 540.0], [0.8, 1440.0, 540.0]]          # host starts 1.8 (2.1 - 0.3)
+    assert P["track"] == [[0.4, 960.0, 567.0], [0.8, 1560.0, 567.0]]          # host 1.8; S2 punch-in 1.25x about (0.5, 0.4)
     assert P["follow"] == "hand"                                              # effects know they were meant to follow
     assert "CutmateFX.make" in sub and "U.follow(el, P.track)" in sub
     html = (proj / "index.html").read_text(encoding="utf-8")
@@ -579,7 +579,7 @@ def test_region_effect_track_is_offset(out169, theme):
     write_plan(out169, {"graphics": [{"type": "custom", "name": "orb", "from": "S2:minus", "to": "S2:Claude'a",
                                       "follow": "hand", "region": [1020, 60, 840, 960]}]})
     sub = (B.build(out169, theme=theme)["project"] / "compositions" / "gx-01-custom.html").read_text(encoding="utf-8")
-    assert _P(sub)["track"] == [[0.4, -60.0, 480.0], [0.8, 420.0, 480.0]]     # (960, 540) − (1020, 60)
+    assert _P(sub)["track"] == [[0.4, -60.0, 507.0], [0.8, 540.0, 507.0]]     # on screen (960, 567) − (1020, 60)
 
 
 def test_custom_params_cannot_override_timing(out169, theme):
@@ -754,11 +754,11 @@ def test_custom_place_px(out169, theme):
     p.write_text(json.dumps(hand), encoding="utf-8")
     write_plan(out169, {"graphics": [{"type": "custom", "name": "orb", "at": "S2:minus", "place": "gesture"}]})
     sub = (B.build(out169, theme=theme)["project"] / "compositions" / "gx-01-custom.html").read_text(encoding="utf-8")
-    assert _P(sub)["place"] == [1440.0, 540.0]
+    assert _P(sub)["place"] == [1560.0, 567.0]                               # (0.75, 0.5) through the punch-in
     write_plan(out169, {"graphics": [{"type": "custom", "name": "orb", "at": "S2:minus", "place": "gesture",
                                       "region": [1020, 60, 840, 960]}]})
     sub = (B.build(out169, theme=theme)["project"] / "compositions" / "gx-01-custom.html").read_text(encoding="utf-8")
-    assert _P(sub)["place"] == [420.0, 480.0]
+    assert _P(sub)["place"] == [540.0, 507.0]
 
 
 def test_custom_media_param_copied(out169, theme):
@@ -791,3 +791,53 @@ def test_split_effect_missing(out, theme):
     with pytest.raises(PlanError, match="nope"):
         B.build(out, theme=theme)
     assert not list((out / "composition" / "compositions").glob("gx-*.html"))
+
+
+def test_screen_point_camera_split_side_clamp():
+    cam169 = [[0.0, 1.0, 0.5, 0.4], [2.0, 1.25, 0.45, 0.4]]
+    x, y = B.screen_point(0.85, 0.4, 2.5, cam169, [], [], 1920, 1080)
+    assert (x, y) == (round(0.95 * 1920, 1), 432.0)                            # zoomed 16:9: about the face
+    assert B.screen_point(0.85, 0.4, 1.0, cam169, [], [], 1920, 1080) == (1632.0, 432.0)   # unzoomed
+    cam916 = [[0.0, 1.0], [2.0, 1.12]]
+    x, y = B.screen_point(0.75, 0.25, 2.5, cam916, [], [], 1080, 1920)
+    assert (x, y) == (round((0.5 + 0.25 * 1.12) * 1080, 1), round((0.46 - 0.21 * 1.12) * 1920, 1))  # #cam origin 50% 46%
+    splits = [[1.0, 2.6]]                                                       # tOut = exit move start (0.4 s)
+    assert B.screen_point(0.5, 0.5, 1.5, cam916[:1], splits, [], 1080, 1920) == (540.0, 1260.0)
+    assert B.screen_point(0.5, 0.5, 2.95, cam916[:1], splits, [], 1080, 1920) == (540.0, 1260.0)
+    assert B.screen_point(0.5, 0.5, 3.1, cam916[:1], splits, [], 1080, 1920) == (540.0, 960.0)
+    sides = [[1.0, 2.6, 480]]
+    assert B.screen_point(0.25, 0.4, 1.5, cam169[:1], [], sides, 1920, 1080) == (960.0, 432.0)
+    assert B.screen_point(0.9, 0.4, 1.5, cam169[:1], [], sides, 1920, 1080) == (1920.0, 432.0)   # clamped
+    assert B.screen_point(0.5, 0.98, 1.5, cam916[:1], splits, [], 1080, 1920) == (540.0, 1920.0)
+
+
+def _point169(o, x=0.75, y=0.5):
+    (o / "work" / "tracks.json").write_text(json.dumps({"fps": 15, "w": 1920, "h": 1080, "tracks": {
+        "face": [], "hand_left": [], "hand_right": [], "point_left": [],
+        "point_right": [[t / 10, x, y, 0.9] for t in range(0, 40)]}}), encoding="utf-8")
+
+
+def test_chip_place_gesture(out169, theme):
+    _point169(out169)
+    write_plan(out169, {"graphics": [{"type": "chip", "at": "S2:minus", "text": "tu", "place": "gesture"}]})
+    sub = (B.build(out169, theme=theme)["project"] / "compositions" / "gx-01-chip.html").read_text(encoding="utf-8")
+    P = _P(sub)
+    assert P["place"] == [1560.0, 567.0]                                       # through the 1.25x punch-in on S2
+    assert P["safe"] == [60, 60, 1800, 800] and "place_xy" not in P
+    _point169(out169)
+    write_plan(out169, {"graphics": [{"type": "chip", "at": "S1:Mówić", "text": "tu", "place": "gesture"}]})
+    out169.joinpath("work", "tracks.json").write_text(json.dumps({"fps": 15, "w": 1920, "h": 1080, "tracks": {
+        "face": [], "point_left": [], "point_right": [[3.5, 0.75, 0.5, 0.9]]}}), encoding="utf-8")
+    sub = (B.build(out169, theme=theme)["project"] / "compositions" / "gx-01-chip.html").read_text(encoding="utf-8")
+    assert "place" not in _P(sub) and "safe" not in _P(sub)                    # no gesture: default band
+
+
+def test_split_explainer_params_media_copied(out, theme):
+    _fx(out, "stat-card")
+    (out.parent / "broll").mkdir()
+    (out.parent / "broll" / "shot.png").write_bytes(b"png")
+    write_plan(out, {"graphics": [{"type": "split", "from": "S2:minus", "to": "S2:</script>", "effect": "stat-card",
+                                   "params": {"value": 75, "media": "broll/shot.png"}}]})
+    proj = B.build(out, theme=theme)["project"]
+    P = _P((proj / "compositions" / "gx-02-custom.html").read_text(encoding="utf-8"))
+    assert P["media"].startswith("assets/media/") and (proj / P["media"]).exists() and P["value"] == 75
