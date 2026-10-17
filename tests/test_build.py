@@ -781,7 +781,11 @@ def test_split_effect_host_and_order(out, theme):
     assert "<video" not in split and 'class="img"' not in split and "media_tag" not in split and "band" in split
     sub = (proj / "compositions" / "gx-02-custom.html").read_text(encoding="utf-8")
     assert 'class="cm-region" style="position:absolute;left:40px;top:40px;width:1000px;height:820px' in sub
-    assert "duration: 0.45" in sub and (_P(sub)["w"], _P(sub)["h"]) == (1000, 820)
+    assert (_P(sub)["w"], _P(sub)["h"]) == (1000, 820)
+    # the region slides in and out with the split panel (split.html: 0.45 s in from P.at, 0.4 s out ending at P.end)
+    assert ('tl.fromTo(root, { y: -900 }, { y: 0, duration: 0.45, ease: "power3.out" }, P.at); '
+            'tl.to(root, { y: -900, duration: 0.4, ease: "power3.inOut", immediateRender: false }, '
+            'Math.max(P.at + 0.45, P.end - 0.4));') in sub and "autoAlpha" not in sub
     assert cfg_of(html)["splits"]                                              # face still moves down for the host
 
 

@@ -29,7 +29,7 @@ HOLDS = {"lower-third": 4.0}      # default hold per type (s); others use HOLD
 PIP_CORNERS = ("br", "bl")
 FOLLOW = ("face", "hand_left", "hand_right", "hand")
 NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,40}$")
-FADE = {"bg": 0.3, "side": 0.45, "split": 0.45}  # entrance / exit of an effect expanded from bg / side (s), matching their components
+FADE = {"bg": 0.3, "side": 0.45}  # entrance / exit of an effect expanded from bg / side (s), matching their components
 SIDE_PANEL = {"right": [60, 60, 840, 960], "left": [1020, 60, 840, 960]}  # x, y, w, h in 1920x1080 px
 SPLIT_PANEL = [40, 40, 1000, 820]  # x, y, w, h in 1080x1920 px (the .split-panel .media box)
 _PUNCT = ".,!?;:…\"'„\u201c\u201d()[]–—-"
@@ -339,7 +339,8 @@ def _expand(gs: list[Graphic]) -> list[Graphic]:
     for g in gs:
         if g.type == "split" and "effect" in g.params:
             out.append(g)
-            p = {"name": g.params["effect"], "_fade": FADE["split"], "region": list(SPLIT_PANEL)}
+            # the effect rides with the panel (slides in / out with it), so it is never left over the speaker
+            p = {"name": g.params["effect"], "_slide": SPLIT_PANEL[1] * 2 + SPLIT_PANEL[3], "region": list(SPLIT_PANEL)}
             if "params" in g.params:
                 p["params"] = g.params["params"]
             out.append(Graphic("custom", g.start, g.end, p, False, False, g.index))
@@ -377,6 +378,18 @@ def _budget(gs: list[Graphic]) -> list[str]:
     for a, b in zip(gs, gs[1:]):
         if b.start < a.end and not _expanded_pair(a, b):
             w.append(f"WARN {a.type} ({a.start:.1f}–{a.end:.1f}s) overlaps {b.type} at {b.start:.1f}s")
+    return w
+
+
+def _glb_warnings(gs: list[Graphic]) -> list[str]:
+    w = []
+    for g in gs:
+        p = g.params.get("params") or {}
+        if g.type != "custom" or p.get("shape") != "glb" or p.get("model"):
+            continue
+        media = g.params.get("media") or p.get("media")
+        if not (isinstance(media, str) and Path(media).suffix.lower() in (".glb", ".gltf")):
+            w.append(f'WARN {g.type} at {g.start:.1f}s: shape "glb" needs a .glb / .gltf "media" — it falls back to the torus knot')
     return w
 
 
@@ -459,7 +472,7 @@ def load_plan(out_dir: Path, factcheck: bool = False) -> Plan:
                 fm = face_median(tr["tracks"], float(s["start"]), float(s["end"]))
                 if fm:
                     face[sid] = fm
-    warnings = gesture_warns + _budget(gs) + _chapter_warnings(chapters, gs, end, min((w['start'] for w in words), default=0.0)) + (_factcheck(out, gs) if factcheck else [])
+    warnings = gesture_warns + _glb_warnings(gs) + _budget(gs) + _chapter_warnings(chapters, gs, end, min((w['start'] for w in words), default=0.0)) + (_factcheck(out, gs) if factcheck else [])
     cap = raw.get("captions") or {}
     if not isinstance(cap, dict):
         raise PlanError(f"{p}: \"captions\" must be a dict")

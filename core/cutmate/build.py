@@ -57,6 +57,8 @@ FX_OPEN = 'Object.assign(window.CutmateFX.make(tl, root, "{cid}", P), '
 REGION = '<div class="cm-region" style="position:absolute;left:{x}px;top:{y}px;width:{w}px;height:{h}px;overflow:hidden">{markup}</div>'
 FADE = ("\n    tl.set(root, {{ autoAlpha: 0 }}, 0); tl.to(root, {{ autoAlpha: 1, duration: {f} }}, P.at); "
         "tl.to(root, {{ autoAlpha: 0, duration: {f}, immediateRender: false }}, Math.max(P.at + {f}, P.end - {f}));")
+SLIDE = ('\n    tl.fromTo(root, {{ y: -{d} }}, {{ y: 0, duration: 0.45, ease: "power3.out" }}, P.at); '   # = split.html's panel
+         'tl.to(root, {{ y: -{d}, duration: 0.4, ease: "power3.inOut", immediateRender: false }}, Math.max(P.at + 0.45, P.end - 0.4));')
 
 INDEX = """<!doctype html>
 <html lang="{lang}" class="{fcls}">
@@ -410,6 +412,8 @@ def subcomp(cid: str, g: Graphic, host_start: float, theme: Path, assets: Path, 
             root = f'document.querySelector("#{cid} > .cm-region")'
         if g.params.get("_fade"):
             fade = FADE.format(f=g.params["_fade"])
+        elif g.params.get("_slide"):
+            fade = SLIDE.format(d=g.params["_slide"])
     media_tag = ""
     if g.type in ("split", "pip"):
         P["fit"] = g.params.get("fit", "contain")

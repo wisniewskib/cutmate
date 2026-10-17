@@ -7,7 +7,6 @@ ROOT .fx-show { position: absolute; inset: 0; }
 // shape "torus-knot" | "icosahedron" | "text" (TextGeometry) | "glb" (P.assets + model). Studio light: key + two rims +
 // hemisphere + RoomEnvironment reflections on a clearcoat physical material; fresnel rim glow, soft halo, dust motes.
 const box = root.querySelector(".fx-show");
-const cid = (root.closest("[data-composition-id]") || root).getAttribute("data-composition-id");
 const FONTS = "https://cdn.jsdelivr.net/npm/three@0.181.2/examples/fonts/";
 // the model: the graphic's "media" (copied by build, P.media), else P.model inside the effect folder (P.assets)
 const modelUrl = P.media && /\.(glb|gltf)$/i.test(P.media) ? P.media : P.model ? (P.assets || "") + P.model : null;
@@ -21,20 +20,7 @@ const ready = U.three({ el: box, bloom: { strength: 0.7, radius: 0.4, threshold:
   const hsl = {}; base.getHSL(hsl);
   const rimA = new THREE.Color().setHSL((hsl.h + 0.5) % 1, 0.9, 0.6), rimB = new THREE.Color().setHSL((hsl.h + 0.08) % 1, 0.95, 0.65);
 
-  // bloom with alpha "keep" alone paints the whole frame black (the bloom composite writes alpha 1 everywhere), so keep
-  // a copy of the clean render and rebuild alpha after the bloom: object pixels keep their own alpha, the added glow
-  // gets alpha from its brightness and lands on the video like light
-  const { SavePass } = await import("three/addons/postprocessing/SavePass.js");
-  const { ShaderPass } = await import("three/addons/postprocessing/ShaderPass.js");
-  const save = new SavePass();
-  S.composer.insertPass(save, 1);
-  const merge = new ShaderPass({ uniforms: { tDiffuse: { value: null }, tBase: { value: null } },
-    vertexShader: "varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }",
-    fragmentShader: "uniform sampler2D tDiffuse; uniform sampler2D tBase; varying vec2 vUv; void main(){ vec4 b=texture2D(tBase,vUv);"
-      + " vec3 g=max(texture2D(tDiffuse,vUv).rgb-b.rgb,0.0); float ga=clamp(max(g.r,max(g.g,g.b)),0.0,1.0); gl_FragColor=vec4(b.rgb+g, max(b.a,ga)); }",
-  });
-  merge.uniforms.tBase.value = save.renderTarget.texture;     // after construction: ShaderPass clones its uniforms
-  S.composer.insertPass(merge, 3);
+  // bloom alpha "keep" (U.three): the object keeps its own alpha, the glow lands on the video like light
   renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 0.8;
   const { RoomEnvironment } = await import("three/addons/environments/RoomEnvironment.js");
   const pm = new THREE.PMREMGenerator(renderer);
@@ -71,7 +57,7 @@ const ready = U.three({ el: box, bloom: { strength: 0.7, radius: 0.4, threshold:
       const bb = new THREE.Box3().setFromObject(obj), c = bb.getCenter(new THREE.Vector3());
       obj.position.sub(c);
       const wrap = new THREE.Group(); wrap.add(obj); obj = wrap;
-    } catch (e) { obj = null; }
+    } catch (e) { obj = null; console.warn("showcase-3d: cannot load model " + modelUrl + " — torus knot instead", e); }
   }
   if (!obj && shape === "text") { obj = await textMesh(String(P.text || "3D")); isText = true; rim1.intensity = 1.6; rim2.intensity = 1.2; }
   if (!obj && shape === "icosahedron") {                      // faceted metal gem, glowing edge struts, spinning core
@@ -186,5 +172,5 @@ const ready = U.three({ el: box, bloom: { strength: 0.7, radius: 0.4, threshold:
     S.render();
   });
 });
-window.__hf.buildReady[cid] = ready;                          // fonts / models load before the first frame is taken
+U.ready(ready);                                               // fonts / models load before the first frame is taken
 </script>

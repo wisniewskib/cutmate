@@ -69,7 +69,6 @@ if (P.title) {
   title.style.padding = "0 " + 40 * s + "px";
   title.style.fontSize = Math.min(52 * s, (W - 80 * s) / Math.max(6, String(P.title).length * 0.56)) + "px";
   bar = U.el("span", "bar", null, title);
-  topBand = 30 * s + title.offsetHeight + 18 * s;
 }
 const fmtNum = (v) => String(Math.round(v)).replace(/\B(?=(\d{3})+(?!\d))/g, P.lang === "pl" ? " " : ",");
 const labels = parts.map((p, i) => {
@@ -86,8 +85,13 @@ if (counter) {
   U.el("div", "l", String(counter.label || ""), el);
   labels.push({ el, color: accent, counter: true });
 }
+// text is measured once the theme font has loaded (fallback metrics would misplace the title band and labels)
+const measure = () => {
+  if (title) topBand = 30 * s + title.offsetHeight + 18 * s;
+  labels.forEach((L) => { L.w = L.el.offsetWidth; L.h = L.el.offsetHeight; });
+};
+measure();
 labels.forEach((L) => {
-  L.w = L.el.offsetWidth; L.h = L.el.offsetHeight;
   L.line = document.createElementNS(NS, "line");
   L.line.setAttribute("stroke", "var(--lead)"); L.line.setAttribute("stroke-width", 2.5 * s);
   L.line.setAttribute("stroke-dasharray", 7 * s + " " + 6 * s);
@@ -123,7 +127,7 @@ const timeAtD = (D) => {                                  // first time the belt
   return hi;
 };
 
-U.three({ el: stage }).then((S) => {
+U.ready(Promise.all([U.three({ el: stage }), U.fonts([800, 900]).then(measure)]).then(([S]) => {
   const { THREE, scene, renderer } = S;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap;
@@ -648,5 +652,5 @@ U.three({ el: stage }).then((S) => {
     }
     renderer.render(scene, cam);
   });
-});
+}));
 </script>

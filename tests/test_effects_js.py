@@ -1,7 +1,7 @@
 import json
 import subprocess
 
-from cutmate.paths import web_dir
+from cutmate.paths import plugin_root, web_dir
 
 JS = """
 global.window = {};
@@ -36,5 +36,30 @@ def test_pure_helpers():
 
 def test_bloom_alpha_option():
     js = (web_dir() / "effects.js").read_text(encoding="utf-8")
-    assert '(opt.bloom.alpha || "luma") !== "keep"' in js
-    assert js.index('!== "keep"') < js.index("ShaderPass.js")             # the luma pass is skipped for "keep"
+    assert 'const keep = opt.bloom.alpha === "keep";' in js
+    # "keep": save the clean render before the bloom, merge after it (never a black frame); "luma": brightness alpha
+    assert js.index("new SavePass()") < js.index("new UnrealBloomPass") < js.index("tBase") < js.index("new OutputPass()")
+    show = (plugin_root() / "themes" / "clean" / "components" / "custom" / "showcase-3d.html").read_text(encoding="utf-8")
+    assert "SavePass" not in show and 'alpha: "keep"' in show                 # uses the shared fix
+
+
+READY = """
+global.window = {};
+require(%s);
+const U = window.CutmateFX.make({ to() {} }, {}, "c1", { dur: 1 });
+const log = [];
+let open;
+const p1 = new Promise((r) => { open = r; }).then(() => log.push("p1"));
+const back = U.ready(p1);
+U.ready(Promise.resolve().then(() => log.push("p2")));
+window.__hf.buildReady.c1.then(() => { log.push("ready"); console.log(JSON.stringify({ log, same: back === p1 })); });
+Promise.resolve().then(() => Promise.resolve()).then(() => { log.push("tick"); open(); });
+"""
+
+
+def test_ready_extends_build_ready():
+    path = json.dumps(str(web_dir() / "effects.js"))
+    r = subprocess.run(["node", "-e", READY % path], capture_output=True, text=True, check=True)
+    d = json.loads(r.stdout)
+    assert d["same"] and d["log"][-1] == "ready" and {"p1", "p2", "tick"} <= set(d["log"])
+    assert d["log"].index("p1") < d["log"].index("ready")                  # waits for every registered promise

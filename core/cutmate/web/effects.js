@@ -50,6 +50,20 @@
     const U = {};
     U.seed = seed;
     U.trackAt = trackAt;
+    // the first frame waits for p (fonts, models, measuring): registers / extends window.__hf.buildReady[cid]
+    U.ready = function (p) {
+      const hf = (window.__hf = window.__hf || {});
+      hf.buildReady = hf.buildReady || {};
+      const prev = hf.buildReady[cid];
+      hf.buildReady[cid] = prev ? Promise.all([prev, p]) : Promise.resolve(p);
+      return p;
+    };
+    // resolves once the theme font is loaded in these weights (text is measured after this)
+    U.fonts = function (weights, family) {
+      if (typeof document === "undefined" || !document.fonts) return Promise.resolve();
+      return Promise.all((weights || [500, 800, 900]).map((wt) => document.fonts.load(wt + " 10px " + (family || "Inter"))))
+        .catch(() => null);
+    };
     U.clock = function (fn) {
       const c = { t: 0 };
       tl.to(c, { t: D, duration: D, ease: "none", onUpdate: () => fn(c.t) }, 0);
@@ -113,18 +127,34 @@
           const { RenderPass } = await import("three/addons/postprocessing/RenderPass.js");
           const { UnrealBloomPass } = await import("three/addons/postprocessing/UnrealBloomPass.js");
           const { OutputPass } = await import("three/addons/postprocessing/OutputPass.js");
+          const { ShaderPass } = await import("three/addons/postprocessing/ShaderPass.js");
+          const VS = "varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }";
+          // the bloom composite writes alpha 1 everywhere, which alone would paint the whole frame black. Two fixes:
+          // alpha "luma" (default): rebuild alpha from brightness (premultiplied), so the glow composites like light
+          //   (≈ screen) over the A-roll.
+          // alpha "keep": save the clean render before the bloom and merge after it: object pixels keep their own
+          //   alpha (solid, dark parts stay opaque), the added glow gets alpha from its brightness.
+          const keep = opt.bloom.alpha === "keep";
           composer = new EffectComposer(renderer);
           composer.addPass(new RenderPass(scene, camera));
+          let save = null;
+          if (keep) {
+            const { SavePass } = await import("three/addons/postprocessing/SavePass.js");
+            save = new SavePass();
+            composer.addPass(save);
+          }
           composer.addPass(new UnrealBloomPass(new THREE.Vector2(w, h), opt.bloom.strength ?? 1.5, opt.bloom.radius ?? 0.5, opt.bloom.threshold ?? 0));
+          if (keep) {
+            const merge = new ShaderPass({ uniforms: { tDiffuse: { value: null }, tBase: { value: null } }, vertexShader: VS,
+              fragmentShader: "uniform sampler2D tDiffuse; uniform sampler2D tBase; varying vec2 vUv; void main(){ vec4 b=texture2D(tBase,vUv);"
+                + " vec3 g=max(texture2D(tDiffuse,vUv).rgb-b.rgb,0.0); float ga=clamp(max(g.r,max(g.g,g.b)),0.0,1.0); gl_FragColor=vec4(b.rgb+g, max(b.a,ga)); }",
+            });
+            merge.uniforms.tBase.value = save.renderTarget.texture;   // after construction: ShaderPass clones its uniforms
+            composer.addPass(merge);
+          }
           composer.addPass(new OutputPass());
-          // alpha "luma" (default): the bloom blur writes alpha 1 everywhere, which would paint the frame black, so
-          // rebuild alpha from brightness (premultiplied) and the glow composites like light (≈ screen) over the A-roll.
-          // alpha "keep": skip that pass (solid objects keep their own alpha; dark parts stay opaque)
-          if ((opt.bloom.alpha || "luma") !== "keep") {
-            const { ShaderPass } = await import("three/addons/postprocessing/ShaderPass.js");
-            composer.addPass(new ShaderPass({
-              uniforms: { tDiffuse: { value: null } },
-              vertexShader: "varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }",
+          if (!keep) {
+            composer.addPass(new ShaderPass({ uniforms: { tDiffuse: { value: null } }, vertexShader: VS,
               fragmentShader: "uniform sampler2D tDiffuse; varying vec2 vUv; void main(){ vec3 c=clamp(texture2D(tDiffuse,vUv).rgb,0.0,1.0);"
                 + " gl_FragColor=vec4(c, max(c.r, max(c.g, c.b))); }",
             }));
@@ -140,10 +170,7 @@
         const render = () => (composer ? composer.render() : renderer.render(scene, camera));
         return { THREE, scene, camera, renderer, composer, toWorld, render };
       })();
-      window.__hf = window.__hf || {};
-      window.__hf.buildReady = window.__hf.buildReady || {};
-      window.__hf.buildReady[cid] = ready;
-      return ready;
+      return U.ready(ready);
     };
     U.glowOrb = function (three, o) {
       o = o || {};

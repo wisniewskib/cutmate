@@ -467,7 +467,7 @@ def test_split_effect_expansion(tmp_path):
     a, b = pl.graphics
     assert (a.type, b.type) == ("split", "custom")
     assert a.params["effect"] == "diagram" and "media" not in a.params
-    assert b.params == {"name": "diagram", "_fade": 0.45, "region": [40, 40, 1000, 820]}
+    assert b.params == {"name": "diagram", "_slide": 900, "region": [40, 40, 1000, 820]}  # rides with the 900 px panel
     assert (a.start, a.end) == (b.start, b.end)
     assert not any("overlaps" in w for w in pl.warnings)
 
@@ -577,3 +577,18 @@ def test_no_pointing_data_warns(tmp_path):
     pl = load_plan(out)
     assert "place_xy" not in pl.graphics[0].params
     assert "WARN tracks.json has no pointing data — run `cutmate track --force`" in pl.warnings
+
+
+def test_glb_shape_needs_glb_media(tmp_path):
+    def plan_with(**kw):
+        g = dict({"type": "custom", "name": "showcase-3d", "at": "S2:minus", "params": {"shape": "glb"}}, **kw)
+        out = make_out169(tmp_path / str(len(list(tmp_path.iterdir()))), {"graphics": [g]})
+        for f in ("a.png", "a.glb"):
+            (out.parent / f).write_bytes(b"x")
+        return load_plan(out).warnings
+    msg = 'WARN custom at 4.0s: shape "glb" needs a .glb / .gltf "media" — it falls back to the torus knot'
+    assert msg in plan_with(media="a.png")
+    assert msg in plan_with()
+    assert not any("glb" in w for w in plan_with(media="a.glb"))
+    assert not any("glb" in w for w in plan_with(params={"shape": "glb", "model": "robot.glb"}))
+    assert not any("glb" in w for w in plan_with(params={"shape": "torus-knot"}, media="a.png"))

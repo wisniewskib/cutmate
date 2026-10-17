@@ -125,34 +125,40 @@ if (kind === "terminal") {
 }
 const doneAt = lines.length ? lines[lines.length - 1].end : P.at + 0.45;
 
+// post: engagement counters only from P.replies / P.reposts / P.likes (no invented numbers); none given -> no footer
 let foot = null, counts = [];
-if (kind === "post") {
+const given = [["reply", P.replies], ["repost", P.reposts], ["like", P.likes]].filter(([, v]) => v != null && v !== "");
+if (kind === "post" && given.length) {
   foot = U.el("div", "um-foot", null, win);
-  const r = U.seed(Array.from(raw.map((l) => l.text).join("")).length + 7);
   const icons = {
     reply: "M4 5h16v11H9l-5 4z",
     repost: "M7 7h11v4l3-3-3-3v2M17 17H6v-4l-3 3 3 3v-2",
     like: "M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z",
   };
   const fmtK = (v) => (v >= 1000 ? (v / 1000).toFixed(1).replace(".", pl ? "," : ".") + (pl ? " tys." : "K") : String(Math.round(v)));
-  counts = [["reply", 40 + Math.floor(r() * 260)], ["repost", 90 + Math.floor(r() * 900)], ["like", 1200 + Math.floor(r() * 8800)]]
-    .map(([name, to], i) => {
-      const a = U.el("div", "act " + name, null, foot);
-      a.innerHTML = '<svg viewBox="0 0 24 24"><path d="' + icons[name] + '"/></svg>';
-      const v = U.el("span", null, "0", a);
-      return { a, v, to, fmtK, at: doneAt + 0.15 + i * 0.12 };
-    });
+  counts = given.map(([name, to], i) => {
+    const a = U.el("div", "act " + name, null, foot);
+    a.innerHTML = '<svg viewBox="0 0 24 24"><path d="' + icons[name] + '"/></svg>';
+    const num = typeof to === "number" && isFinite(to);             // numbers count up; text ("1,2 tys.") is shown as is
+    const v = U.el("span", null, num ? "0" : String(to), a);
+    return { a, v, to, num, fmtK, at: doneAt + 0.15 + i * 0.12 };
+  });
 }
 
-// few / short lines: grow the text (up to 1.7x) while the finished conversation still fits in ~92% of the window body
-lines.forEach((l) => { l.tx.textContent = l.ch.join(""); if (l.dots) l.dots.style.display = "none"; });
-let fk = 1;
-for (const k of [1.7, 1.55, 1.4, 1.3, 1.2, 1.1]) {
-  win.style.setProperty("--fk", k);
-  if (feed.offsetHeight <= body.clientHeight * 0.92) { fk = k; break; }
-}
-win.style.setProperty("--fk", fk);
-lines.forEach((l) => { l.tx.textContent = ""; if (l.dots) l.dots.style.display = ""; });
+// few / short lines: grow the text (up to 1.7x) while the finished conversation still fits in ~92% of the window body;
+// measured once the theme font has loaded (fallback metrics would pick the wrong size)
+const fit = () => {
+  lines.forEach((l) => { l.tx.textContent = l.ch.join(""); if (l.dots) l.dots.style.display = "none"; });
+  let fk = 1;
+  for (const k of [1.7, 1.55, 1.4, 1.3, 1.2, 1.1]) {
+    win.style.setProperty("--fk", k);
+    if (feed.offsetHeight <= body.clientHeight * 0.92) { fk = k; break; }
+  }
+  win.style.setProperty("--fk", fk);
+  lines.forEach((l) => { l.tx.textContent = ""; if (l.dots) l.dots.style.display = ""; });
+};
+fit();
+U.ready(U.fonts([500, 800, 900]).then(fit));
 
 U.clock((t) => {
   const vis = clamp((t - P.at) / 0.25) * clamp((P.end - t) / 0.25);
@@ -195,7 +201,7 @@ U.clock((t) => {
   }
   counts.forEach((c) => {
     const q = quartOut(clamp((t - c.at) / 0.9));
-    c.v.textContent = c.fmtK(c.to * q);
+    if (c.num) c.v.textContent = c.fmtK(c.to * q);
     c.a.style.opacity = 0.35 + 0.65 * clamp((t - c.at) / 0.3);
     if (c.a.classList.contains("like")) {
       const on = t >= c.at + 0.5;
