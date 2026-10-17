@@ -1,3 +1,4 @@
+import shutil
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -84,6 +85,7 @@ def test_faster_cuda_fallback_to_cpu(monkeypatch, tmp_path, capsys):
     # Verify _faster was cached (loaded on CPU)
     assert b._faster is not None
     assert b._faster.device == "cpu"
+    assert b.device == "cpu"
 
 
 def test_faster_transcribe_runtime_error(monkeypatch, tmp_path):
@@ -137,11 +139,11 @@ def test_faster_lazy_cuda_failure_at_transcribe_falls_back_to_cpu(monkeypatch, t
     make_wav(wav)
     assert [w.word for w in b.transcribe(wav, "en").words] == ["hi"]
     out = capsys.readouterr().out
-    assert out.count("WARN local: GPU transcription failed") == 1
-    assert built == ["cuda", "cpu"]
+    assert out.count("WARN local: GPU transcription failed") == 2
+    assert built == ["cuda", "cuda", "cpu"]
     # cached on CPU: no further rebuilds or warnings
     b.transcribe(wav, "en")
-    assert built == ["cuda", "cpu"] and "WARN" not in capsys.readouterr().out
+    assert built == ["cuda", "cuda", "cpu"] and "WARN" not in capsys.readouterr().out
 
 
 def test_faster_cuda_and_cpu_both_fail_raises(monkeypatch, tmp_path):
@@ -199,6 +201,48 @@ def test_cuda_oom_float16_retries_int8_on_gpu(monkeypatch, tmp_path, capsys):
     b = LocalBackend("faster", "large-v3")
     b.transcribe(make_wav(tmp_path / "a.wav"), "pl")
     assert built == [("cuda", "float16"), ("cuda", "int8_float16")]
-    assert b._device == "cuda"
+    assert b.device == "cuda"
     out = capsys.readouterr().out
     assert "out of memory" in out and "int8_float16" in out
+
+
+def _ladder_model(fail_on):
+    class FakeWhisperModel:
+        def __init__(self, model, device="cpu", compute_type="int8"):
+            self.key = (device, compute_type)
+
+        def transcribe(self, *a, **k):
+            if self.key in fail_on:
+                raise RuntimeError("CUDA out of memory")
+            W = lambda w, s, e, p: SimpleNamespace(word=w, start=s, end=e, probability=p)
+            return iter([SimpleNamespace(words=[W(" hi", 0.0, 0.5, 0.9)])]), SimpleNamespace()
+    return FakeWhisperModel
+
+
+def test_transcribe_oom_retries_int8_float16(monkeypatch, tmp_path, capsys):
+    monkeypatch.setitem(sys.modules, "faster_whisper",
+                        SimpleNamespace(WhisperModel=_ladder_model({("cuda", "float16")})))
+    monkeypatch.setattr(local, "pick_device", lambda: ("cuda", "float16"))
+    b = LocalBackend("faster", "large-v3")
+    assert [w.word for w in b.transcribe(make_wav(tmp_path / "a.wav"), "en").words] == ["hi"]
+    assert (b.device, b.compute) == ("cuda", "int8_float16")
+    assert "retrying with int8_float16" in capsys.readouterr().out
+
+
+def test_transcribe_gpu_failure_falls_back_to_cpu_with_hint(monkeypatch, tmp_path, capsys):
+    monkeypatch.setitem(sys.modules, "faster_whisper", SimpleNamespace(
+        WhisperModel=_ladder_model({("cuda", "float16"), ("cuda", "int8_float16")})))
+    monkeypatch.setattr(local, "pick_device", lambda: ("cuda", "float16"))
+    b = LocalBackend("faster", "large-v3")
+    b.transcribe(make_wav(tmp_path / "a.wav"), "en")
+    assert (b.device, b.compute) == ("cpu", "int8")
+    out = capsys.readouterr().out
+    assert "transcribing on CPU" in out and "/cutmate:setup" in out
+
+
+@pytest.mark.slow
+@pytest.mark.skipif(shutil.which("nvidia-smi") is None, reason="no NVIDIA GPU")
+def test_gpu_transcribe_real(tmp_path):
+    b = LocalBackend("faster", "tiny")
+    b.transcribe(make_wav(tmp_path / "a.wav", dur=2.0), "en")
+    assert b.device == "cuda"

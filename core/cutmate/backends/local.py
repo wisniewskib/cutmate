@@ -2,6 +2,7 @@ import platform
 import sys
 from pathlib import Path
 
+from .. import cuda
 from ..errors import BackendError
 from ..media import read_pcm
 from ..transcript import Transcript, Word
@@ -17,11 +18,15 @@ def words_from_faster(segments) -> list[Word]:
             for s in segments for w in (s.words or []) if w.word.strip()]
 
 
+SETUP_HINT = "Run /cutmate:setup → Transcription to fix the GPU."
+
+
 def _short(e: Exception) -> str:
     return " ".join(str(e).split())[:120] or type(e).__name__
 
 
 def pick_device() -> tuple[str, str]:
+    cuda.enable_cuda_libs()
     try:
         import ctranslate2
         if ctranslate2.get_cuda_device_count() > 0:
@@ -37,7 +42,8 @@ class LocalBackend:
     def __init__(self, engine: str, model: str):
         self.engine, self.model = engine, model
         self._faster = None
-        self._device = None
+        self.device: str | None = None
+        self.compute: str | None = None
 
     @classmethod
     def auto(cls) -> "LocalBackend":
@@ -64,24 +70,34 @@ class LocalBackend:
         try:
             return self._run_faster(wav, language, prompt)
         except Exception as e:
-            if self._device != "cuda":
-                raise BackendError(f"local transcription failed: {e}") from None
-            # cuDNN/cuBLAS load lazily at the first transcribe, so GPU failures surface here, not at model load
-            print(f"WARN local: GPU transcription failed ({_short(e)}), falling back to CPU")
+            err = e
+        # cuDNN/cuBLAS load lazily at the first transcribe, so GPU failures surface here, not at model load
+        if self.device == "cuda" and self.compute != "int8_float16":
+            print(f"WARN local: GPU transcription failed with {self.compute} ({_short(err)}), retrying with int8_float16")
             try:
-                self._faster, self._device = self._build("cpu", "int8"), "cpu"
-            except Exception as e2:
-                raise BackendError(f"local model load failed: {e2}") from None
+                self._faster, self.device, self.compute = self._build("cuda", "int8_float16"), "cuda", "int8_float16"
+                return self._run_faster(wav, language, prompt)
+            except Exception as e:
+                err = e
+        if self.device == "cuda":
+            print(f"WARN local: GPU transcription failed ({_short(err)}) — transcribing on CPU (much slower). "
+                  f"{SETUP_HINT}")
+            try:
+                self._faster, self.device, self.compute = self._build("cpu", "int8"), "cpu", "int8"
+            except Exception as e:
+                raise BackendError(f"local model load failed: {e}") from None
             try:
                 return self._run_faster(wav, language, prompt)
-            except Exception as e2:
-                raise BackendError(f"local transcription failed: {e2}") from None
+            except Exception as e:
+                err = e
+        raise BackendError(f"local transcription failed: {err}") from None
 
     def _build(self, device: str, compute: str):
         from faster_whisper import WhisperModel
         return WhisperModel(self.model, device=device, compute_type=compute)
 
     def _load(self):
+        cuda.enable_cuda_libs()
         try:
             import faster_whisper  # noqa: F401
         except ImportError:
@@ -92,22 +108,22 @@ class LocalBackend:
                 model = self._build(device, compute)
             except Exception as e:
                 raise BackendError(f"local model load failed: {e}") from None
-            self._device = device
+            self.device, self.compute = device, compute
             return model
         # 6 GB cards can run out of memory on large-v3 float16; int8_float16 still fits on the GPU
         for gpu_compute in (compute, "int8_float16"):
             try:
                 model = self._build("cuda", gpu_compute)
-                self._device = "cuda"
+                self.device, self.compute = "cuda", gpu_compute
                 return model
             except Exception as e:
-                nxt = "trying int8_float16" if gpu_compute == compute else "falling back to CPU"
+                nxt = "trying int8_float16" if gpu_compute == compute else f"falling back to CPU. {SETUP_HINT}"
                 print(f"WARN local: GPU load failed with {gpu_compute} ({_short(e)}), {nxt}")
         try:
             model = self._build("cpu", "int8")
         except Exception as e2:
             raise BackendError(f"local model load failed: {e2}") from None
-        self._device = "cpu"
+        self.device, self.compute = "cpu", "int8"
         return model
 
     def _run_faster(self, wav: Path, language: str, prompt: str | None) -> Transcript:
