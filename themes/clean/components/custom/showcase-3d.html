@@ -107,6 +107,7 @@ const ready = U.three({ el: box, bloom: { strength: 0.7, radius: 0.4, threshold:
   // where: gesture place > x/y params > right third; kept inside the frame
   let px = P.place ? P.place[0] : P.x != null ? P.x : P.w * 0.75;
   let py = P.place ? P.place[1] : P.y != null ? P.y : P.h * 0.45;
+  if (P.place && py > P.h * 0.55) py -= sz.y * scale / UPX / 2;   // a low gesture spot is a hand held out: rest on it, don't cover it
   const mx = Math.min(P.w / 2, sz.x * scale / UPX / 2 + P.w * 0.03), my = Math.min(P.h / 2, sz.y * scale / UPX / 2 + P.h * 0.03);
   px = Math.min(P.w - mx, Math.max(mx, px)); py = Math.min(P.h - my, Math.max(my, py));
   const home = S.toWorld(px, py);

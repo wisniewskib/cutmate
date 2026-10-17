@@ -43,6 +43,13 @@ def test_bloom_alpha_option():
     assert "SavePass" not in show and 'alpha: "keep"' in show                 # uses the shared fix
 
 
+def test_showcase_rests_on_a_low_gesture_spot():
+    """Palm held out low in the frame ("tutaj" + open hand): the object sits on the spot instead of covering the hand."""
+    show = (plugin_root() / "themes" / "clean" / "components" / "custom" / "showcase-3d.html").read_text(encoding="utf-8")
+    lift = show.index("if (P.place && py > P.h * 0.55) py -= sz.y * scale / UPX / 2;")
+    assert show.index("let py = P.place") < lift < show.index("py = Math.min(P.h - my")    # before the frame clamp
+
+
 READY = """
 global.window = {};
 require(%s);
