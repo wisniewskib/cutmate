@@ -131,6 +131,10 @@ def _parser() -> argparse.ArgumentParser:
     cs.add_parser("show", help="print the effective config as JSON")
     cst = cs.add_parser("set", help="set KEY=VALUE pairs (e.g. language=en music.volume=0.3)")
     cst.add_argument("pairs", nargs="+", metavar="PAIR")
+    sub.add_parser("doctor", help="health report (JSON): packages, models, GPU, keys, config")
+    md = sub.add_parser("models", help="download the local models (alignment, whisper, face/hand tracking)")
+    md.add_argument("--language", choices=config.LANGUAGES)
+    md.add_argument("--backend", choices=config.BACKENDS)
     return ap
 
 
@@ -149,9 +153,17 @@ def _config_cmd(args) -> int:
 def _dispatch(args) -> int:
     if args.cmd == "config":
         return _config_cmd(args)
+    if args.cmd == "doctor":
+        import json
+        from .doctor import doctor
+        print(json.dumps(doctor(), indent=2, ensure_ascii=False))
+        return 0
     cfg = config.load()
     language = getattr(args, "language", None) or cfg.language
-    if args.cmd == "transcribe":
+    if args.cmd == "models":
+        from .doctor import download_models
+        download_models(language, args.backend or cfg.transcription)
+    elif args.cmd == "transcribe":
         from .transcribe import run_transcribe
         run_transcribe(Path(args.rec), get_backend(args.backend or cfg.transcription), language, args.prompt, args.force)
     elif args.cmd == "formats":
