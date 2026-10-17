@@ -33,11 +33,14 @@ fi
 # --- gpu
 gpu_kind=none; gpu_name=; gpu_vram=; gpu_driver=
 if command -v nvidia-smi >/dev/null 2>&1; then
-  line=$(nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader,nounits 2>/dev/null | head -1)
-  if [ -n "$line" ]; then
+  # a broken driver prints its failure text on stdout and exits non-zero: require exit 0 and a numeric VRAM
+  if line=$(nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader,nounits 2>/dev/null) \
+     && line=$(printf '%s\n' "$line" | head -1) \
+     && vram=$(printf '%s' "$line" | awk -F', *' '{print $2}' | tr -d ' ') \
+     && printf '%s' "$vram" | grep -Eq '^[0-9]+$'; then
     gpu_kind=nvidia
     gpu_name=$(printf '%s' "$line" | awk -F', *' '{print $1}')
-    gpu_vram=$(printf '%s' "$line" | awk -F', *' '{print $2}' | tr -cd '0-9')
+    gpu_vram=$vram
     gpu_driver=$(printf '%s' "$line" | awk -F', *' '{print $3}' | tr -d ' ')
   fi
 fi

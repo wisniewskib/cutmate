@@ -76,6 +76,18 @@ def test_detect_sh_nvidia(tmp_path):
                         "vram_mb": 6144, "driver": "595.99.02"}
 
 
+def test_detect_sh_broken_nvidia_smi(tmp_path):
+    msg = "NVIDIA-SMI has failed because it couldn't communicate with the NVIDIA driver."
+    d = run_sh(tmp_path, {"nvidia-smi": 'echo "%s"; exit 9' % msg})
+    assert d["gpu"]["kind"] == "none"
+    assert d["gpu"]["vram_mb"] is None
+
+
+def test_detect_ps1_nvidia_needs_numeric_vram():
+    t = (ROOT / "install/detect.ps1").read_text(encoding="utf-8")
+    assert "$LASTEXITCODE -eq 0" in t and "'^\\d+$'" in t
+
+
 def test_detect_sh_cutmate_home(tmp_path):
     home = tmp_path / "cm"
     home.mkdir()

@@ -15,9 +15,12 @@ if (Get-Command winget -ErrorAction SilentlyContinue) { $pkg = 'winget' }
 $gpu = [ordered]@{ kind = 'none'; name = $null; vram_mb = $null; driver = $null }
 if (Get-Command nvidia-smi -ErrorAction SilentlyContinue) {
     $line = (& nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader,nounits 2>$null | Select-Object -First 1)
-    if ($line) {
-        $p = $line -split ',\s*'
-        $gpu.kind = 'nvidia'; $gpu.name = $p[0]; $gpu.vram_mb = [int]$p[1]; $gpu.driver = $p[2].Trim()
+    # a broken driver prints its failure text on stdout and exits non-zero: require exit 0 and a numeric VRAM
+    if ($LASTEXITCODE -eq 0 -and $line) {
+        $p = "$line" -split ',\s*'
+        if ($p.Count -ge 3 -and $p[1].Trim() -match '^\d+$') {
+            $gpu.kind = 'nvidia'; $gpu.name = $p[0]; $gpu.vram_mb = [int]$p[1]; $gpu.driver = $p[2].Trim()
+        }
     }
 }
 if ($gpu.kind -eq 'none') {
