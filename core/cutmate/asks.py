@@ -44,6 +44,12 @@ def _range(anchor, timed: list[dict], words: list[dict], end: float) -> tuple[fl
     raise CutmateError(f"requests: no segment {anchor!r}")
 
 
+def _matches(g, target: str) -> bool:
+    if target == "explainer":                      # a split (9:16) or side (16:9) graphic carrying an effect
+        return g.type in ("split", "side") and bool(g.params.get("effect"))
+    return g.type == target or target == f"custom:{g.params.get('name')}"
+
+
 def check_requests(out_dir: Path) -> list[str]:
     import json
     out = Path(out_dir)
@@ -72,7 +78,8 @@ def check_requests(out_dir: Path) -> list[str]:
             lines.append(f"BAD  {r['error']}")
             continue
         label = f"[{r['source']}] {r['what']} → {r['target']}" + (f" @ {r['anchor']}" if r["anchor"] else "")
-        if r["target"] in _NOTES:
+        surprise = r["source"] == "niespodzianka"
+        if r["target"] in _NOTES or r["target"] == "explainers":
             lines.append(f"NOTE {label}")
             continue
         if not r["anchor"]:
@@ -83,7 +90,7 @@ def check_requests(out_dir: Path) -> list[str]:
         except CutmateError as e:
             lines.append(f"BAD  {label} ({' '.join(str(e).split())})")
             continue
-        found = any((g.type == r["target"] or r["target"] == f"custom:{g.params.get('name')}")
-                    and lo <= g.start <= hi for g in plan.graphics)
-        lines.append((f"OK   {label}" if found else f"MISSING {label}"))
+        found = any(_matches(g, r["target"]) and lo <= g.start <= hi for g in plan.graphics)
+        status = "OK  " if found else "MISSING"
+        lines.append(f"SURPRISE {status.strip()} {label}" if surprise else f"{status} {label}")
     return lines

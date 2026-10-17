@@ -44,3 +44,10 @@ def test_skill_covers_effects():
               "\"side\"", "U.clock", "U.three", "U.trackAt", "U.seed", "energy-ball", "out/custom/",
               "zrozumiałem tak", "polecenia"):
         assert s in md, s
+
+
+def test_skill_covers_2d():
+    md = (paths.plugin_root() / "skills" / "edit" / "SKILL.md").read_text(encoding="utf-8")
+    for s in ("\"place\": \"gesture\"", "\"speaker\": \"gesture\"", "stat-card", "iso-machine", "ui-mock", "flow",
+              "index.json", "niespodzianka", "bez niespodzianek", "explainer"):
+        assert s in md, s

@@ -96,3 +96,23 @@ def test_cli_summary_counts_bad(tmp_path, capsys):
     out = _setup(tmp_path, "- [c] a → pip @ S2\n- [c] b → pip @ S9\n- [c] c → pip @ S1\n- zła linia\n")
     assert main(["requests", str(out)]) == 0
     assert capsys.readouterr().out.strip().splitlines()[-1] == "requests: 1 ok, 1 missing, 2 bad"
+
+
+def test_explainer_targets(tmp_path):
+    md = ("- [czat] explainery → explainers\n"
+          "- [czat] liczba → explainer @ S2\n"
+          "- [czat] schemat → explainer @ S1\n"
+          "- [niespodzianka] burst → custom:burst @ S2\n"
+          "- [niespodzianka] kula → custom:orb @ S1\n")
+    out = _setup(tmp_path, md)
+    plan = json.loads((out / "plan.json").read_text())
+    plan["graphics"] = [
+        {"type": "side", "from": "S2:75%", "to": "S2:75%", "effect": "stat-card", "speaker": "right"},
+        {"type": "side", "from": "S2:75%", "to": "S2:75%", "media": "b.png"},
+        {"type": "custom", "name": "burst", "at": "S2:75%"}]
+    (out / "plan.json").write_text(json.dumps(plan))
+    lines = check_requests(out)
+    assert lines[0].startswith("NOTE") and "explainers" in lines[0]
+    assert lines[1].startswith("OK") and lines[2].startswith("MISSING")
+    assert lines[3].startswith("SURPRISE OK")
+    assert lines[4].startswith("SURPRISE MISSING")

@@ -64,10 +64,14 @@ The user can ask for things the built-in components don't cover. Collect every r
   person ("tutaj ma być", "dodaj", "przenosisz mnie", "zrób"). These segments never go into the EDL unless they are
   also content. Jokes / filler with no content ("Test.", "Twerk.") are cut like false starts and listed as `→ cut`.
 - `[uwagi <mm:ss>]` — feedback after a render.
+- `[niespodzianka]` — your own surprises (see "Zaskocz mnie" below); `$CM requests` lists them as `SURPRISE OK|MISSING`.
+
+Film-wide request "chcę explainery" → `- [czat] explainery → explainers` (a NOTE; the explainers themselves are `→ explainer @ S3`, matched by a `split`/`side` graphic with an `effect`).
 
 **Map:** a built-in component when one fits; `bg` for "inne tło / przenieś mnie gdzie indziej"; `side` for "na połowie
 ekranu" (16:9 only); otherwise `custom`. Check saved effects first: `~/.cutmate/themes/<theme>/components/custom/index.json`
-and the bundled `energy-ball` (params `radius`, `colors`; use with `"follow": "hand"`).
+and the bundled ones in `${CLAUDE_PLUGIN_ROOT}/themes/<theme>/components/custom/index.json` — read BOTH `index.json` files; their formats differ (bundled: `params` = {name: description}, `follow`/`place` booleans, `kind`; user file from `save-effect`: `params` = list, `follow` = string|null).
+Bundled: `energy-ball` (params `radius`, `colors`; `"follow": "hand"`; hidden without hand samples), explainers `stat-card`, `flow`, `ui-mock`, `iso-machine`, VFX/3D `showcase-3d`, `burst`.
 
 **Plan types** (in `plan.json` graphics):
 - `{"type": "custom", "name": "<lowercase-dashes>", "from": …, "to": …}` or `"at"` (+ `until`); `"follow": "face"|"hand_left"|"hand_right"|"hand"`
@@ -77,6 +81,25 @@ and the bundled `energy-ball` (params `radius`, `colors`; use with `"follow": "h
   (copy it to `broll/`). `bg` removes the background from the A-roll: ~17× the duration on CPU. Total `bg` > 30 s → build WARN: ask the user before building.
 - `{"type": "side", "from", "to", "media"|"effect", "speaker": "right"|"left"}` — speaker on one half, graphic on the other (16:9 only).
 - `face` per segment is filled automatically from tracks.json when missing.
+
+**Explainers** (animated explanations in the `split` panel): only after an explicit request — chat or spoken ("explainer(y)", "wyjaśnij to animacją"), never on your own. Pick moments:
+2–4 per 60 s of video, each ≥ 2 s, ≥ 2 s of plain face between two explainers, never on a sentence that already has a requested effect or a `split` with `media`.
+Choose from `index.json` by sentence type: a number → `stat-card`, steps / a process → `flow`, a tool / a chat / a command → `ui-mock`, a mechanism / "how it works" → `iso-machine`. Nothing fits → write a new effect in `out/custom/` starting from the closest template.
+Text and numbers come ONLY from the sentence (the fact-check rule of §3 applies; the build warns about numbers no ✅ line confirms).
+9:16: `{"type": "split", "from": …, "to": …, "effect": "<name>", "params": {…}}` (panel 1000×820, params go to the effect); 16:9: the same as `{"type": "side", …, "effect", "params", "speaker": "right"|"left"|"gesture"}`.
+Templates (params; `?` = optional):
+- `stat-card`: value, prefix?, suffix?, label, note?, media?, accent?
+- `flow`: nodes (2–6), edges?, style (`clean`|`rough`), title?, seed?, accent?
+- `ui-mock`: kind (`chat`|`terminal`|`post`), lines [{who: `user`|`ai`|`cmd`, text}], title?, accent?
+- `iso-machine`: parts (2–5) [{label, shape: `box`|`cylinder`|`funnel`|`screen`|`gear`, color?}], token?, counter? {to, label}, title?, theme (`light`|`dark`), accent?
+VFX/3D: `showcase-3d` (shape `torus-knot`|`icosahedron`|`text`|`glb`, text?, color?, x?, y?, place; GLB via graphic-level `"media": "broll/x.glb"`), `burst` (x?, y?, place).
+
+**Gesture placement:** when a spoken command says "tutaj / tu / tam / w tym miejscu" without naming a place, write `"place": "gesture"` (custom / chip) or `"speaker": "gesture"` (side: the panel goes to the screen side the speaker points to). A named place ("w prawym dolnym rogu", "po lewej") always wins — then do NOT write gesture. Run `$CM track <folder>/out` first (fresh tracks needed; stale → build error, no pointing gesture near the word → build WARN and the default position).
+
+**Zaskocz mnie (surprises):** on by default whenever effects or explainers are requested; "bez niespodzianek" turns it off (never add surprises to a plain cut).
+1–3 per video, ≤ 1 per 15 s, never over the face, never on a sentence with a requested effect. Use `burst`, `showcase-3d`, a `chip` / `stamp` or a small custom effect on a punchline or key word. Log each as `- [niespodzianka] <what> → <target> @ <anchor>` and flag them in the "zrozumiałem tak" list as surprises so the user can strike any.
+
+**Snapshot loop:** every explainer and every gesture-placed effect gets at least two snapshots (start and middle, §6) and you READ them before the checkpoint; fix `plan.json` / the effect and rebuild BEFORE showing the "zrozumiałem tak" list.
 
 **Tracking:** if any graphic uses `"follow"`, or you want face-centred punch-ins without reading sheets, run
 `$CM track <folder>/out` after `cut` (it skips the work when tracks.json is newer than aroll.mp4; `--force` redoes it). After every re-cut run it again: plan/build ignore a tracks.json older than aroll.mp4, and `follow` then fails. Needs mediapipe; otherwise tell the user to run `/cutmate:setup`.
@@ -124,7 +147,7 @@ U.three({ el: root.querySelector(".fx"), bloom: { strength: 1.2, radius: 0.6, th
 ```
 
 **Checkpoint "zrozumiałem tak":** map every request into `plan.json` in §5 first (a word anchor in requests.md matches a graphic starting within ±1 s of that word). Then, right before build (16:9: together with the preview), when `requests.md` has ≥ 1 line, run `$CM requests <folder>/out` — it needs aligned_words.json, edl_timed.json and plan.json (one line per request: OK / MISSING /
-NOTE / BAD, then `requests: N ok, M missing, K bad`), fix every `MISSING` and `BAD`, then show the user the list as "zrozumiałem tak: …"
+NOTE / SURPRISE OK|MISSING / BAD, then `requests: N ok, M missing, K bad`), fix every `MISSING` and `BAD`, then show the user the list as "zrozumiałem tak: …"
 and wait for OK. No requests → no pause.
 
 **After acceptance:** for each `custom` effect used, ask once "Zapisać efekt <name> w theme?" → `$CM save-effect <folder>/out <name> --description "…"`
@@ -196,7 +219,7 @@ Follow `frame.md`. Write `out/plan.json`:
   also matches the spoken `75%`. Optional on any graphic: `until` (anchor or seconds), `hit`, `sfx`.
 - Components: `title` (at, text, kicker?, logo?), `counter` (at, to, prefix?, suffix?, label), `list` (items[{text, at}],
   head?), `chip` (at, text, logo?/icon?), `stamp` (at, one-word text), `bars` (at, head, rows[{label, value}],
-  illustrative), `point` (at, image, corner tl/tr/bl/br), `split` (from, to, media).
+  illustrative), `point` (at, image, corner tl/tr/bl/br), `split` (from, to, media | effect + params).
 - Effects on request (`custom`, `bg`, `side`, `"follow"`): §1c.
 - Limits enforced by the planner: a `list` has at most 4 items, `bars` at most 3 rows, `stamp` is exactly one word,
   `counter.to` is a number. Budgets (warnings): at most 2 graphics with `hit`, 1 `title`, no overlapping graphics.
