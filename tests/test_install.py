@@ -158,3 +158,10 @@ def test_ps1_files_ascii_or_bom():
     for p in (ROOT / "install").glob("*.ps1"):
         b = p.read_bytes()
         assert b.startswith(b"\xef\xbb\xbf") or b.isascii(), p.name
+
+
+def test_install_scripts_executable_in_index():
+    out = subprocess.run(["git", "ls-files", "-s", "install/detect.sh", "install/setup.sh"],
+                         cwd=ROOT, capture_output=True, text=True, check=True).stdout
+    modes = {line.split()[-1]: line.split()[0] for line in out.splitlines()}
+    assert modes == {"install/detect.sh": "100755", "install/setup.sh": "100755"}
