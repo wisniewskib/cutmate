@@ -51,3 +51,6 @@ def test_skill_covers_2d():
     for s in ("\"place\": \"gesture\"", "\"speaker\": \"gesture\"", "stat-card", "iso-machine", "ui-mock", "flow",
               "index.json", "niespodzianka", "bez niespodzianek", "explainer"):
         assert s in md, s
+    assert "build does NOT check explainer numbers" in md and "the build warns about numbers no" not in md
+    for s in ("replies?", "U.ready(", "U.fonts(", "track --force"):
+        assert s in md, s

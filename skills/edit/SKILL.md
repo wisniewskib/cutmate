@@ -85,16 +85,16 @@ Bundled: `energy-ball` (params `radius`, `colors`; `"follow": "hand"`; hidden wi
 **Explainers** (animated explanations in the `split` panel): only after an explicit request — chat or spoken ("explainer(y)", "wyjaśnij to animacją"), never on your own. Pick moments:
 2–4 per 60 s of video, each ≥ 2 s, ≥ 2 s of plain face between two explainers, never on a sentence that already has a requested effect or a `split` with `media`.
 Choose from `index.json` by sentence type: a number → `stat-card`, steps / a process → `flow`, a tool / a chat / a command → `ui-mock`, a mechanism / "how it works" → `iso-machine`. Nothing fits → write a new effect in `out/custom/` starting from the closest template.
-Text and numbers come ONLY from the sentence (the fact-check rule of §3 applies; the build warns about numbers no ✅ line confirms).
+Text and numbers come ONLY from the sentence. The build does NOT check explainer numbers (stat-card `value`, iso-machine `counter.to`, ui-mock counts): verify each one against a ✅ line in `factcheck.md` yourself (§3) before you write it.
 9:16: `{"type": "split", "from": …, "to": …, "effect": "<name>", "params": {…}}` (panel 1000×820, params go to the effect); 16:9: the same as `{"type": "side", …, "effect", "params", "speaker": "right"|"left"|"gesture"}`.
 Templates (params; `?` = optional):
-- `stat-card`: value, prefix?, suffix?, label, note?, media?, accent?
+- `stat-card`: value, prefix?, suffix?, label, note?, media? (a file next to the recording, e.g. `broll/shot.png`; build copies it), accent?
 - `flow`: nodes (2–6), edges?, style (`clean`|`rough`), title?, seed?, accent?
-- `ui-mock`: kind (`chat`|`terminal`|`post`), lines [{who: `user`|`ai`|`cmd`, text}], title?, accent?
+- `ui-mock`: kind (`chat`|`terminal`|`post`), lines [{who: `user`|`ai`|`cmd`, text}], title?, accent?, replies? / reposts? / likes? (post only: real counts — a number counts up, text is shown as is; leave them out and the post has no counters, never invent them)
 - `iso-machine`: parts (2–5) [{label, shape: `box`|`cylinder`|`funnel`|`screen`|`gear`, color?}], token?, counter? {to, label}, title?, theme (`light`|`dark`), accent?
 VFX/3D (both support `"place": "gesture"`): `showcase-3d` (shape `torus-knot`|`icosahedron`|`text`|`glb`, text?, model?, color?, size?, x?, y?; GLB via graphic-level `"media": "broll/x.glb"`; default spot: right third), `burst` (colors?, size?, x?, y?; default spot: frame CENTRE, i.e. over the face — for surprises always pass x/y or place).
 
-**Gesture placement:** when a spoken command says "tutaj / tu / tam / w tym miejscu" without naming a place, write `"place": "gesture"` (custom / chip) or `"speaker": "gesture"` (side: the panel goes to the screen side the speaker points to). A named place ("w prawym dolnym rogu", "po lewej") always wins — then do NOT write gesture. Run `$CM track <folder>/out` first (fresh tracks needed; stale → build error, no pointing gesture near the word → build WARN and the default position).
+**Gesture placement:** when a spoken command says "tutaj / tu / tam / w tym miejscu" without naming a place, write `"place": "gesture"` (custom / chip) or `"speaker": "gesture"` (side: the panel goes to the screen side the speaker points to). A named place ("w prawym dolnym rogu", "po lewej") always wins — then do NOT write gesture. `place` is only for `custom` / `chip` and `"speaker": "gesture"` only for `side` (anything else → plan error). A chip centres on the pointed spot (kept inside the safe zone); positions follow punch-ins and the split / side moves. Run `$CM track <folder>/out` first (fresh tracks needed; stale → build error, no pointing gesture near the word → build WARN and the default position; WARN "tracks.json has no pointing data" → run `$CM track --force <folder>/out`).
 
 **Zaskocz mnie (surprises):** on by default whenever effects or explainers are requested; "bez niespodzianek" turns it off (never add surprises to a plain cut).
 1–3 per video, ≤ 1 per 15 s, never over the face, never on a sentence with a requested effect. Use `burst`, `showcase-3d`, a `chip` / `stamp` or a small custom effect on a punchline or key word. Log each as `- [niespodzianka] <what> → <target> @ <anchor>` and flag them in the "zrozumiałem tak" list as surprises so the user can strike any.
@@ -114,9 +114,12 @@ components; `ROOT` in style is the effect root. Rules:
   `U.glowOrb(S, {radius, colors, swirl})` → `{group, update(t)}`; `U.particles(target, {count, seed, life, speed, spin, size, colors, emitter})`
   → `{update(t), points?}` (canvas: px; inside `U.three`: world units: frame height ÷ 6.3 px per unit, ≈171 at 1080 px tall, ≈305 at 1920); `U.draw(sel, {from, dur, stagger})`;
   `U.rough(svg, shapes, {seed})` (shape = `{kind: "rectangle"|"circle"|"line"|"path"…, args: [...], opts: {...}}`); `U.tex(el, latex)`; `U.anime(timeline)`; `U.lottie(anim)`.
+- Measuring text (`offsetWidth`, fit loops): do it after `U.fonts([500, 800, 900])` (Promise: the theme font loaded) and
+  register the work with `U.ready(promise)` — the first frame waits for every promise passed to `U.ready` (`U.three` registers itself).
 - `P.w`, `P.h`, `P.dur`, `P.at`, `P.end`, `P.track`, plus your own params at the top level of `P` (they cannot override these keys).
   Used as a `side` effect, `root` is the 840×960 panel (build clips it there), `P.w`/`P.h` are the panel size and
-  `P.track` is in panel px. Used as `bg`/`side` `"effect"`, build fades `root` in at `P.at` and out by `P.end`.
+  `P.track` is in panel px. Used as `bg`/`side` `"effect"`, build fades `root` in at `P.at` and out by `P.end`; as a
+  `split` effect, `root` slides in and out with the panel.
 - Files the effect needs (Lottie JSON, textures, SVGs) go in the folder `out/custom/<name>/`; build copies it to the
   project and `P.assets` is its URL prefix (`fetch(P.assets + "anim.json")`, `P.assets + "tex.png"`); `save-effect` keeps the folder.
 - Hand-placed `custom` effects get no automatic fade: draw nothing before `P.at` and be gone by `P.end` —

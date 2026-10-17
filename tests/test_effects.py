@@ -190,4 +190,12 @@ def test_vfx_lint_and_index(tmp_path, monkeypatch, name, kind, params):
     assert idx[name]["kind"] == kind
     assert params <= set(idx[name]["params"])
     assert idx[name]["follow"] is (name == "energy-ball")
-    assert idx[name]["place"] is (name != "energy-ball")
+    assert idx[name]["place"] is True                                          # energy-ball too (without follow)
+
+
+def test_ui_mock_post_counters_only_from_params():
+    import json
+    idx = {e["name"]: e for e in json.loads((BUNDLED / "index.json").read_text(encoding="utf-8"))}
+    assert {"replies", "reposts", "likes"} <= set(idx["ui-mock"]["params"])
+    js = (BUNDLED / "ui-mock.html").read_text(encoding="utf-8")
+    assert "P.replies" in js and "P.likes" in js and "U.seed" not in js       # no invented numbers

@@ -10,7 +10,7 @@
       "y": "optional px position when there is no hand track"
     },
     "follow": true,
-    "place": false
+    "place": true
   },
   {
     "name": "stat-card",
@@ -51,7 +51,10 @@
       "kind": "\"chat\" (default), \"terminal\" or \"post\"",
       "lines": "[{\"who\": \"user\"|\"ai\"|\"cmd\", \"text\": \"...\"}, ...] (terminal: user/cmd typed after $, ai printed as output)",
       "title": "optional window / account name",
-      "accent": "optional accent colour (default theme --accent)"
+      "accent": "optional accent colour (default theme --accent)",
+      "replies": "post only, optional: real reply count (number counts up; text shown as is); absent = not shown",
+      "reposts": "post only, optional: real repost count; absent = not shown",
+      "likes": "post only, optional: real like count; absent = not shown (no counters at all when none is given)"
     },
     "follow": false,
     "place": false
