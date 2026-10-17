@@ -180,3 +180,22 @@ def test_formats_cli_single(tmp_path, capsys):
     make_clip(tmp_path / "rec" / "a.mp4", dur=1.0, size="320x180")
     assert main(["formats", str(tmp_path / "rec")]) == 0
     assert capsys.readouterr().out.strip().endswith("format: 16:9")
+
+
+def test_config_show_and_set(capsys):
+    assert main(["config", "set", "language=en"]) == 0
+    capsys.readouterr()
+    assert main(["config", "show"]) == 0
+    assert json.loads(capsys.readouterr().out)["language"] == "en"
+    assert main(["config", "set", "language=de"]) == 2
+    err = capsys.readouterr().err
+    assert err.startswith("cutmate:") and len(err.strip().splitlines()) == 1
+
+
+def test_config_set_repairs_broken_file(tmp_path, capsys):
+    from cutmate import config
+    p = config.home() / "config.json"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text("{nope", encoding="utf-8")
+    assert main(["config", "set", "language=en"]) == 0
+    assert config.load(p).language == "en"

@@ -20,7 +20,7 @@ def test_load_missing_returns_defaults(tmp_path):
     assert cfg.language == "pl"
     assert cfg.theme == "clean"
     assert cfg.steps == {"factcheck": True, "qa": True, "thumbnail": True}
-    assert cfg.music == {"source": "none", "folder": None}
+    assert cfg.music == {"source": "none", "folder": None, "volume": 0.45}
 
 
 def test_save_load_roundtrip(tmp_path):
@@ -107,3 +107,73 @@ def test_captions_invalid(tmp_path, bad, msg):
     p.write_text(bad, encoding="utf-8")
     with pytest.raises(ConfigError, match=msg):
         config.load(p)
+
+
+@pytest.mark.parametrize("music", [{"source": "spotify"}, {"volume": True}, {"volume": 3}, {"volume": "x"}])
+def test_load_rejects_bad_music(tmp_path, music):
+    p = tmp_path / "config.json"
+    p.write_text(json.dumps({"music": music}), encoding="utf-8")
+    with pytest.raises(ConfigError, match="music"):
+        config.load(p)
+
+
+def test_set_values_roundtrip(tmp_path):
+    p = tmp_path / "config.json"
+    config.set_values(["language=en", "steps.qa=false", "captions.9:16=srt", "music.volume=0.3"], p)
+    cfg = config.load(p)
+    assert cfg.language == "en"
+    assert cfg.steps == {"factcheck": True, "qa": False, "thumbnail": True}
+    assert cfg.captions["9:16"] == "srt"
+    assert cfg.music["volume"] == 0.3
+
+
+def test_set_values_unknown_key_hides_value(tmp_path):
+    p = tmp_path / "config.json"
+    with pytest.raises(ConfigError) as e:
+        config.set_values(["GROQ_API_KEY=gsk_secret123"], p)
+    msg = str(e.value)
+    assert "environment variables" in msg and "gsk_secret123" not in msg
+    assert not p.exists()
+
+
+def test_set_values_folder_needs_audio(tmp_path, monkeypatch):
+    p = tmp_path / "config.json"
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    with pytest.raises(ConfigError, match="empty"):
+        config.set_values(["music.source=folder", f"music.folder={empty}"], p)
+    notes = tmp_path / "notes"
+    notes.mkdir()
+    (notes / "notes.txt").write_text("x")
+    with pytest.raises(ConfigError, match="notes"):
+        config.set_values(["music.source=folder", f"music.folder={notes}"], p)
+    home = tmp_path / "h"
+    (home / "tunes").mkdir(parents=True)
+    (home / "tunes" / "a.mp3").write_bytes(b"x")
+    monkeypatch.setenv("HOME", str(home))
+    cfg = config.set_values(["music.source=folder", "music.folder=~/tunes"], p)
+    assert "~" not in cfg.music["folder"]
+    assert cfg.music["folder"] == str((home / "tunes").resolve())
+    assert config.load(p).music["folder"] == cfg.music["folder"]
+
+
+def test_set_values_bad_theme(tmp_path):
+    with pytest.raises(CutmateError, match="nope"):
+        config.set_values(["theme=nope"], tmp_path / "config.json")
+
+
+def test_set_values_atomic(tmp_path):
+    p = tmp_path / "config.json"
+    p.write_text(json.dumps({"language": "pl"}), encoding="utf-8")
+    with pytest.raises(ConfigError):
+        config.set_values(["language=en", "steps.qa=maybe"], p)
+    assert config.load(p).language == "pl"
+
+
+def test_set_values_rewrites_broken_file(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("CUTMATE_HOME", str(tmp_path))
+    p = tmp_path / "config.json"
+    p.write_text("{nope", encoding="utf-8")
+    config.set_values(["language=en"])
+    assert config.load(p).language == "en"
+    assert "WARN config:" in capsys.readouterr().out

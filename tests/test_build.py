@@ -261,6 +261,22 @@ def test_music_with_carve_keeps_volume(out, theme, monkeypatch):
     assert 'data-volume="0.4" data-audio-group="music"' in html
 
 
+def test_music_volume_from_config(out, theme, monkeypatch):
+    from conftest import make_wav
+    make_wav(out.parent / "bed.wav", dur=2.0)
+    write_plan(out, {"music": {"src": "bed.wav"}})
+    monkeypatch.setattr(B, "carve", lambda proj: True)
+    r = B.build(out, theme=theme, music={"source": "folder", "folder": None, "volume": 0.3})
+    assert 'data-volume="0.3" data-audio-group="music"' in (r["project"] / "index.html").read_text(encoding="utf-8")
+
+
+def test_heygen_without_src_warns(out, theme):
+    write_plan(out, {})
+    r = B.build(out, theme=theme, music={"source": "heygen", "folder": None, "volume": 0.45})
+    assert any("music.source is heygen" in w for w in r["warnings"])
+    assert 'id="music-bed"' not in (r["project"] / "index.html").read_text(encoding="utf-8")
+
+
 def test_relative_music_src_resolves_against_recording_folder(out, theme, monkeypatch):
     from conftest import make_wav
     (out.parent / "muzyka").mkdir()

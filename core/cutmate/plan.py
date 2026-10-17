@@ -493,7 +493,7 @@ def load_plan(out_dir: Path, factcheck: bool = False) -> Plan:
     music = raw.get("music")
     if music is not None:
         v = music.get("volume") if isinstance(music, dict) else None
-        if (not isinstance(music, dict) or isinstance(v, bool) or not isinstance(v, (int, float)) or not 0 <= v <= 2
+        if (not isinstance(music, dict) or not ({"volume", "src"} & music.keys()) or ("volume" in music and (isinstance(v, bool) or not isinstance(v, (int, float)) or not 0 <= v <= 2))
                 or ("src" in music and not isinstance(music["src"], str))):
-            raise PlanError(f"{p}: \"music\" must be an object with a numeric \"volume\" (0–2) and an optional string \"src\"")
+            raise PlanError(f"{p}: \"music\" must be an object with an optional numeric \"volume\" (0–2) and an optional string \"src\"")
     return Plan(gs, captions, music, end, warnings, chapters, face, fmt, tr)

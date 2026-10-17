@@ -126,10 +126,29 @@ def _parser() -> argparse.ArgumentParser:
     se.add_argument("--force", action="store_true")
     rq = sub.add_parser("requests", help="match out/requests.md (\"zrozumiałem tak\") against the plan")
     rq.add_argument("out")
+    cf = sub.add_parser("config", help="show or change the cutmate config")
+    cs = cf.add_subparsers(dest="config_cmd", required=True)
+    cs.add_parser("show", help="print the effective config as JSON")
+    cst = cs.add_parser("set", help="set KEY=VALUE pairs (e.g. language=en music.volume=0.3)")
+    cst.add_argument("pairs", nargs="+", metavar="PAIR")
     return ap
 
 
+def _config_cmd(args) -> int:
+    import json
+    from dataclasses import asdict
+    if args.config_cmd == "show":
+        print(json.dumps(asdict(config.load()), indent=2, ensure_ascii=False))
+    else:
+        cfg = config.set_values(args.pairs)
+        print(f"saved {config.home() / 'config.json'}")
+        print(json.dumps(asdict(cfg), indent=2, ensure_ascii=False))
+    return 0
+
+
 def _dispatch(args) -> int:
+    if args.cmd == "config":
+        return _config_cmd(args)
     cfg = config.load()
     language = getattr(args, "language", None) or cfg.language
     if args.cmd == "transcribe":

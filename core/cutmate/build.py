@@ -618,10 +618,14 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
         ch.unlink(missing_ok=True)
     audio = sfx_tags(cues, end, A)
     src = pick_source(plan.music, music, out.parent)  # relative plan.music.src resolves against the recording folder
+    warnings = list(plan.warnings)
+    if (music or {}).get("source") == "heygen" and not (plan.music or {}).get("src"):
+        warnings.append("WARN music: config music.source is heygen but plan.json has no music.src — resolve a bed (edit skill §5) "
+                        "or set music.source=none")
     vol = 0.45
     if src:
         prepare_music(src, A / "bgm" / "bed.m4a", end)
-        vol = float((plan.music or {}).get("volume", 0.45))
+        vol = float((plan.music or {}).get("volume", (music or {}).get("volume", 0.45)))
         audio.append(f'      <audio id="music-bed" src="assets/bgm/bed.m4a" data-start="0" data-duration="{round(end, 3)}" '
                      f'data-track-index="9" data-volume="{vol}" data-audio-group="music"></audio>')
     _prune(A / "sfx", set(re.findall(r'assets/sfx/([^"]+)"', "".join(audio))))
@@ -646,4 +650,4 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
         return round(min(t + 0.4, g.end - 0.05), 2)
     checkpoints = sorted({checkpoint(g) for g in items})
     (out / "work" / "checkpoints.json").write_text(json.dumps(checkpoints), encoding="utf-8")
-    return {"project": proj, "warnings": plan.warnings, "checkpoints": checkpoints}
+    return {"project": proj, "warnings": warnings, "checkpoints": checkpoints}
