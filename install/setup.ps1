@@ -1,4 +1,4 @@
-# cutmate setup (Windows): builds %CUTMATE_HOME%\venv (default ~\.cutmate\venv) with the plugin installed editable.
+﻿# cutmate setup (Windows): builds %CUTMATE_HOME%\venv (default ~\.cutmate\venv) with the plugin installed editable.
 # Usage: setup.ps1 [-Gpu nvidia|none] [-Local] [-DryRun]
 param(
   [ValidateSet('nvidia', 'none')][string]$Gpu = 'none',
@@ -16,7 +16,16 @@ function Find-Python {
   foreach ($c in 'python3.13', 'python3.12', 'python3.11', 'python3.10', 'python3', 'python') {
     $cmd = Get-Command $c -ErrorAction SilentlyContinue
     if (-not $cmd) { continue }
-    $out = (& $cmd.Source --version 2>&1 | Select-Object -First 1)
+    $out = $null
+    try {
+      $ErrorActionPreference = 'Continue'
+      $out = (& $cmd.Source --version 2>&1 | Select-Object -First 1)
+      if ($LASTEXITCODE -ne 0) { $out = $null }
+    } catch {
+      $out = $null
+    } finally {
+      $ErrorActionPreference = 'Stop'
+    }
     if ("$out" -match '^Python (\d+)\.(\d+)') {
       $maj = [int]$Matches[1]; $min = [int]$Matches[2]
       if ($maj -gt 3 -or ($maj -eq 3 -and $min -ge 10)) { return $cmd.Source }

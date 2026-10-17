@@ -149,4 +149,12 @@ def test_setup_ps1_dry_run(tmp_path):
     r = subprocess.run([shutil.which("pwsh"), "-NoProfile", "-File", str(ROOT / "install" / "setup.ps1"),
                         "-Gpu", "nvidia", "-Local", "-DryRun"],
                        capture_output=True, text=True, env=env)
+    assert r.returncode == 0, r.stderr
     assert "nvidia-cudnn-cu12==9.*" in r.stdout
+    assert not (tmp_path / "cm").exists()
+
+
+def test_ps1_files_ascii_or_bom():
+    for p in (ROOT / "install").glob("*.ps1"):
+        b = p.read_bytes()
+        assert b.startswith(b"\xef\xbb\xbf") or b.isascii(), p.name
