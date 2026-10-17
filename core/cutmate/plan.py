@@ -11,7 +11,7 @@ from pathlib import Path
 from .cut import load_timed
 from .errors import PlanError
 from .formats import format_of
-from .tracks import face_median, gesture_at, load_tracks, tracks_fresh
+from .tracks import face_median, gesture_at, load_tracks, place_at, tracks_fresh
 
 TYPES = ("title", "counter", "list", "chip", "stamp", "bars", "point", "split", "pip", "lower-third", "custom", "bg", "side")
 REQUIRED = {"title": ("at", "text"), "counter": ("at", "to", "label"), "list": ("items",), "chip": ("at", "text"),
@@ -317,11 +317,17 @@ def _resolve_gestures(gs: list[Graphic], tr: dict | None) -> list[str]:
     pointing = any(k in tr["tracks"] for k in ("point_left", "point_right")) if uses else True
     if not pointing:
         w.append("WARN tracks.json has no pointing data — run `cutmate track --force`")
+    places = [g for g in uses if g.params.get("place") == "gesture" and g.type in ("custom", "chip")]
+    if places and pointing and not any(k in tr["tracks"] for k in ("palm_left", "palm_right")):
+        w.append("WARN tracks.json has no hand-shape data (open palm / index point) — run `cutmate track --force`")
     for g in uses:
         hit = gesture_at(tr["tracks"], g.start)
-        if g.params.get("place") == "gesture" and g.type in ("custom", "chip"):
-            if hit:
-                g.params["place_xy"] = [hit["x"], hit["y"]]
+        if g in places:
+            spot = place_at(tr["tracks"], g.start)
+            if spot:                                    # open palm: the effect sits on it and follows that hand
+                g.params["place_xy"] = [spot["x"], spot["y"]]
+                if spot["track"]:
+                    g.params["place_track"] = spot["track"]
             elif pointing:
                 w.append(f"WARN {g.type} at {g.start:.1f}s: no pointing gesture near the anchor — default position")
         if g.params.get("speaker") == "gesture":

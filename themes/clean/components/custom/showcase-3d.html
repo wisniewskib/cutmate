@@ -13,6 +13,7 @@ const modelUrl = P.media && /\.(glb|gltf)$/i.test(P.media) ? P.media : P.model ?
 const shape = ["torus-knot", "icosahedron", "text", "glb"].includes(P.shape) ? P.shape : (P.text ? "text" : modelUrl ? "glb" : "torus-knot");
 const ready = U.three({ el: box, bloom: { strength: 0.7, radius: 0.4, threshold: 1.6, alpha: "keep" } }).then(async (S) => {
   const { THREE, scene, renderer } = S;
+  const bloom = S.composer && S.composer.passes.find((p) => p.strength !== undefined);
   const clamp = (v) => Math.min(1, Math.max(0, v));
   const out3 = (x) => 1 - Math.pow(1 - x, 3), in3 = (x) => x * x * x;
   const UPX = 6.3 / P.h;                                       // world units per px at z 0
@@ -104,14 +105,24 @@ const ready = U.three({ el: box, bloom: { strength: 0.7, radius: 0.4, threshold:
   const holder = new THREE.Group(); holder.add(obj); obj.scale.setScalar(scale); scene.add(holder);
   const halfPx = Math.max(sz.x, sz.y) * scale / UPX / 2;
 
-  // where: gesture place > x/y params > right third; kept inside the frame
-  let px = P.place ? P.place[0] : P.x != null ? P.x : P.w * 0.75;
-  let py = P.place ? P.place[1] : P.y != null ? P.y : P.h * 0.45;
-  if (P.place && py > P.h * 0.55) py -= sz.y * scale / UPX / 2;   // a low gesture spot is a hand held out: rest on it, don't cover it
-  const mx = Math.min(P.w / 2, sz.x * scale / UPX / 2 + P.w * 0.03), my = Math.min(P.h / 2, sz.y * scale / UPX / 2 + P.h * 0.03);
-  px = Math.min(P.w - mx, Math.max(mx, px)); py = Math.min(P.h - my, Math.max(my, py));
-  const home = S.toWorld(px, py);
+  // where: gesture place > x/y params > right third; kept inside the frame. With P.track (an open palm placed by
+  // "place": "gesture") the object rests on top of the palm and follows it.
+  const hasTrack = P.track && P.track.length;
+  const hPx = sz.y * scale / UPX;
+  const mx = Math.min(P.w / 2, sz.x * scale / UPX / 2 + P.w * 0.03), my = Math.min(P.h / 2, hPx / 2 + P.h * 0.03);
+  const spot = (t) => {
+    const tp = hasTrack ? U.trackAt(P.track, t) : null;
+    let px = tp ? tp[0] : P.place ? P.place[0] : P.x != null ? P.x : P.w * 0.75;
+    let py = tp ? tp[1] : P.place ? P.place[1] : P.y != null ? P.y : P.h * 0.45;
+    if (tp) py -= hPx * 0.55;                                    // resting on the palm, not covering it
+    else if (P.place && py > P.h * 0.55) py -= sz.y * scale / UPX / 2;   // a low gesture spot is a hand held out: rest on it, don't cover it
+    px = Math.min(P.w - mx, Math.max(mx, px)); py = Math.min(P.h - my, Math.max(my, py));
+    return [px, py];
+  };
+  const [px, py] = spot(P.at);
+  const home0 = S.toWorld(px, py);
   const side = px >= P.w / 2 ? 1 : -1;                         // enter from the near edge, leave over the top
+  const off = (t) => { const s = spot(t); return S.toWorld(s[0], s[1]).sub(home0); };   // hand drift since P.at
   const p0 = S.toWorld(px + side * (P.w * 0.5 + halfPx * 2), py + P.h * 0.35, -3);
   const c0 = S.toWorld(px + side * P.w * 0.18, py + P.h * 0.12, 1.5);
   const p2 = S.toWorld(px - side * P.w * 0.1, -halfPx * 2.5 - P.h * 0.2, 2);
@@ -148,7 +159,8 @@ const ready = U.three({ el: box, bloom: { strength: 0.7, radius: 0.4, threshold:
     holder.visible = dust.visible = on;
     if (on) {
       let pos, extra = 0, k = 1;
-      if (a < tin) { const u = out3(a / tin); pos = bez(p0, c0, home, u); extra = (1 - u) * 5; k = clamp(a / (tin * 0.4)); }
+      const home = home0.clone().add(off(t));
+      if (a < tin) { const u = out3(a / tin); pos = bez(p0.clone().add(off(t)), c0.clone().add(off(t)), home, u); extra = (1 - u) * 5; k = clamp(a / (tin * 0.4)); }
       else if (b < tout) { const u = in3(1 - b / tout); pos = bez(home, c2, p2, u); extra = -u * 3; }
       else pos = home.clone();
       const idle = a;
@@ -159,7 +171,9 @@ const ready = U.three({ el: box, bloom: { strength: 0.7, radius: 0.4, threshold:
       holder.scale.setScalar(Math.max(0.001, k));
       const settle = clamp((a - tin * 0.6) / 0.5) * clamp(b / tout);
       halo.material.opacity = (isText ? 0.05 : 0.09) * settle;
-      rimMat.uniforms.uK.value = (0.7 + 0.3 * Math.sin(idle * 2.2)) * (isText ? 0.3 : 1);   // bevels catch too much rim
+      // entry is soft: rim glow and bloom build up only once the object has landed (a flash on arrival washed out the shirt)
+      rimMat.uniforms.uK.value = (0.7 + 0.3 * Math.sin(idle * 2.2)) * (isText ? 0.3 : 1) * (0.25 + 0.75 * settle);   // bevels catch too much rim
+      if (bloom) bloom.strength = 0.7 * (0.2 + 0.8 * settle);
       const dv = clamp((a - tin * 0.5) / 0.6) * clamp(b / (tout * 0.8));
       motes.forEach((m, i) => {
         const ang = m.a + idle * m.w;

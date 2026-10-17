@@ -57,6 +57,8 @@ GRAPHICS_169 = [
         {"text": "Trzeci punkt", "at": "S1:słowo11"}, {"text": "Czwarty bardzo długi punkt", "at": "S1:słowo12"}],
      "until": "S1:słowo14"},
     {"type": "chip", "at": "S1:słowo16", "until": "S1:słowo18", "text": "Caveman"},
+    {"type": "custom", "name": "hand-sparks", "from": "S2:słowo1", "to": "S2:słowo2",
+     "params": {"mode": "sparks", "link": True, "x": 1300, "y": 600}},
     {"type": "lower-third", "at": "S2:słowo3", "until": "S2:słowo4", "name": "Anna Nowak", "role": "AI · wideo"},
     {"type": "stamp", "at": "S2:słowo6", "until": "S2:słowo7", "text": "NIE."},
     {"type": "bars", "at": "S2:słowo8", "until": "S2:słowo9", "head": "Koszt", "illustrative": True,

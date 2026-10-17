@@ -15,7 +15,7 @@ from .captions import to_srt
 from .chapters import chapters_txt
 from .config import CAPTION_MODES, DEFAULT_CAPTIONS
 from .cut import load_timed
-from .effects import THREE_MARK, find_effect, libs_head, lint_effect, track_slice
+from .effects import THREE_MARK, find_effect, held_slice, libs_head, lint_effect, track_slice
 from .errors import CutmateError
 from .formats import size_of
 from .hf import ensure_project, hf
@@ -182,6 +182,7 @@ def cam_from_cuts(timed: list[dict], fmt: str = "9:16", face: dict | None = None
 
 CAM_ORIGIN = (0.5, 0.46)      # theme.css: #cam { transform-origin: 50% 46%; } (9:16 cam entries carry no origin)
 SPLIT_DY = 300                # #split moves the A-roll this far down while a split panel is on screen (cutmate.js)
+PALM_LIFT = 0.05   # a palm-placed effect sits this far (frame fraction) above the palm centre, not on the fingers
 SAFE = {(1080, 1920): [60, 192, 960, 1344], (1920, 1080): [60, 60, 1800, 800]}  # x, y, w, h a placed chip stays in
 
 
@@ -378,8 +379,9 @@ def subcomp(cid: str, g: Graphic, host_start: float, theme: Path, assets: Path, 
     if g.type == "chip":
         P.pop("place", None)
         xy = P.pop("place_xy", None)
+        lift = PALM_LIFT if P.pop("place_track", None) else 0.0
         if xy:                                           # place: gesture -> centre on the pointed spot, in frame px
-            P["place"] = list(screen(xy[0], xy[1], g.start))
+            P["place"] = list(screen(xy[0], xy[1] - lift, g.start))
             P["safe"] = SAFE.get((W, H), [0, 0, W, H])
     root, u_open, u_close, fade = f'document.getElementById("{cid}")', "", "", ""
     region = None
@@ -405,6 +407,21 @@ def subcomp(cid: str, g: Graphic, host_start: float, theme: Path, assets: Path, 
         if g.params.get("place_xy"):
             px, py = screen(g.params["place_xy"][0], g.params["place_xy"][1], g.start)
             P["place"] = [round(px - rx, 1), round(py - ry, 1)]
+        if g.params.get("place_track") and tracks:       # open palm: sit just above it and follow it, held through gaps
+            lifted = lambda x, y, t: screen(x, y - PALM_LIFT, t)  # noqa: E731
+            held = lambda name: [[t, round(x - rx, 1), round(y - ry, 1)] for t, x, y in held_slice(  # noqa: E731
+                tracks["tracks"].get(name, []), g.start, g.end, host_start, W, H, lifted)]
+            hands = {}
+            for side in ("left", "right"):
+                samples = tracks["tracks"].get(f"palm_{side}", [])
+                if any(g.start - 0.75 <= s[0] <= g.end for s in samples):
+                    hands[side] = held(f"palm_{side}")
+            if hands:
+                P["hands"] = hands                       # both palms (effects that use two hands)
+            mine = held(g.params["place_track"])
+            if mine and not follow:
+                P["track"] = mine
+                P["place"] = list(mine[0][1:])
         if "media" in g.params:
             P["media"] = _copy_media(g.params["media"], assets, media_map)
         u_open, u_close = FX_OPEN.format(cid=cid), ")"

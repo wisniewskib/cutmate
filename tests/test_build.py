@@ -821,6 +821,20 @@ def _point169(o, x=0.75, y=0.5):
         "point_right": [[t / 10, x, y, 0.9] for t in range(0, 40)]}}), encoding="utf-8")
 
 
+def test_custom_place_palm_follows_held_hand(out169, theme):
+    """Open palm: P.place sits a bit above the palm and P.track follows the hand, held where it drops out."""
+    _fx(out169)
+    (out169 / "work" / "tracks.json").write_text(json.dumps({"fps": 15, "w": 1920, "h": 1080, "tracks": {
+        "face": [], "point_left": [], "point_right": [], "finger_left": [], "finger_right": [], "palm_left": [],
+        "palm_right": [[round(2.0 + i * 0.1, 2), 0.5, 0.6, 1.0] for i in range(4)] + [[3.5, 0.6, 0.6, 1.0]]}}), encoding="utf-8")
+    write_plan(out169, {"graphics": [{"type": "custom", "name": "orb", "at": "S2:minus", "until": 3.9, "place": "gesture"}]})
+    P = _P((B.build(out169, theme=theme)["project"] / "compositions" / "gx-01-custom.html").read_text(encoding="utf-8"))
+    assert P["place"][1] < 0.6 * 1080 and P["track"] and P["track"][0][0] == P["at"]
+    assert all(b[0] - a[0] <= 0.5 for a, b in zip(P["track"], P["track"][1:]))
+    assert P["track"][0][1:] == P["place"] and "follow" not in P
+    assert set(P["hands"]) == {"right"} and P["hands"]["right"][0] == P["track"][0]
+
+
 def test_chip_place_gesture(out169, theme):
     _point169(out169)
     write_plan(out169, {"graphics": [{"type": "chip", "at": "S2:minus", "text": "tu", "place": "gesture"}]})

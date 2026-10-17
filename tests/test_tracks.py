@@ -169,7 +169,7 @@ def test_analyze_unreadable_video_is_error(tmp_path, monkeypatch):
 
 def test_pointing_target():
     from cutmate.tracks import pointing_target
-    assert pointing_target((0.5, 0.5), (0.55, 0.5)) == pytest.approx((0.65, 0.5))
+    assert pointing_target((0.5, 0.5), (0.55, 0.5)) == pytest.approx((0.63, 0.5))   # 2x would be 0.1: capped at 0.08
 
 
 def test_pointing_target_clamped():
@@ -259,3 +259,84 @@ def test_track_redone_when_tracks_missing(tmp_path):
     assert set(json.loads(p.read_text(encoding="utf-8"))["tracks"]) == set(TRACKS)
     track(out, detector=det)                                   # complete and fresh: cached
     assert len(det.calls) == 2 * n
+
+
+def test_pointing_target_capped_near_the_hand():
+    """A long wrist -> tip vector must not throw the target across the frame (an open palm read as a point)."""
+    from cutmate.tracks import pointing_target
+    x, y = pointing_target((0.30, 0.80), (0.20, 0.78))      # 0.1 long: pushed at most 0.08 past the tip
+    assert x == pytest.approx(0.20 - 0.08 * 0.1 / (0.1 ** 2 + 0.02 ** 2) ** 0.5, abs=1e-6) and x > 0.1
+
+
+def _hand(fingers, wrist=(0.5, 0.8), up=0.1):
+    """21 hand landmarks: fingers = [index, middle, ring, pinky] extended? Palm upright, fingers pointing up."""
+    pts = [(wrist[0], wrist[1])] + [(0.0, 0.0)] * 20
+    xs = {1: -0.04, 5: -0.03, 9: -0.01, 13: 0.01, 17: 0.03}
+    for base, dx in xs.items():
+        pts[base] = (wrist[0] + dx, wrist[1] - up)
+    pts[2], pts[3], pts[4] = (wrist[0] - 0.05, wrist[1] - 0.06), (wrist[0] - 0.06, wrist[1] - 0.08), (wrist[0] - 0.07, wrist[1] - 0.09)
+    for k, mcp in enumerate((5, 9, 13, 17)):
+        x, y = pts[mcp]
+        if fingers[k]:
+            pts[mcp + 1], pts[mcp + 2], pts[mcp + 3] = (x, y - 0.04), (x, y - 0.07), (x, y - 0.09)
+        else:                                               # curled back towards the palm
+            pts[mcp + 1], pts[mcp + 2], pts[mcp + 3] = (x, y - 0.03), (x, y - 0.01), (x, y + 0.01)
+    return pts
+
+
+def test_hand_shape_open_point_other():
+    from cutmate.tracks import hand_shape
+    kind, palm, target = hand_shape(_hand([1, 1, 1, 1]), 16 / 9)
+    assert kind == "open" and palm == pytest.approx((0.5, 0.8 - 0.08), abs=1e-6)
+    kind, palm, target = hand_shape(_hand([1, 0, 0, 0]), 16 / 9)
+    assert kind == "point"
+    assert target[0] == pytest.approx(0.47) and 0.6 - 0.06 - 1e-6 <= target[1] < 0.61   # just past the index tip
+    assert hand_shape(_hand([0, 0, 0, 0]), 16 / 9)[0] == "other"
+
+
+def test_assign_hands_by_pose_wrists():
+    from cutmate.tracks import assign_hands
+    # pose: speaker's left hand on the viewer's right
+    got = assign_hands([(0.7, 0.5, "Right"), (0.3, 0.5, "Left")], left=(0.72, 0.52), right=(0.28, 0.5))
+    assert got == {"left": 0, "right": 1}
+    # no pose hands: the model's label is mirrored (it assumes a selfie image)
+    assert assign_hands([(0.7, 0.5, "Right")], left=None, right=None) == {"left": 0}
+    assert assign_hands([(0.7, 0.5, "Right"), (0.71, 0.5, "Right")], left=(0.7, 0.5), right=None) == {"left": 0}
+
+
+def test_smooth_conf_majority():
+    s = [[i / 15, 0.5, 0.5, 1.0] for i in range(7)]
+    s[3][3] = 0.0
+    assert smooth(s, 5, conf=True)[3][3] == 1.0
+    assert smooth(s, 5)[3][3] == 0.0
+
+
+def test_place_at_prefers_index_point_then_open_palm():
+    from cutmate.tracks import place_at
+    tr = {"finger_right": [[1.0, 0.3, 0.4, 1.0], [1.1, 0.31, 0.4, 1.0]], "finger_left": [],
+          "palm_right": [[1.0, 0.25, 0.5, 0.0]], "palm_left": [[1.0, 0.7, 0.6, 1.0]]}
+    assert place_at(tr, 1.0) == {"mode": "point", "x": 0.3, "y": 0.4, "track": None}
+    tr["finger_right"] = [[1.0, 0.3, 0.4, 0.0]]                        # not a clear point any more
+    assert place_at(tr, 1.0) == {"mode": "palm", "x": 0.7, "y": 0.6, "track": "palm_left"}
+    tr["palm_left"] = [[1.0, 0.7, 0.6, 0.0]]                           # no open palm: the higher visible hand
+    assert place_at(tr, 1.0) == {"mode": "palm", "x": 0.25, "y": 0.5, "track": "palm_right"}
+    assert place_at(tr, 5.0) is None
+
+
+def test_place_at_legacy_pose_point():
+    from cutmate.tracks import place_at
+    tr = {"point_right": [[1.0, 0.8, 0.4, 1.0]]}                       # tracks.json from before hand shapes
+    assert place_at(tr, 1.2) == {"mode": "point", "x": 0.8, "y": 0.4, "track": None}
+
+
+def test_analyze_keeps_hand_shape_tracks(tmp_path):
+    from cutmate.tracks import analyze
+
+    class Det(FakeDetector):
+        def __call__(self, rgb, t):
+            d = super().__call__(rgb, t)
+            d.update(palm_left=(0.6, 0.7, 1.0), finger_left=(0.62, 0.6, 0.0))
+            return d
+    clip = make_clip(tmp_path / "a.mp4", dur=1.0, size="1920x1080", gaps=())
+    d = analyze(clip, Det())
+    assert d["tracks"]["palm_left"][0][1:] == [0.6, 0.7, 1.0] and d["tracks"]["finger_left"]

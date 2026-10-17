@@ -54,3 +54,10 @@ def test_skill_covers_2d():
     assert "build does NOT check explainer numbers" in md and "the build warns about numbers no" not in md
     for s in ("replies?", "U.ready(", "U.fonts(", "track --force"):
         assert s in md, s
+
+
+def test_skill_puts_effects_on_every_gesture():
+    md = (paths.plugin_root() / "skills" / "edit" / "SKILL.md").read_text(encoding="utf-8")
+    for s in ("**Every gesture gets an effect.**", "open / presenting palm", "clear index-finger point",
+              "every 0.25 s", "never cover the face", "hand-sparks", "anchor it on the GESTURE", "no hand-shape data"):
+        assert s in md, s

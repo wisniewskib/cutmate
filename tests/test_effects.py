@@ -179,6 +179,7 @@ def test_iso_machine_lint_and_index(tmp_path, monkeypatch):
     ("energy-ball", "3d", {"radius", "colors"}),
     ("showcase-3d", "3d", {"shape", "text", "model", "color", "x", "y"}),
     ("burst", "vfx", {"colors", "x", "y"}),
+    ("hand-sparks", "vfx", {"mode", "colors", "size", "link"}),
 ])
 def test_vfx_lint_and_index(tmp_path, monkeypatch, name, kind, params):
     import json
@@ -189,7 +190,7 @@ def test_vfx_lint_and_index(tmp_path, monkeypatch, name, kind, params):
     idx = {e["name"]: e for e in json.loads((BUNDLED / "index.json").read_text(encoding="utf-8"))}
     assert idx[name]["kind"] == kind
     assert params <= set(idx[name]["params"])
-    assert idx[name]["follow"] is (name == "energy-ball")
+    assert idx[name]["follow"] is (name in ("energy-ball", "hand-sparks"))
     assert idx[name]["place"] is True                                          # energy-ball too (without follow)
 
 
@@ -230,3 +231,14 @@ def test_iso_machine_labels_anchor_on_their_own_part():
     assert "BY - 0.04, BW / 2 + 0.12" not in html                           # not the belt edge in front of the part
     for shape in ("box", "cylinder", "funnel", "screen", "gear"):
         assert shape + ":" in html[html.index("const ANCHOR"):html.index("const ANCHOR") + 900], shape
+
+
+def test_held_slice_holds_nearest_sample():
+    """Gesture-placed effects stay on the last seen hand position instead of vanishing (and start without waiting)."""
+    from cutmate.effects import held_slice
+    s = [[0.5, 0.5, 0.5, 1.0], [0.6, 0.5, 0.5, 1.0], [2.0, 0.6, 0.5, 1.0]]
+    out = held_slice(s, 1.0, 2.5, 1.0, 100, 100)
+    assert out[0] == [0.0, 50.0, 50.0]                                  # before the window: nearest earlier sample
+    assert all(b[0] - a[0] <= 0.5 for a, b in zip(out, out[1:]))        # no gap that trackAt would blank
+    assert out[-1] == [1.5, 60.0, 50.0] and [1.0, 60.0, 50.0] in out
+    assert held_slice([], 0, 1, 0, 100, 100) == []

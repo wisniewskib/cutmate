@@ -84,7 +84,7 @@
       "model": "GLB file for shape \"glb\": put the graphic-level \"media\": \"broll/<file>.glb\" (build copies it), or a file name inside the effect folder (P.assets); falls back to the torus knot if it cannot load",
       "color": "base colour (default \"#7c3aed\"); rim lights use its complement",
       "size": "object size as a fraction of the shorter frame side (default 0.4)",
-      "x": "optional px x of the centre (default: gesture place, else the right third)",
+      "x": "optional px x of the centre (default: gesture place — on an open palm it rests on the palm and follows it — else the right third)",
       "y": "optional px y of the centre (default: gesture place, else 45% down)"
     },
     "follow": false,
@@ -93,14 +93,29 @@
   {
     "name": "burst",
     "kind": "vfx",
-    "description": "One-shot impact (0.6-1.0 s): white flash, double shockwave ring, streak sparks with drag and gravity, falling embers.",
+    "description": "One-shot energy impact (~1-1.4 s), big enough to read on a phone: hot white flash with a star flare, three shockwave rings, a lingering coloured glow, 150 streak sparks with drag and gravity, falling embers. Placed on an open palm it rides with the hand.",
     "params": {
       "colors": "[core, sparks, ring] colours (default [\"#ffffff\", \"#fde68a\", \"#fb923c\"])",
-      "size": "reach multiplier (default 1 = 20% of the shorter frame side)",
+      "size": "reach multiplier (default 1 = 20% of the shorter frame side; 1.2-1.6 for a hero moment)",
       "x": "optional px x (default: gesture place, else centre)",
       "y": "optional px y (default: gesture place, else centre)"
     },
     "follow": false,
+    "place": true
+  },
+  {
+    "name": "hand-sparks",
+    "kind": "vfx",
+    "description": "Energy pouring out of the speaker's hands: a glow on each palm and a stream of particles leaving it, following the hands. mode stream = soft motes flowing outward and up (spread hands, presenting); mode sparks = hot streak sparks falling with gravity (a trick, a fast move); link = a flickering energy arc between the two hands.",
+    "params": {
+      "mode": "\"stream\" (default) or \"sparks\"",
+      "colors": "[core, particle colours...] (default stream [\"#ffffff\", \"#a5f3fc\", \"#818cf8\"], sparks [\"#ffffff\", \"#fde68a\", \"#fb923c\"])",
+      "size": "scale of the glow, particle count and speed (default 1)",
+      "link": "true: energy arc between the two hands while both are in view",
+      "x": "optional px x when there is no hand (else gesture place, else centre)",
+      "y": "optional px y when there is no hand"
+    },
+    "follow": true,
     "place": true
   }
 ]

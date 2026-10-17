@@ -51,3 +51,4 @@ unit: 1080×1920 (9:16), 30 fps
   `{"type": "custom", "name": "energy-ball", "from": …, "to": …, "follow": "hand",
   "params": {"radius": 0.45, "colors": ["#e0f7ff", "#38bdf8"]}}` (`radius` in 3D units, ~170 px each at 1080 p;
   `colors` = core, rim). Without hand samples (no tracks, or the hand out of view) it stays hidden; only without `follow` does it sit at `place` / `x`,`y` / the centre.
+- **Gestures:** every moment the speaker shows with the hands where something goes gets a visible effect on the hands (`"place": "gesture"`): open palm → the effect rests on it and follows it; index point → the pointed spot near the fingertip. Stock `burst` (flash, shockwaves, sparks, ~1 s), `hand-sparks` (`stream` / `sparks`, `link` arc between the hands), `showcase-3d` on a palm. Big enough for a phone, never over the face.

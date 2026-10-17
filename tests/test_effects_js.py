@@ -46,8 +46,28 @@ def test_bloom_alpha_option():
 def test_showcase_rests_on_a_low_gesture_spot():
     """Palm held out low in the frame ("tutaj" + open hand): the object sits on the spot instead of covering the hand."""
     show = (plugin_root() / "themes" / "clean" / "components" / "custom" / "showcase-3d.html").read_text(encoding="utf-8")
-    lift = show.index("if (P.place && py > P.h * 0.55) py -= sz.y * scale / UPX / 2;")
-    assert show.index("let py = P.place") < lift < show.index("py = Math.min(P.h - my")    # before the frame clamp
+    lift = show.index("else if (P.place && py > P.h * 0.55) py -= sz.y * scale / UPX / 2;")
+    assert show.index("let py = tp ? tp[1] : P.place") < lift < show.index("py = Math.min(P.h - my")    # before the frame clamp
+
+
+def test_gesture_effects_follow_the_palm_track():
+    """An open palm ("tutaj" + presenting hand): burst / showcase-3d / energy-ball ride with P.track over their span."""
+    fx = plugin_root() / "themes" / "clean" / "components" / "custom"
+    show = (fx / "showcase-3d.html").read_text(encoding="utf-8")
+    assert "U.trackAt(P.track, t)" in show and "if (tp) py -= hPx * 0.55;" in show       # rests on the palm
+    assert "home0.clone().add(off(t))" in show                                         # home moves with the hand
+    burst = (fx / "burst.html").read_text(encoding="utf-8")
+    assert "U.trackAt(P.track, t)" in burst and "core.position.copy(S.toWorld(p[0], p[1]))" in burst
+    assert "U.trackAt(P.track, t)" in (fx / "energy-ball.html").read_text(encoding="utf-8")
+
+
+def test_showcase_entry_is_soft_and_burst_is_big():
+    fx = plugin_root() / "themes" / "clean" / "components" / "custom"
+    show = (fx / "showcase-3d.html").read_text(encoding="utf-8")
+    assert "bloom.strength = 0.7 * (0.2 + 0.8 * settle)" in show and "(0.25 + 0.75 * settle)" in show
+    burst = (fx / "burst.html").read_text(encoding="utf-8")
+    assert "const LEN = Math.max(0.9, Math.min(1.4, P.end - P.at));" in burst                 # ~1 s, not 0.6
+    assert "const N = 120;" in burst and "const RINGS = [" in burst and "flares" in burst
 
 
 READY = """

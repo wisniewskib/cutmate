@@ -3,13 +3,16 @@ ROOT .fx-burst { position: absolute; inset: 0; }
 </style>
 <markup><div class="fx-burst"></div></markup>
 <script>
-// One-shot impact: white flash, two shockwave rings, streak sparks flying out with drag and gravity, falling embers.
-// Placed at P.place (gesture), else params x / y (px), else the frame centre. Plays 0.6-1.0 s from P.at.
+// One-shot energy impact (~1-1.4 s): hot white flash with a star flare, three shockwave rings, a coloured glow that
+// lingers, streak sparks flying out with drag and gravity, falling embers. Big enough to read on a phone.
+// Placed at P.place (gesture), else params x / y (px), else the frame centre. With P.track (an open palm placed by
+// "place": "gesture") the flash, glow and rings ride with the hand; sparks keep flying from where they were thrown.
 const box = root.querySelector(".fx-burst");
 const cols = (P.colors && P.colors.length ? P.colors : ["#ffffff", "#fde68a", "#fb923c"]);
-const LEN = Math.max(0.6, Math.min(1.0, P.end - P.at));
-const xy = P.place || (P.x != null && P.y != null ? [P.x, P.y] : [P.w / 2, P.h / 2]);
-U.three({ el: box, bloom: { strength: 0.8, radius: 0.5, threshold: 0.25 } }).then((S) => {
+const LEN = Math.max(0.9, Math.min(1.4, P.end - P.at));
+const xy0 = P.place || (P.x != null && P.y != null ? [P.x, P.y] : [P.w / 2, P.h / 2]);
+const hasTrack = P.track && P.track.length;
+U.three({ el: box, bloom: { strength: 0.9, radius: 0.5, threshold: 0.32 } }).then((S) => {
   const { THREE } = S;
   const UPX = 6.3 / P.h;                                    // world units per px (camera z 10, fov 35)
   const R = (P.size || 1) * 0.2 * Math.min(P.w, P.h) * UPX; // burst reach
@@ -19,85 +22,108 @@ U.three({ el: box, bloom: { strength: 0.8, radius: 0.5, threshold: 0.25 } }).the
   const tex = (draw, w, h) => { const c = document.createElement("canvas"); c.width = w; c.height = h || w; draw(c.getContext("2d"), w, h || w);
                                 const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t; };
   const radial = tex((g, w) => { const gr = g.createRadialGradient(w / 2, w / 2, 0, w / 2, w / 2, w / 2);
-    gr.addColorStop(0, "rgba(255,255,255,1)"); gr.addColorStop(0.25, "rgba(255,255,255,0.55)"); gr.addColorStop(1, "rgba(255,255,255,0)");
+    gr.addColorStop(0, "rgba(255,255,255,1)"); gr.addColorStop(0.2, "rgba(255,255,255,0.7)"); gr.addColorStop(0.5, "rgba(255,255,255,0.18)");
+    gr.addColorStop(1, "rgba(255,255,255,0)");
     g.fillStyle = gr; g.fillRect(0, 0, w, w); }, 128);
   const streak = tex((g, w, h) => { const gx = g.createLinearGradient(0, 0, w, 0);   // tail (left) -> hot head (right)
-    gx.addColorStop(0, "rgba(255,255,255,0)"); gx.addColorStop(0.8, "rgba(255,255,255,0.75)"); gx.addColorStop(1, "rgba(255,255,255,1)");
+    gx.addColorStop(0, "rgba(255,255,255,0)"); gx.addColorStop(0.7, "rgba(255,255,255,0.8)"); gx.addColorStop(1, "rgba(255,255,255,1)");
     g.fillStyle = gx; g.fillRect(0, 0, w, h);
     g.globalCompositeOperation = "destination-in"; const gy = g.createLinearGradient(0, 0, 0, h);
     gy.addColorStop(0, "rgba(0,0,0,0)"); gy.addColorStop(0.5, "rgba(0,0,0,1)"); gy.addColorStop(1, "rgba(0,0,0,0)");
     g.fillStyle = gy; g.fillRect(0, 0, w, h); }, 128, 16);
-  const group = new THREE.Group(); group.position.copy(S.toWorld(xy[0], xy[1])); S.scene.add(group);
+  const where = (t) => (hasTrack && U.trackAt(P.track, t)) || xy0;
+  const core = new THREE.Group(); S.scene.add(core);             // flash, flare, glow, rings: ride with the hand
+  const start = where(P.at);
+  const thrown = new THREE.Group(); thrown.position.copy(S.toWorld(start[0], start[1])); S.scene.add(thrown);
   const add = { transparent: true, depthWrite: false, blending: THREE.AdditiveBlending };
 
-  const flash = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial(Object.assign({ map: radial, color: cCore }, add)));
-  group.add(flash);
-  const glow = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial(Object.assign({ map: radial, color: cRing }, add)));
-  group.add(glow);
+  const sprite = (c) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial(Object.assign({ map: radial, color: c }, add)));
+                          core.add(m); return m; };
+  const glow = sprite(cRing), flash = sprite(cCore), hot = sprite(new THREE.Color(1, 1, 1));
+  // star flare: thin bright spikes (two long horizontal, six short) that flick out with the flash
+  const flares = Array.from({ length: 8 }, (_, i) => {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial(Object.assign({ map: streak, color: i < 2 ? cSpark : cCore }, add)));
+    m.rotation.z = i < 2 ? i * Math.PI : (i - 2) * Math.PI / 3 + 0.5;
+    core.add(m); return m;
+  });
 
   const ringMat = () => new THREE.ShaderMaterial(Object.assign({
     uniforms: { uR: { value: 0 }, uW: { value: 0.05 }, uA: { value: 0 }, uC: { value: cRing.clone() } },
     vertexShader: "varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }",
     fragmentShader: "uniform float uR; uniform float uW; uniform float uA; uniform vec3 uC; varying vec2 vUv;"
-      + " void main(){ float d=length(vUv-0.5)*2.0; float k=exp(-pow((d-uR)/uW,2.0)); float inner=smoothstep(uR,0.0,d)*0.06*step(d,uR);"
-      + " vec3 c=mix(uC, vec3(1.0), k*0.6); gl_FragColor=vec4(c*(k+inner)*uA, 1.0); }",
+      + " void main(){ float d=length(vUv-0.5)*2.0; float k=exp(-pow((d-uR)/uW,2.0)); float inner=smoothstep(uR,0.0,d)*0.12*step(d,uR);"
+      + " vec3 c=mix(uC, vec3(1.0), k*0.7); gl_FragColor=vec4(c*(k*1.6+inner)*uA, 1.0); }",
   }, add));
-  const rings = [0, 1].map(() => { const m = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), ringMat()); group.add(m); return m; });
+  const RINGS = [[0, 3.6, 0.034, 1.0, 0.5], [0.08, 4.6, 0.016, 0.8, 0.7], [0.2, 3.0, 0.05, 0.5, 0.8]];  // delay, size, width, alpha, span
+  const rings = RINGS.map(() => { const m = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), ringMat()); core.add(m); return m; });
 
   const rnd = U.seed(P.seed || 11);
-  const N = 84;
+  const N = 120;
   const sparks = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial(Object.assign({ map: streak }, add)), N);
   sparks.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-  const sp = Array.from({ length: N }, () => ({ a: rnd() * Math.PI * 2, v: R * (3.0 + rnd() * 4.5), k: 3.0 + rnd() * 2.0,
-                                                life: LEN * (0.6 + rnd() * 0.4), w: 0.7 + rnd() * 0.9, hot: rnd() }));
+  const sp = Array.from({ length: N }, () => ({ a: rnd() * Math.PI * 2, v: R * (3.5 + rnd() * 6.0), k: 2.6 + rnd() * 2.0,
+                                                life: LEN * (0.55 + rnd() * 0.45), w: 0.7 + rnd() * 0.9, hot: rnd(), d: rnd() * 0.1 }));
   for (let i = 0; i < N; i++) sparks.setColorAt(i, cCore);
-  group.add(sparks);
-  const NE = 36, epos = new Float32Array(NE * 3), ecol = new Float32Array(NE * 3);
+  thrown.add(sparks);
+  const NE = 50, epos = new Float32Array(NE * 3), ecol = new Float32Array(NE * 3);
   const egeo = new THREE.BufferGeometry();
   egeo.setAttribute("position", new THREE.BufferAttribute(epos, 3)); egeo.setAttribute("color", new THREE.BufferAttribute(ecol, 3));
-  const embers = new THREE.Points(egeo, new THREE.PointsMaterial(Object.assign({ map: radial, size: R * 0.06, vertexColors: true }, add)));
-  const em = Array.from({ length: NE }, () => ({ a: rnd() * Math.PI * 2, v: R * (0.6 + rnd() * 1.6), d: 0.05 + rnd() * 0.2, f: 8 + rnd() * 14, ph: rnd() * 6 }));
-  group.add(embers);
+  const embers = new THREE.Points(egeo, new THREE.PointsMaterial(Object.assign({ map: radial, size: R * 0.09, vertexColors: true }, add)));
+  const em = Array.from({ length: NE }, () => ({ a: rnd() * Math.PI * 2, v: R * (0.8 + rnd() * 2.2), d: 0.05 + rnd() * 0.25, f: 8 + rnd() * 14, ph: rnd() * 6 }));
+  thrown.add(embers);
 
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), Z = new THREE.Vector3(0, 0, 1), v3 = new THREE.Vector3(), s3 = new THREE.Vector3();
   const col = new THREE.Color(), out3 = (x) => 1 - Math.pow(1 - x, 3);
   U.clock((t) => {
     const a = t - P.at;
-    group.visible = a >= 0 && a <= LEN;
-    if (group.visible) {
-      const f = clamp(a / 0.16);                              // flash: pops then dies in ~0.25 s
-      flash.scale.setScalar(R * (0.3 + 0.8 * out3(f)));
-      flash.material.opacity = (a < 0.04 ? a / 0.04 : 1) * Math.pow(1 - clamp(a / 0.22), 2) * 0.95;
-      glow.scale.setScalar(R * 2.6);
-      glow.material.opacity = 0.12 * Math.pow(1 - clamp(a / (LEN * 0.6)), 2);
+    core.visible = thrown.visible = a >= 0 && a <= LEN;
+    if (core.visible) {
+      const p = where(t);
+      core.position.copy(S.toWorld(p[0], p[1]));
+      // flash: a compact hot core (never a white disc over the face): pops in 0.03 s, dies by ~0.3 s
+      const f = clamp(a / 0.1);
+      const fl = (a < 0.03 ? a / 0.03 : 1) * Math.pow(1 - clamp((a - 0.05) / 0.25), 2);
+      flash.scale.setScalar(R * (0.35 + 0.5 * out3(f)));
+      flash.material.opacity = 0.85 * fl;
+      hot.scale.setScalar(R * 0.28 * (1 + 0.3 * Math.sin(a * 40)));
+      hot.material.opacity = fl;
+      glow.scale.setScalar(R * (2.2 + 0.6 * out3(clamp(a / LEN))));
+      glow.material.opacity = 0.16 * (a < 0.05 ? a / 0.05 : 1) * Math.pow(1 - clamp(a / LEN), 1.6);
+      flares.forEach((m, i) => {
+        const L = (i < 2 ? 4.2 : 1.6) * R * (0.4 + 0.6 * out3(clamp(a / 0.15)));
+        m.scale.set(L, R * (i < 2 ? 0.07 : 0.05), 1);
+        m.position.set(Math.cos(m.rotation.z) * L / 2, Math.sin(m.rotation.z) * L / 2, 0);
+        m.material.opacity = (a < 0.02 ? a / 0.02 : 1) * Math.pow(1 - clamp(a / (i < 2 ? 0.5 : 0.3)), 2);
+      });
       rings.forEach((m, i) => {
-        const r0 = clamp((a - i * 0.07) / (LEN * (0.55 + i * 0.15)));
-        m.scale.setScalar(R * (i ? 3.4 : 2.8));
-        m.material.uniforms.uR.value = 0.08 + 0.9 * out3(r0);
-        m.material.uniforms.uW.value = (i ? 0.008 : 0.016) * (1 + 1.5 * r0);
-        m.material.uniforms.uA.value = a < i * 0.07 ? 0 : (i ? 0.55 : 0.85) * Math.pow(1 - r0, 1.4);
+        const [dl, sz, wd, al, span] = RINGS[i];
+        const r0 = clamp((a - dl) / (LEN * span));
+        m.scale.setScalar(R * sz);
+        m.material.uniforms.uR.value = 0.06 + 0.92 * out3(r0);
+        m.material.uniforms.uW.value = wd * (1 + 1.2 * r0);
+        m.material.uniforms.uA.value = a < dl ? 0 : al * Math.pow(1 - r0, 1.2);
       });
       sp.forEach((s, i) => {
-        const age = a, k = s.k, g = R * 1.6;
+        const age = Math.max(0, a - s.d), k = s.k, g = R * 1.8;
         const life = clamp(age / s.life);
-        const d = (s.v / k) * (1 - Math.exp(-k * age)), vel = s.v * Math.exp(-k * age);
+        const d = R * 0.25 + (s.v / k) * (1 - Math.exp(-k * age)), vel = s.v * Math.exp(-k * age);   // thrown from the rim of the flash
         const x = Math.cos(s.a) * d, y = Math.sin(s.a) * d - 0.5 * g * age * age;
         const vx = Math.cos(s.a) * vel, vy = Math.sin(s.a) * vel - g * age;
-        const len = Math.max(R * 0.12, Math.hypot(vx, vy) * 0.13), ang = Math.atan2(vy, vx);
+        const len = Math.max(R * 0.12, Math.hypot(vx, vy) * 0.1), ang = Math.atan2(vy, vx);
         q.setFromAxisAngle(Z, ang);
         v3.set(x - Math.cos(ang) * len / 2, y - Math.sin(ang) * len / 2, 0);
-        s3.set(life >= 1 ? 0.0001 : len, R * 0.06 * s.w, 1);
+        s3.set(life >= 1 || a < s.d ? 0.0001 : len, R * 0.07 * s.w, 1);
         m4.compose(v3, q, s3); sparks.setMatrixAt(i, m4);
-        const fade = Math.pow(1 - life, 0.8);
-        col.copy(cCore).lerp(cSpark, clamp(life * 1.6 + s.hot * 0.3)).multiplyScalar(fade * 1.4);
+        const fade = Math.pow(1 - life, 0.7);
+        col.copy(cCore).lerp(cSpark, clamp(life * 1.4 + s.hot * 0.3)).multiplyScalar(fade * 1.3);
         sparks.setColorAt(i, col);
       });
       sparks.instanceMatrix.needsUpdate = true; if (sparks.instanceColor) sparks.instanceColor.needsUpdate = true;
       em.forEach((e, i) => {
-        const age = Math.max(0, a - e.d), d = e.v * out3(clamp(age / 0.5)) ;
+        const age = Math.max(0, a - e.d), d = e.v * out3(clamp(age / 0.6));
         epos[i * 3] = Math.cos(e.a) * d; epos[i * 3 + 1] = Math.sin(e.a) * d - R * 0.9 * age * age; epos[i * 3 + 2] = 0;
         const life = clamp(age / (LEN - e.d)), tw = 0.6 + 0.4 * Math.sin(e.ph + age * e.f);
-        col.copy(cSpark).lerp(cRing, life).multiplyScalar(a < e.d ? 0 : (1 - life) * tw);
+        col.copy(cSpark).lerp(cRing, life).multiplyScalar(a < e.d ? 0 : (1 - life) * tw * 1.5);
         ecol[i * 3] = col.r; ecol[i * 3 + 1] = col.g; ecol[i * 3 + 2] = col.b;
       });
       egeo.attributes.position.needsUpdate = true; egeo.attributes.color.needsUpdate = true;

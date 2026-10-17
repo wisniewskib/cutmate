@@ -592,3 +592,39 @@ def test_glb_shape_needs_glb_media(tmp_path):
     assert not any("glb" in w for w in plan_with(media="a.glb"))
     assert not any("glb" in w for w in plan_with(params={"shape": "glb", "model": "robot.glb"}))
     assert not any("glb" in w for w in plan_with(params={"shape": "torus-knot"}, media="a.png"))
+
+
+def _hand_tracks(out, palm=None, finger=None, t0=3.8, t1=4.6):
+    n = int((t1 - t0) * 10) + 1
+    ts = [round(t0 + i * 0.1, 2) for i in range(n)]
+    tr = {"face": [[t / 10, 0.45, 0.3, 0.9] for t in range(0, 100)], "point_left": [], "point_right": [],
+          "palm_left": [], "palm_right": [], "finger_left": [], "finger_right": []}
+    if palm:
+        tr["palm_right"] = [[t, palm[0], palm[1], palm[2]] for t in ts]
+    if finger:
+        tr["finger_right"] = [[t, finger[0], finger[1], finger[2]] for t in ts]
+    (out / "work" / "tracks.json").write_text(json.dumps({"fps": 15, "w": 1920, "h": 1080, "tracks": tr}), encoding="utf-8")
+
+
+def test_place_gesture_open_palm_follows_the_hand(tmp_path):
+    out = make_out169(tmp_path, {"graphics": [{"type": "custom", "name": "showcase-3d", "at": "S2:minus", "place": "gesture"}]})
+    _hand_tracks(out, palm=(0.2, 0.78, 1.0), finger=(0.05, 0.78, 0.0))
+    pl = load_plan(out)
+    g = pl.graphics[0]
+    assert g.params["place_xy"] == [0.2, 0.78] and g.params["place_track"] == "palm_right"
+    assert not any("hand-shape" in w for w in pl.warnings)
+
+
+def test_place_gesture_index_point_uses_the_target(tmp_path):
+    out = make_out169(tmp_path, {"graphics": [{"type": "custom", "name": "burst", "at": "S2:minus", "place": "gesture"}]})
+    _hand_tracks(out, palm=(0.6, 0.6, 0.0), finger=(0.66, 0.5, 1.0))
+    g = load_plan(out).graphics[0]
+    assert g.params["place_xy"] == [0.66, 0.5] and "place_track" not in g.params
+
+
+def test_place_gesture_warns_without_hand_shapes(tmp_path):
+    out = make_out169(tmp_path, {"graphics": [{"type": "custom", "name": "arrow", "at": "S2:minus", "place": "gesture"}]})
+    _point_tracks(out)
+    pl = load_plan(out)
+    assert pl.graphics[0].params["place_xy"] == [0.8, 0.4]
+    assert "WARN tracks.json has no hand-shape data (open palm / index point) — run `cutmate track --force`" in pl.warnings

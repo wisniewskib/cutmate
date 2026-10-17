@@ -69,6 +69,34 @@ def track_slice(samples, a: float, b: float, host_start: float, W: int, H: int, 
     return [[round(t - host_start, 3), *to_px(x, y, t)] for t, x, y, *_ in samples if a <= t <= b]
 
 
+def held_slice(samples, a: float, b: float, host_start: float, W: int, H: int, to_px=None,
+               step: float = 0.4, ease: float = 0.3) -> list[list[float]]:
+    """Like track_slice, but never empty inside [a, b] while the track has any sample: starts at a with the nearest
+    sample (so an effect shows at once, not when the hand is next seen), holds the last position through gaps (moving to
+    the next one over the last `ease` s) and to b, with points <= step apart (U.trackAt never blanks)."""
+    if not samples:
+        return []
+    to_px = to_px or (lambda x, y, t: (round(x * W, 1), round(y * H, 1)))
+    inside = [s[:3] for s in samples if a <= s[0] <= b]
+    if not inside or inside[0][0] > a:
+        near = min(samples, key=lambda s: (abs(s[0] - a), s[0] > a))
+        inside.insert(0, [a, near[1], near[2]])
+    if inside[-1][0] < b:
+        inside.append([b, inside[-1][1], inside[-1][2]])
+    pts = [inside[0]]
+    for p, q in zip(inside, inside[1:]):
+        if q[0] - p[0] > step:                          # hold p, then glide to q
+            hold_to = max(p[0], q[0] - ease)
+            t = p[0] + step
+            while t < hold_to - 1e-9:
+                pts.append([t, p[1], p[2]])
+                t += step
+            if hold_to > p[0] + 1e-9:
+                pts.append([hold_to, p[1], p[2]])
+        pts.append(q)
+    return [[round(t - host_start, 3), *to_px(x, y, t)] for t, x, y in pts]
+
+
 THEME_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 
 
