@@ -79,3 +79,18 @@ def test_smoke_real_render(tmp_path):
     info = media.probe_video(r["final"])
     assert r["ok"] and (info["width"], info["height"]) == (1080, 1920)
     assert info["duration"] == pytest.approx(5.0, abs=0.3) and r["frame"].exists()
+
+
+def test_smoke_short_clip(tmp_path, calls):
+    src = make_clip(tmp_path / "in.mp4", dur=3, size="1920x1080")
+    sm.smoke(tmp_path / "w", config.Config(), clip=src)
+    seg = _load(tmp_path / "w", "work/edl_timed.json")[0]
+    assert seg["end"] == pytest.approx(3.0, abs=0.05)
+    assert _load(tmp_path / "w", "work/aligned_words.json")[-1]["end"] <= 3.0
+
+
+def test_smoke_clip_too_short(tmp_path, calls):
+    from cutmate.errors import CutmateError
+    src = make_clip(tmp_path / "in.mp4", dur=1.5, size="1920x1080")
+    with pytest.raises(CutmateError, match="clip too short"):
+        sm.smoke(tmp_path / "w", config.Config(), clip=src)
