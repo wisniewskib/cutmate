@@ -22,7 +22,7 @@ def nvidia_dirs(paths: list[str] | None = None) -> list[Path]:
 
 def _preload(dirs: list[Path]) -> None:
     def files(pattern: str) -> list[Path]:
-        return sorted(f for d in dirs for f in d.glob(pattern))
+        return sorted((f for d in dirs for f in d.glob(pattern)), key=lambda f: f.name)
 
     pending = files("libcublasLt.so.12") + files("libcublas.so.12") + files("libcudnn*.so.9")
     reasons: dict[Path, str] = {}
@@ -47,10 +47,10 @@ def enable_cuda_libs() -> list[Path]:
     _done = True
     if sys.platform == "darwin":
         _dirs = []
-        return _dirs
+        return list(_dirs)
     _dirs = nvidia_dirs()
     if not _dirs:
-        return _dirs
+        return []
     joined = os.pathsep.join(str(d) for d in _dirs)
     if sys.platform == "win32":
         for d in _dirs:
@@ -61,4 +61,4 @@ def enable_cuda_libs() -> list[Path]:
         old = os.environ.get("LD_LIBRARY_PATH")
         os.environ["LD_LIBRARY_PATH"] = joined + (os.pathsep + old if old else "")
         _preload(_dirs)
-    return _dirs
+    return list(_dirs)

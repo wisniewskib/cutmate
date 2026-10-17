@@ -55,7 +55,7 @@ def test_enable_preloads_in_order(monkeypatch, tmp_path):
     files = ["libcublasLt.so.12", "libcublas.so.12", "libcublas.so.13", "libcudnn.so.9",
              "libcudnn_graph.so.9", "libcudnn_ops.so.9"]
     cublas, _ = _linux(monkeypatch, tmp_path, files)
-    loaded, calls = _fake_cdll(monkeypatch, lambda n, l: n == "libcudnn_ops.so.9" and "libcudnn_graph.so.9" not in l)
+    loaded, calls = _fake_cdll(monkeypatch, lambda n, l: n == "libcudnn_graph.so.9" and "libcudnn_ops.so.9" not in l)
     cuda.enable_cuda_libs()
     assert loaded[:2] == ["libcublasLt.so.12", "libcublas.so.12"]
     assert {"libcudnn.so.9", "libcudnn_graph.so.9", "libcudnn_ops.so.9"} <= set(loaded)
@@ -89,7 +89,7 @@ def test_enable_windows(monkeypatch, tmp_path):
     added = []
     monkeypatch.setattr(cuda.os, "add_dll_directory", lambda d: added.append(d), raising=False)
     cuda.enable_cuda_libs()
-    assert added == [str(cublas), str(cudnn)] or added == [cublas, cudnn]
+    assert added == [str(cublas), str(cudnn)]
     assert os.environ["PATH"].startswith(str(cublas) + os.pathsep + str(cudnn))
 
 

@@ -1,3 +1,4 @@
+import gc
 import platform
 import sys
 from pathlib import Path
@@ -65,32 +66,42 @@ class LocalBackend:
                 raise
             except Exception as e:
                 raise BackendError(f"local transcription failed: {e}") from None
+        try:
+            audio = read_pcm(wav, 16000)  # decode once, before any GPU work, so a bad wav can't trigger rebuilds
+        except Exception as e:
+            raise BackendError(f"local transcription failed: {e}") from None
         if self._faster is None:
             self._faster = self._load()
         try:
-            return self._run_faster(wav, language, prompt)
+            return self._run_faster(audio, language, prompt)
         except Exception as e:
-            err = e
+            err = _short(e)  # keep only text: the exception's traceback would pin the old model in memory
         # cuDNN/cuBLAS load lazily at the first transcribe, so GPU failures surface here, not at model load
         if self.device == "cuda" and self.compute != "int8_float16":
-            print(f"WARN local: GPU transcription failed with {self.compute} ({_short(err)}), retrying with int8_float16")
+            print(f"WARN local: GPU transcription failed with {self.compute} ({err}), retrying with int8_float16")
             try:
-                self._faster, self.device, self.compute = self._build("cuda", "int8_float16"), "cuda", "int8_float16"
-                return self._run_faster(wav, language, prompt)
+                self._rebuild("cuda", "int8_float16")
+                return self._run_faster(audio, language, prompt)
             except Exception as e:
-                err = e
+                err = _short(e)
         if self.device == "cuda":
-            print(f"WARN local: GPU transcription failed ({_short(err)}) — transcribing on CPU (much slower). "
-                  f"{SETUP_HINT}")
+            print(f"WARN local: GPU transcription failed ({err}) — transcribing on CPU (much slower). {SETUP_HINT}")
             try:
-                self._faster, self.device, self.compute = self._build("cpu", "int8"), "cpu", "int8"
+                self._rebuild("cpu", "int8")
             except Exception as e:
                 raise BackendError(f"local model load failed: {e}") from None
             try:
-                return self._run_faster(wav, language, prompt)
+                return self._run_faster(audio, language, prompt)
             except Exception as e:
-                err = e
+                err = _short(e)
         raise BackendError(f"local transcription failed: {err}") from None
+
+    def _rebuild(self, device: str, compute: str) -> None:
+        # free the old model first: on a 6 GB card the replacement can OOM while the old one is still resident
+        self._faster = None
+        gc.collect()
+        self._faster = self._build(device, compute)
+        self.device, self.compute = device, compute
 
     def _build(self, device: str, compute: str):
         from faster_whisper import WhisperModel
@@ -126,9 +137,8 @@ class LocalBackend:
         self.device, self.compute = "cpu", "int8"
         return model
 
-    def _run_faster(self, wav: Path, language: str, prompt: str | None) -> Transcript:
-        # decode with our ffmpeg: faster-whisper's PyAV decoder breaks on PyAV >= 15 (metadata_errors)
-        audio = read_pcm(wav, 16000)
+    def _run_faster(self, audio, language: str, prompt: str | None) -> Transcript:
+        # audio is decoded with our ffmpeg: faster-whisper's PyAV decoder breaks on PyAV >= 15 (metadata_errors)
         segments, _info = self._faster.transcribe(audio, word_timestamps=True, language=language,
                                                   initial_prompt=prompt, condition_on_previous_text=False,
                                                   temperature=0)

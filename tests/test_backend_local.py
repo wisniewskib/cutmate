@@ -246,3 +246,40 @@ def test_gpu_transcribe_real(tmp_path):
     b = LocalBackend("faster", "tiny")
     b.transcribe(make_wav(tmp_path / "a.wav", dur=2.0), "en")
     assert b.device == "cuda"
+
+
+def test_ladder_releases_old_model_before_rebuild(monkeypatch, tmp_path):
+    seen = []
+
+    class FakeWhisperModel:
+        def __init__(self, model, device="cpu", compute_type="int8"):
+            self.key = (device, compute_type)
+
+        def transcribe(self, *a, **k):
+            if self.key[0] == "cuda":
+                raise RuntimeError("CUDA out of memory")
+            return iter([]), SimpleNamespace()
+
+    monkeypatch.setitem(sys.modules, "faster_whisper", SimpleNamespace(WhisperModel=FakeWhisperModel))
+    monkeypatch.setattr(local, "pick_device", lambda: ("cuda", "float16"))
+    b = LocalBackend("faster", "large-v3")
+    orig = b._build
+    b._build = lambda d, c: (seen.append((d, c, b._faster is None)), orig(d, c))[1]
+    b.transcribe(make_wav(tmp_path / "a.wav"), "en")
+    assert seen[-2:] == [("cuda", "int8_float16", True), ("cpu", "int8", True)]
+
+
+def test_bad_wav_raises_without_gpu_rebuilds(monkeypatch, tmp_path, capsys):
+    built = []
+
+    class FakeWhisperModel:
+        def __init__(self, model, device="cpu", compute_type="int8"):
+            built.append((device, compute_type))
+
+    monkeypatch.setitem(sys.modules, "faster_whisper", SimpleNamespace(WhisperModel=FakeWhisperModel))
+    monkeypatch.setattr(local, "pick_device", lambda: ("cuda", "float16"))
+    bad = tmp_path / "bad.wav"
+    bad.write_bytes(b"not audio")
+    with pytest.raises(BackendError, match="local transcription failed"):
+        LocalBackend("faster", "large-v3").transcribe(bad, "en")
+    assert built == [] and "WARN" not in capsys.readouterr().out
