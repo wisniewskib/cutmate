@@ -155,6 +155,20 @@ def test_setup_ps1_parity():
         assert s in t
 
 
+def test_setup_ps1_tries_py_launcher_first():
+    t = (ROOT / "install" / "setup.ps1").read_text(encoding="utf-8")
+    find = t[t.index("function Test-Python"):t.index("$PyBin = Find-Python")]
+    assert find.index("'py -3'") < find.index("'python3.13'")
+    assert "$ErrorActionPreference = 'Continue'" in find
+    assert "$LASTEXITCODE" in find
+
+
+def test_setup_ps1_run_tolerates_native_stderr():
+    t = (ROOT / "install" / "setup.ps1").read_text(encoding="utf-8")
+    run = t[t.index("function Run"):t.index("$extras =")]
+    assert "$ErrorActionPreference = 'Continue'" in run and "$LASTEXITCODE" in run
+
+
 @pytest.mark.skipif(not shutil.which("pwsh"), reason="pwsh not installed")
 def test_setup_ps1_dry_run(tmp_path):
     env = {**os.environ, "CUTMATE_HOME": str(tmp_path / "cm")}

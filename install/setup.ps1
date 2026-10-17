@@ -12,24 +12,34 @@ $HomeDir = if ($env:CUTMATE_HOME) { $env:CUTMATE_HOME } else { Join-Path $HOME '
 $Venv = Join-Path $HomeDir 'venv'
 $Py = Join-Path $Venv 'Scripts\python.exe'
 
+function Test-Python([string]$Exe, [string[]]$Extra) {
+  # Continue + $LASTEXITCODE: a native stderr line must not become a terminating error (PS 5.1)
+  $out = $null
+  try {
+    $ErrorActionPreference = 'Continue'
+    $out = (& $Exe @Extra --version 2>&1 | Select-Object -First 1)
+    if ($LASTEXITCODE -ne 0) { return $null }
+    if ("$out" -notmatch '^Python (\d+)\.(\d+)') { return $null }
+    $maj = [int]$Matches[1]; $min = [int]$Matches[2]
+    if (-not ($maj -gt 3 -or ($maj -eq 3 -and $min -ge 10))) { return $null }
+    $exe = (& $Exe @Extra -c 'import sys; print(sys.executable)' 2>$null | Select-Object -First 1)
+    if ($LASTEXITCODE -ne 0 -or -not $exe) { return $null }
+    return "$exe".Trim()
+  } catch {
+    return $null
+  } finally {
+    $ErrorActionPreference = 'Stop'
+  }
+}
+
 function Find-Python {
-  foreach ($c in 'python3.13', 'python3.12', 'python3.11', 'python3.10', 'python3', 'python') {
-    $cmd = Get-Command $c -ErrorAction SilentlyContinue
+  # py -3 first, like detect.ps1
+  foreach ($c in 'py -3', 'python3.13', 'python3.12', 'python3.11', 'python3.10', 'python3', 'python') {
+    $parts = $c -split ' '
+    $cmd = Get-Command $parts[0] -ErrorAction SilentlyContinue
     if (-not $cmd) { continue }
-    $out = $null
-    try {
-      $ErrorActionPreference = 'Continue'
-      $out = (& $cmd.Source --version 2>&1 | Select-Object -First 1)
-      if ($LASTEXITCODE -ne 0) { $out = $null }
-    } catch {
-      $out = $null
-    } finally {
-      $ErrorActionPreference = 'Stop'
-    }
-    if ("$out" -match '^Python (\d+)\.(\d+)') {
-      $maj = [int]$Matches[1]; $min = [int]$Matches[2]
-      if ($maj -gt 3 -or ($maj -eq 3 -and $min -ge 10)) { return $cmd.Source }
-    }
+    $found = Test-Python $cmd.Source @($parts | Select-Object -Skip 1)
+    if ($found) { return $found }
   }
   return $null
 }
@@ -43,8 +53,16 @@ if (-not $PyBin) {
 function Run([string[]]$Cmd) {
   Write-Output ('+ ' + ($Cmd -join ' '))
   if (-not $DryRun) {
-    & $Cmd[0] $Cmd[1..($Cmd.Length - 1)]
-    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    # pip writes warnings to stderr; under 'Stop' PS 5.1 turns them into terminating errors when output is
+    # redirected, so run the native command under 'Continue' and judge it by $LASTEXITCODE alone
+    $ErrorActionPreference = 'Continue'
+    try {
+      & $Cmd[0] $Cmd[1..($Cmd.Length - 1)]
+      $code = $LASTEXITCODE
+    } finally {
+      $ErrorActionPreference = 'Stop'
+    }
+    if ($code -ne 0) { exit $code }
   }
 }
 
