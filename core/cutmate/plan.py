@@ -98,6 +98,18 @@ def _media(rel, rec: Path, where: str) -> str:
     return str(p)
 
 
+def _effect_params(g: dict, rec: Path, where: str, params: dict) -> None:
+    """An effect's "params" (an object); a string params.media is a file next to the recording, like "media"."""
+    if "params" not in g:
+        return
+    if not isinstance(g["params"], dict):
+        raise PlanError(f'{where}: "params" must be an object')
+    p = dict(g["params"])
+    if isinstance(p.get("media"), str):
+        p["media"] = _media(p["media"], rec, where)
+    params["params"] = p
+
+
 def _media_or_effect(g: dict, params: dict, rec: Path, where: str) -> None:
     if ("media" in g) == ("effect" in g):
         raise PlanError(f'{where}: needs exactly one of "media" or "effect"')
@@ -105,8 +117,8 @@ def _media_or_effect(g: dict, params: dict, rec: Path, where: str) -> None:
         params["media"] = _media(g["media"], rec, where)
     elif not NAME_RE.match(str(g["effect"])):
         raise PlanError(f"{where}: effect must be an effect name (e.g. space-bg)")
-    elif "params" in g and not isinstance(g["params"], dict):
-        raise PlanError(f'{where}: "params" must be an object')
+    else:
+        _effect_params(g, rec, where, params)
 
 
 def _range(g: dict, words: list[dict], end: float, where: str) -> tuple[float, float]:
@@ -132,6 +144,13 @@ def _graphic(i: int, g, words: list[dict], end: float, rec: Path, fmt: str = "9:
     for k in REQUIRED[t]:
         if k not in g:
             raise PlanError(f"{where}: missing \"{k}\"")
+    if "place" in g:
+        if t not in ("custom", "chip"):
+            raise PlanError(f'{where}: "place" works only on custom and chip')
+        if g["place"] != "gesture":
+            raise PlanError(f'{where}: place must be "gesture"')
+    if g.get("speaker") == "gesture" and t != "side":
+        raise PlanError(f'{where}: speaker "gesture" works only on side')
     params = {k: v for k, v in g.items() if k not in TIMING_KEYS}
     stop = None
     if t in ("split", "pip"):
@@ -175,13 +194,12 @@ def _graphic(i: int, g, words: list[dict], end: float, rec: Path, fmt: str = "9:
             raise PlanError(f'{where}: needs "at" or "from"/"to"')
         if "follow" in g and g["follow"] not in FOLLOW:
             raise PlanError(f"{where}: follow must be one of {', '.join(FOLLOW)}")
-        if "params" in g and not isinstance(g["params"], dict):
-            raise PlanError(f'{where}: "params" must be an object')
         r = g.get("region")
         if "region" in g and not (isinstance(r, list) and len(r) == 4 and all(
                 isinstance(x, (int, float)) and not isinstance(x, bool) and x >= 0 for x in r) and r[2] > 0 and r[3] > 0):
             raise PlanError(f"{where}: region must be [x, y, w, h] in px (non-negative numbers, w and h > 0)")
-        params = {k: g[k] for k in ("name", "follow", "params", "region", "place") if k in g}
+        params = {k: g[k] for k in ("name", "follow", "region", "place") if k in g}
+        _effect_params(g, rec, where, params)
         if "media" in g:
             if not isinstance(g["media"], str):
                 raise PlanError(f'{where}: "media" must be a file path')
@@ -296,19 +314,23 @@ def _resolve_gestures(gs: list[Graphic], tr: dict | None) -> list[str]:
         g = uses[0]
         raise PlanError(f"graphic #{g.index + 1} ({g.type}): gesture needs out/work/tracks.json (fresh) — run `cutmate track`")
     w = []
+    pointing = any(k in tr["tracks"] for k in ("point_left", "point_right")) if uses else True
+    if not pointing:
+        w.append("WARN tracks.json has no pointing data — run `cutmate track --force`")
     for g in uses:
         hit = gesture_at(tr["tracks"], g.start)
         if g.params.get("place") == "gesture" and g.type in ("custom", "chip"):
             if hit:
                 g.params["place_xy"] = [hit["x"], hit["y"]]
-            else:
+            elif pointing:
                 w.append(f"WARN {g.type} at {g.start:.1f}s: no pointing gesture near the anchor — default position")
         if g.params.get("speaker") == "gesture":
             if hit:
                 g.params["speaker"] = "right" if hit["side"] == "left" else "left"
             else:
                 g.params["speaker"] = "right"
-                w.append(f"WARN {g.type} at {g.start:.1f}s: no pointing gesture near the anchor — speaker right")
+                if pointing:
+                    w.append(f"WARN {g.type} at {g.start:.1f}s: no pointing gesture near the anchor — speaker right")
     return w
 
 

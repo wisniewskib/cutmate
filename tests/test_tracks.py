@@ -199,3 +199,24 @@ def test_analyze_keeps_point_tracks(tmp_path):
     d = analyze(clip, FakeDetector())
     pr = d["tracks"]["point_right"]
     assert pr and all(len(p) == 4 for p in pr) and d["tracks"]["point_left"] == []
+
+
+def test_track_redone_when_tracks_missing(tmp_path):
+    from cutmate.tracks import TRACKS, track
+    out = tmp_path / "out"
+    make_clip(out / "aroll.mp4", dur=1.0, size="1920x1080", gaps=())
+    det = FakeDetector()
+    p = track(out, detector=det)
+    n = len(det.calls)
+    d = json.loads(p.read_text(encoding="utf-8"))
+    del d["tracks"]["point_left"], d["tracks"]["point_right"]  # a tracks.json from before plan 2d
+    p.write_text(json.dumps(d), encoding="utf-8")
+    import os
+    import time
+    later = time.time() + 5
+    os.utime(p, (later, later))                                # newer than aroll.mp4, still incomplete
+    track(out, detector=det)
+    assert len(det.calls) == 2 * n
+    assert set(json.loads(p.read_text(encoding="utf-8"))["tracks"]) == set(TRACKS)
+    track(out, detector=det)                                   # complete and fresh: cached
+    assert len(det.calls) == 2 * n

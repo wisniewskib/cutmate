@@ -538,3 +538,42 @@ def test_effect_params_forwarded_to_expanded_custom(tmp_path):
     assert custom.params["params"] == {"value": 75}
     with pytest.raises(PlanError, match='"params" must be an object'):
         load_plan(make_out(tmp_path / "b", {"graphics": [dict(gs[0], params=[1])]}))
+
+
+def test_effect_params_media_resolved(tmp_path):
+    gs = [{"type": "split", "from": "S2:minus", "to": "S2:koniec.", "effect": "stat-card",
+           "params": {"value": 75, "media": "broll/a.png"}}]
+    out = make_out(tmp_path, {"graphics": gs})
+    with pytest.raises(PlanError, match=r"media not found: .*broll/a.png"):
+        load_plan(out)
+    (out.parent / "broll").mkdir()
+    (out.parent / "broll" / "a.png").write_bytes(b"x")
+    split, custom = load_plan(out).graphics
+    assert custom.params["params"] == {"value": 75, "media": str(out.parent / "broll" / "a.png")}
+    raw = json.loads((out / "plan.json").read_text(encoding="utf-8"))
+    assert raw["graphics"][0]["params"]["media"] == "broll/a.png"
+    out = make_out169(tmp_path / "c", {"graphics": [{"type": "custom", "name": "stat-card", "at": "S2:minus",
+                                                      "params": {"media": "shot.png"}}]})
+    (out.parent / "shot.png").write_bytes(b"x")
+    assert load_plan(out).graphics[0].params["params"]["media"] == str(out.parent / "shot.png")
+
+
+@pytest.mark.parametrize("g, msg", [
+    ({"type": "title", "at": "S2:minus", "text": "X", "place": "gesture"}, '"place" works only on custom and chip'),
+    ({"type": "chip", "at": "S2:minus", "text": "X", "place": "left"}, 'place must be "gesture"'),
+    ({"type": "custom", "name": "x", "at": "S2:minus", "place": [1, 2]}, 'place must be "gesture"'),
+    ({"type": "chip", "at": "S2:minus", "text": "X", "speaker": "gesture"}, 'speaker "gesture" works only on side'),
+])
+def test_place_and_speaker_validated(tmp_path, g, msg):
+    out = make_out169(tmp_path, {"graphics": [g]})
+    _point_tracks(out)
+    with pytest.raises(PlanError, match=msg):
+        load_plan(out)
+
+
+def test_no_pointing_data_warns(tmp_path):
+    out = make_out169(tmp_path, {"graphics": [{"type": "chip", "text": "tu", "at": "S2:minus", "place": "gesture"}]})
+    _tracks(out)                                               # pre-2d tracks.json: face and hands, no point_* tracks
+    pl = load_plan(out)
+    assert "place_xy" not in pl.graphics[0].params
+    assert "WARN tracks.json has no pointing data — run `cutmate track --force`" in pl.warnings

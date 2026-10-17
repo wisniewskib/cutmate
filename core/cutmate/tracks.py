@@ -217,13 +217,22 @@ def analyze(video: Path, detector, every: int = 2, width: int = 640) -> dict:
             "tracks": {n: fill_gaps(smooth(s), 0.5, step) for n, s in raw.items()}}
 
 
+def _complete(p: Path) -> bool:
+    """tracks.json has every track this version writes (a file from before the pointing tracks does not)."""
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+    except (ValueError, OSError):
+        return False
+    return isinstance(data, dict) and isinstance(data.get("tracks"), dict) and all(n in data["tracks"] for n in TRACKS)
+
+
 def track(out_dir: Path, detector=None, force: bool = False) -> Path:
     out = Path(out_dir)
     src = out / "aroll.mp4"
     if not src.exists():
         raise CutmateError(f"{src} not found — run `cutmate cut` first")
     p = out / "work" / "tracks.json"
-    if not force and p.exists() and p.stat().st_mtime >= src.stat().st_mtime:
+    if not force and p.exists() and p.stat().st_mtime >= src.stat().st_mtime and _complete(p):
         return p
     own = detector is None
     det = detector or PoseDetector()
