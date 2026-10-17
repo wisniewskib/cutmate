@@ -23,10 +23,29 @@ def pointing_target(wrist: tuple, tip: tuple) -> tuple[float, float]:
     return tuple(min(0.98, max(0.02, tip[i] + 2.0 * (tip[i] - wrist[i]))) for i in (0, 1))
 
 
-def is_extended(wrist: tuple, shoulder: tuple, shoulder_mid: tuple, hip_mid: tuple) -> bool:
-    """Arm stretched out: wrist-shoulder distance > 0.6 x torso length (shoulder midpoint -> hip midpoint)."""
-    torso = float(np.hypot(shoulder_mid[0] - hip_mid[0], shoulder_mid[1] - hip_mid[1]))
-    return float(np.hypot(wrist[0] - shoulder[0], wrist[1] - shoulder[1])) > 0.6 * torso
+def is_extended(wrist: tuple, shoulder: tuple, torso: float) -> bool:
+    """Arm stretched out: wrist-shoulder distance > 0.6 x torso length, and not just hanging down
+    (a relaxed arm is long too, but its wrist sits more than 0.75 torso below the shoulder).
+    All points in the same isotropic units (x scaled by the frame aspect)."""
+    long_ = float(np.hypot(wrist[0] - shoulder[0], wrist[1] - shoulder[1])) > 0.6 * torso
+    return bool(long_ and wrist[1] - shoulder[1] < 0.75 * torso)
+
+
+def pointing(lm: dict, wrist: int, tip: int, shoulder: int, aspect: float, vis: float = 0.5) -> tuple | None:
+    """(x, y, conf) of where one arm points; conf 1.0 = arm extended. lm = {index: (x, y, visibility)} as frame
+    fractions; aspect = width / height (distances are measured in pixels, not fractions). Torso = shoulder midpoint ->
+    hip midpoint, or 1.3 x shoulder width when the hips are out of frame (close-ups). None when the arm is not visible."""
+    if any(lm[i][2] < vis for i in (wrist, tip, shoulder, 11, 12)):
+        return None
+    P = lambda i: (lm[i][0] * aspect, lm[i][1])  # noqa: E731
+    sl, sr = P(11), P(12)
+    if lm[23][2] >= vis and lm[24][2] >= vis:
+        hl, hr = P(23), P(24)
+        torso = float(np.hypot((sl[0] + sr[0] - hl[0] - hr[0]) / 2, (sl[1] + sr[1] - hl[1] - hr[1]) / 2))
+    else:
+        torso = 1.3 * float(np.hypot(sl[0] - sr[0], sl[1] - sr[1]))
+    x, y = pointing_target(lm[wrist][:2], lm[tip][:2])
+    return (x, y, 1.0 if is_extended(P(wrist), P(shoulder), torso) else 0.0)
 
 
 def gesture_at(tracks: dict, t: float, window: float = 0.5) -> dict | None:
@@ -170,13 +189,9 @@ class PoseDetector:
             return (sum(L[i].x for i in ids) / len(ids), sum(L[i].y for i in ids) / len(ids),
                     min(getattr(L[i], "visibility", 1.0) for i in ids))
 
-        def point(wrist, tip, shoulder):
-            if any(getattr(L[i], "visibility", 1.0) < self.VIS for i in (wrist, tip, shoulder, 11, 12, 23, 24)):
-                return None
-            xy = lambda i: (L[i].x, L[i].y)
-            mid = lambda a, b: ((L[a].x + L[b].x) / 2, (L[a].y + L[b].y) / 2)
-            x, y = pointing_target(xy(wrist), xy(tip))
-            return (x, y, 1.0 if is_extended(xy(wrist), xy(shoulder), mid(11, 12), mid(23, 24)) else 0.0)
+        lm = {i: (L[i].x, L[i].y, getattr(L[i], "visibility", 1.0)) for i in (11, 12, 15, 16, 19, 20, 23, 24)}
+        aspect = rgb.shape[1] / rgb.shape[0]
+        point = lambda w, tip, sh: pointing(lm, w, tip, sh, aspect, self.VIS)  # noqa: E731
         return {"face": pt(0), "hand_left": pt(15, 19), "hand_right": pt(16, 20),
                 "point_left": point(15, 19, 11), "point_right": point(16, 20, 12)}
 

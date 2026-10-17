@@ -179,9 +179,48 @@ def test_pointing_target_clamped():
 
 def test_is_extended():
     from cutmate.tracks import is_extended
-    args = ((0.4, 0.3), (0.5, 0.3), (0.5, 0.7))
-    assert is_extended((0.4, 0.5), *args) is False
-    assert is_extended((0.1, 0.3), *args) is True
+    assert is_extended((0.4, 0.5), (0.4, 0.3), 0.4) is False      # hand near the shoulder
+    assert is_extended((0.1, 0.3), (0.4, 0.3), 0.4) is True       # arm out to the side
+    assert is_extended((0.42, 0.68), (0.4, 0.3), 0.4) is False    # arm hanging down: long, but not pointing
+
+
+def _lm(pts=None):
+    """landmarks {index: (x, y)} all visible; defaults: a speaker facing the camera, arms down."""
+    base = {0: (0.5, 0.2), 11: (0.6, 0.4), 12: (0.4, 0.4), 23: (0.57, 0.8), 24: (0.43, 0.8),
+            15: (0.62, 0.78), 19: (0.62, 0.82), 16: (0.38, 0.78), 20: (0.38, 0.82)}
+    base.update(pts or {})
+    return {i: (x, y, 0.9) for i, (x, y) in base.items()}
+
+
+def test_pointing_ignores_hanging_arms():
+    from cutmate.tracks import pointing
+    assert pointing(_lm(), 15, 19, 11, 1.0)[2] == 0.0
+    assert pointing(_lm(), 16, 20, 12, 16 / 9)[2] == 0.0
+
+
+def test_pointing_without_hips_uses_shoulder_width():
+    """Close-up landscape framing: hips out of frame must not drop the pointing track."""
+    from cutmate.tracks import pointing
+    lm = _lm({15: (0.8, 0.42), 19: (0.85, 0.4)})
+    for i in (23, 24):
+        lm[i] = (lm[i][0], lm[i][1], 0.1)
+    x, y, c = pointing(lm, 15, 19, 11, 16 / 9)
+    assert c == 1.0 and x > 0.8
+
+
+def test_pointing_counts_width_in_pixels():
+    """A sideways arm in 16:9 is as long in pixels as it looks: fractions of the width are 16/9 longer."""
+    from cutmate.tracks import pointing
+    lm = _lm({15: (0.78, 0.45), 19: (0.81, 0.45)})          # 0.18 of the width from the shoulder
+    assert pointing(lm, 15, 19, 11, 1.0)[2] == 0.0
+    assert pointing(lm, 15, 19, 11, 16 / 9)[2] == 1.0
+
+
+def test_pointing_none_without_arm():
+    from cutmate.tracks import pointing
+    lm = _lm()
+    lm[19] = (0.6, 0.8, 0.2)
+    assert pointing(lm, 15, 19, 11, 1.0) is None
 
 
 def test_gesture_at():
