@@ -526,13 +526,22 @@ U.ready(Promise.all([U.three({ el: stage }), U.fonts([800, 900]).then(measure)])
       if (inPoly(base, r.x0 + (r.x1 - r.x0) * gx2 / 4, r.y0 + (r.y1 - r.y0) * gy2 / 2)) return true;
     return false;
   };
-  const partTop = (g) => new THREE.Box3().setFromObject(g).max.y;
+  // each label points at its own part's main body (part-local x, y, z): "up" = on top of it, "dn" = its lower front
+  // edge (never the belt in front of it — the monitor and gear plate stand behind the belt)
+  const ANCHOR = {
+    box: { up: [0, 1.47, 0], dn: [0, 0.7, 0.84] },
+    cylinder: { up: [0, 2.38, -0.4], dn: [0, 1.42, 0.4] },
+    funnel: { up: [0, 2.24, 0], dn: [0, 1.17, 0.14] },
+    screen: { up: [0, 2.04, -1.05], dn: [0, 0.92, -0.96] },
+    gear: { up: [0, 2.12, -1.08], dn: [0, 0.55, -1.0] },
+  };
   labels.forEach((Lb, i) => {
     const g = Lb.counter ? crate : stations[i].g;
     const at = (x, y, z) => { const v = g.localToWorld(new THREE.Vector3(x, y, z)); return proj(v.x, v.y, v.z); };
     const cx0 = Lb.counter ? uEl + 0.95 : 0;
-    const aUp = Lb.counter ? at(cx0, 0.45, 0) : at(0, partTop(g) + 0.06, stations[i].shape === "box" || stations[i].shape === "funnel" ? 0 : -0.5);
-    const aDn = Lb.counter ? at(cx0, 0.05, CR / 2) : at(0, BY - 0.04, BW / 2 + 0.12);
+    const an = Lb.counter ? null : ANCHOR[stations[i].shape] || ANCHOR.box;
+    const aUp = Lb.counter ? at(cx0, 0.45, 0) : at(...an.up);
+    const aDn = Lb.counter ? at(cx0, 0.05, CR / 2) : at(...an.dn);
     const prefUp = Lb.counter || i >= (labels.length - 1) / 2;
     const own = Lb.counter ? n + 1 : i;
     const cand = (up, d) => {

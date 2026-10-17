@@ -199,3 +199,34 @@ def test_ui_mock_post_counters_only_from_params():
     assert {"replies", "reposts", "likes"} <= set(idx["ui-mock"]["params"])
     js = (BUNDLED / "ui-mock.html").read_text(encoding="utf-8")
     assert "P.replies" in js and "P.likes" in js and "U.seed" not in js       # no invented numbers
+
+
+def _css_rule(html, sel):
+    import re
+    m = re.search(r"ROOT " + re.escape(sel) + r" \{([^}]*)\}", html)
+    return m.group(1) if m else ""
+
+
+def test_stat_card_media_is_a_readable_framed_screenshot():
+    import re
+    html = (BUNDLED / "stat-card.html").read_text(encoding="utf-8")
+    shot = _css_rule(html, ".sc-shot")
+    assert shot and "brightness" not in shot and "blur" not in shot          # the framed shot itself is not dimmed
+    bg = re.search(r"brightness\(([\d.]+)\)", _css_rule(html, ".sc-bg"))
+    assert bg and float(bg.group(1)) >= 0.4                                  # the ambient copy behind is lighter too
+    assert '"sc-shot"' in html and "P.media" in html
+
+
+def test_ui_mock_window_fits_its_content():
+    html = (BUNDLED / "ui-mock.html").read_text(encoding="utf-8")
+    fit = html[html.index("const fit = () =>"):html.index("fit();")]
+    # after the font size is picked, the window shrinks to head + finished feed (+ footer) and is centred in the panel
+    assert "head.offsetHeight" in fit and "feed.offsetHeight" in fit
+    assert "Object.assign(win.style, { top: (P.h - h) / 2" in fit and 'height: h + "px"' in fit
+
+
+def test_iso_machine_labels_anchor_on_their_own_part():
+    html = (BUNDLED / "iso-machine.html").read_text(encoding="utf-8")
+    assert "BY - 0.04, BW / 2 + 0.12" not in html                           # not the belt edge in front of the part
+    for shape in ("box", "cylinder", "funnel", "screen", "gear"):
+        assert shape + ":" in html[html.index("const ANCHOR"):html.index("const ANCHOR") + 900], shape
