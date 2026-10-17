@@ -47,7 +47,7 @@ unit: 1080×1920 (9:16), 30 fps
   background removal is slow on CPU (~17 min per minute of video).
 - **`side`** exists only in 16:9: a half-screen panel (`media` or `effect`) with the speaker shifted to the other half
   (`speaker` `right` default / `left`). In 9:16 use `split`.
-- **Stock `energy-ball`** — a glowing Rasengan-style orb with sparks, 40 px above the tracked hand:
+- **Stock `energy-ball`** — a Rasengan-style orb (swirling core, spiral bands, wind rings, spiralling sparks; flash in, implodes out), ≈ P.h × 0.037 px above the tracked hand point (40 px at 1080 p):
   `{"type": "custom", "name": "energy-ball", "from": …, "to": …, "follow": "hand",
   "params": {"radius": 0.45, "colors": ["#e0f7ff", "#38bdf8"]}}` (`radius` in 3D units, ~170 px each at 1080 p;
-  `colors` = core, rim). Without hand samples in the range it stays hidden.
+  `colors` = core, rim). Without hand samples (no tracks, or the hand out of view) it stays hidden; only without `follow` does it sit at `place` / `x`,`y` / the centre.

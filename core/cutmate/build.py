@@ -361,6 +361,8 @@ def subcomp(cid: str, g: Graphic, host_start: float, theme: Path, assets: Path, 
         P = dict(g.params.get("params") or {})          # user params first: timing / size keys always win
         P.update(name=g.params["name"], at=loc(g.start), end=loc(g.end), lang=lang, w=rw, h=rh,
                  dur=round(g.end - host_start, 3), track=track)
+        if follow:
+            P["follow"] = follow                         # meant to follow: no samples → the effect stays hidden
         if assets_url:
             P["assets"] = assets_url
         if g.params.get("place_xy"):

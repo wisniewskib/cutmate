@@ -2,7 +2,8 @@
 <script>
 // Rasengan-style orb on the speaker's hand: swirling core + rotating spiral bands + wind rings + sparks spiralling out.
 // Enters with a flash (scale 0 -> 1.2 -> 1 in 0.3 s, bloom spike, shockwave), leaves by imploding into a point.
-// Follows P.track; without a track it sits at P.place, else params x / y (px), else the frame centre.
+// Follows P.track (hidden where the hand has no samples); placed without "follow" it sits at P.place, else
+// params x / y (px), else the frame centre.
 const box = root.querySelector(".fx-orb");
 U.three({ el: box, bloom: { strength: 0.75, radius: 0.5, threshold: 0.3 } }).then((S) => {
   const { THREE } = S;
@@ -96,7 +97,7 @@ U.three({ el: box, bloom: { strength: 0.75, radius: 0.5, threshold: 0.3 } }).the
   const motes = Array.from({ length: NI }, () => ({ a: rnd() * 6.283, d: r * (1.8 + rnd() * 2.2), w: 2 + rnd() * 3, o: rnd() * 0.3 }));
   S.scene.add(imp);
 
-  const fallback = P.place || (P.x != null && P.y != null ? [P.x, P.y] : [P.w / 2, P.h / 2]);
+  const fallback = P.follow ? null : P.place || (P.x != null && P.y != null ? [P.x, P.y] : [P.w / 2, P.h / 2]);
   const hasTrack = P.track && P.track.length;
   const lift = P.h * 0.037;                                  // sit just above the tracked hand point
   const ENTER = 0.3, EXIT = 0.35;

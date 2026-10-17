@@ -443,6 +443,7 @@ def test_custom_host_with_follow(out169, theme):
     P = json.loads(re.search(r"const P = (.*?);\n", sub).group(1).replace("<\\/", "</"))
     assert P["color"] == "#fff" and (P["w"], P["h"]) == (1920, 1080)
     assert P["track"] == [[0.4, 960.0, 540.0], [0.8, 1440.0, 540.0]]          # host starts 1.8 (2.1 - 0.3)
+    assert P["follow"] == "hand"                                              # effects know they were meant to follow
     assert "CutmateFX.make" in sub and "U.follow(el, P.track)" in sub
     html = (proj / "index.html").read_text(encoding="utf-8")
     assert '<script src="assets/effects.js"></script>' in html and (proj / "assets" / "effects.js").exists()
@@ -455,7 +456,7 @@ def test_follow_without_samples(out169, theme):
                                                              "tracks": {"face": [], "hand_left": [], "hand_right": []}}))
     write_plan(out169, {"graphics": [{"type": "custom", "name": "orb", "at": "S2:minus", "follow": "face"}]})
     sub = (B.build(out169, theme=theme)["project"] / "compositions" / "gx-01-custom.html").read_text(encoding="utf-8")
-    assert '"track": []' in sub
+    assert '"track": []' in sub and _P(sub)["follow"] == "face"
 
 
 def test_custom_three_injects_importmap_and_region(out169, theme):
@@ -748,7 +749,7 @@ def test_custom_place_px(out169, theme):
     p = out169 / "work" / "tracks.json"
     # no place -> no P.place
     sub = (B.build(out169, theme=theme)["project"] / "compositions" / "gx-01-custom.html").read_text(encoding="utf-8")
-    assert "place" not in _P(sub)
+    assert "place" not in _P(sub) and "follow" not in _P(sub)
     hand = {"fps": 15, "w": 1920, "h": 1080, "tracks": {"face": [], "point_right": [[t / 10, 0.75, 0.5, 0.9] for t in range(0, 40)]}}
     p.write_text(json.dumps(hand), encoding="utf-8")
     write_plan(out169, {"graphics": [{"type": "custom", "name": "orb", "at": "S2:minus", "place": "gesture"}]})
