@@ -158,7 +158,7 @@ U.three({ el: root.querySelector(".fx"), bloom: { strength: 1.2, radius: 0.6, th
 ```
 
 **Checkpoint "zrozumiałem tak":** map every request into `plan.json` in §5 first (a word anchor in requests.md matches a graphic starting within ±1 s of that word). Then, right before build (16:9: together with the preview), when `requests.md` has ≥ 1 line, run `$CM requests <folder>/out` — it needs aligned_words.json, edl_timed.json and plan.json (one line per request: OK / MISSING /
-NOTE / SURPRISE OK|MISSING / BAD, then `requests: N ok, M missing, K bad`), fix every `MISSING` and `BAD`, then show the user the list as "zrozumiałem tak: …"
+NOTE / SURPRISE OK|MISSING / BAD, then `requests: N ok, M missing, K bad`), fix every `MISSING` and `BAD` and every `WARN density` (§5 Gęstość), then show the user the list as "zrozumiałem tak: …"
 and wait for OK. No requests → no pause.
 
 **After acceptance:** for each `custom` effect used, ask once "Zapisać efekt <name> w theme?" → `$CM save-effect <folder>/out <name> --description "…"`
@@ -235,6 +235,14 @@ Follow `frame.md`. Write `out/plan.json`:
 - Effects on request (`custom`, `bg`, `side`, `"follow"`): §1c.
 - Limits enforced by the planner: a `list` has at most 4 items, `bars` at most 3 rows, `stamp` is exactly one word,
   `counter.to` is a number. Budgets (warnings): at most 2 graphics with `hit`, 1 `title`, no overlapping graphics.
+- **Gęstość (density) — never a "pusty" video.** Follow the density rule of `frame.md` (9:16: a visual on screen ≥ 50 %
+  of the time, bare face — captions only — never longer than 4 s outside the hook and the CTA; 16:9: never longer than
+  20 s). After the first plan run `$CM build <folder>/out` and read every `WARN density` line, then fill each named
+  stretch: a `chip` / `stamp` / `counter` on its key word, number or name; b-roll (`$CM shot` of the page, a `broll/`
+  file, or an image via `media-use resolve` when signed in) in a `split` (9:16) / `pip` (16:9); an explainer only when
+  explainers were requested (§1c); an effect on a gesture. Many short visuals in a row, never two at once — the budgets
+  below still hold. Rebuild until no `WARN density` is left; one that stays gets a one-line reason. The "zrozumiałem
+  tak" list is shown only with zero density warnings, or with each remaining one explained in one line.
 - B-roll: files in `<folder>/broll/`; for a web page the speaker talks about: `$CM shot <url> -o <folder>/broll/<name>.png`
   and READ the PNG (cookie banners, login walls → pick another page or crop).
 - Music: config `music.source` = `folder` → automatic (first audio file in config `music.folder`); `heygen` → check

@@ -10,6 +10,11 @@ unit: 1080×1920 (9:16), 30 fps
 - **Accent (`--accent`, default #7dd3fc) marks key words and numbers only.** Put product / person / key-term words in `captions.key`.
 - **Key words match inflected forms** (key CAVEMAN also marks "Cavemana", "Cavemanem"; key CLAUDE marks "Claude’a"), but anchors (`"S2:word"`) must still use the transcript's exact word (case- and punctuation-insensitive).
 - **Budget:** at most 2 graphics with `"hit": true` (the punchline and the key number), at most 1 `title`, never two graphics at once.
+- **Density — never an empty short.** A visual layer (any graphic, b-roll / `split`, an explainer, an effect, a `chip` /
+  `stamp` on a key word) is on screen **≥ 50 %** of the video time. Bare face (captions only) never lasts longer than
+  **4 s**, except the first hook second and the CTA (the last segment). Every key word, number and name gets a `chip`,
+  `stamp`, `counter` or b-roll. Reach it with many short visuals one after another (1.5–3 s each, a gap of ≥ 0.3 s), not
+  by stacking — the budget above still holds. `cutmate build` prints `WARN density` for every stretch that breaks this.
 - **Pick components by what is said:**
   - `title` — a name reveal (product, model, person) or the topic in the first seconds.
   - `counter` — THE number of the short (percent, price, count). Only numbers confirmed by the fact-check.
@@ -19,7 +24,7 @@ unit: 1080×1920 (9:16), 30 fps
   - `bars` — a comparison. Mark `"illustrative": true` unless the values were spoken and fact-checked.
   - `point` — the speaker points at something: a card with a screenshot near the finger (`corner`; the bottom corners sit at y 340–712, still inside the graphics band).
   - `split` — tutorial / "look at this" beats: b-roll panel on top, face slides down. Use a page screenshot (`cutmate shot`) or a file from `broll/`.
-- **Rhythm:** something should change every 3–6 s (cut punch-ins already help). Do not let a graphic wait empty for more than 1.5 s.
+- **Rhythm:** a new visual every 2–4 s (cuts and punch-ins alone are not enough — they are still bare face). Do not let a graphic wait empty for more than 1.5 s.
 - **SFX** come automatically per component; set `"sfx": false` to mute one, or a name (`whoosh`, `pop`, `click`, `impact`, `swell`, `ping`) to replace it.
 
 ## 16:9 (long-form, 1920×1080)
@@ -35,7 +40,8 @@ unit: 1080×1920 (9:16), 30 fps
   continues). Don't start other graphics during a plate. YouTube wants ≥ 3 chapters, each ≥ 10 s, the first at 00:00.
 - **`face`**: for every segment write where the face is (fractions of the frame, read from the contact sheet) — punch-ins
   (1.25×) and the pip circle centre on it.
-- **Rhythm** is calmer than a short: something should change every 10–20 s (cuts, a graphic, a pip); no hits on chapter plates.
+- **Rhythm** is calmer than a short, but bare face never lasts longer than **20 s** (`WARN density`): a `pip` / b-roll on
+  every concrete thing named (a page, a tool, a product, a result), corner graphics for names and numbers; no hits on chapter plates.
 
 ## Effects on request
 

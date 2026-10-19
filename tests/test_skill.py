@@ -282,3 +282,11 @@ def test_edit_skill_theme_from_config():
     for s in ("$CM theme list", "$CM theme check", "unchecked", "--theme"):
         assert s in md, s
     assert "theme-check --theme" not in md
+
+
+def test_density_rule_in_skill_and_frame():
+    md = _skill("edit")
+    for s in ("Gęstość", "density", "4 s"):
+        assert s in md, s
+    frame = (paths.plugin_root() / "themes" / "clean" / "frame.md").read_text(encoding="utf-8")
+    assert "≥ 50 %" in frame and "4 s" in frame

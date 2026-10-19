@@ -32,6 +32,9 @@ NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,40}$")
 FADE = {"bg": 0.3, "side": 0.45}  # entrance / exit of an effect expanded from bg / side (s), matching their components
 SIDE_PANEL = {"right": [60, 60, 840, 960], "left": [1020, 60, 840, 960]}  # x, y, w, h in 1920x1080 px
 SPLIT_PANEL = [40, 40, 1000, 820]  # x, y, w, h in 1080x1920 px (the .split-panel .media box)
+BARE_MAX = {"9:16": 4.0, "16:9": 20.0}  # longest stretch of bare face (captions only) frame.md allows (s)
+COVER_MIN = {"9:16": 0.5}              # share of the video with a visual layer on screen (frame.md)
+HOOK = 1.5                             # the first seconds are exempt from the bare-face rule (the hook)
 _PUNCT = ".,!?;:…\"'„\u201c\u201d()[]–—-"
 
 
@@ -370,7 +373,35 @@ def _expanded_pair(a: Graphic, b: Graphic) -> bool:
     return a.type == "split" and b.type == "custom" and a.params.get("effect") == b.params.get("name")
 
 
-def _budget(gs: list[Graphic]) -> list[str]:
+def _density(spans: list[tuple[float, float]], end: float, fmt: str, last_start: float) -> list[str]:
+    """Bare-face stretches over the frame.md limit and (9:16) the share of the video with a visual on screen.
+    Every graphic counts (b-roll, split / pip / side, effects, chips, stamps); captions alone do not. The first HOOK
+    seconds and the last segment (the CTA) are exempt; a video that is only hook + CTA is not checked."""
+    lo, hi = HOOK, last_start
+    if hi <= lo:
+        return []
+    merged = []
+    for a, b in sorted(spans):
+        if merged and a <= merged[-1][1]:
+            merged[-1][1] = max(merged[-1][1], b)
+        else:
+            merged.append([a, b])
+    w, cur, limit = [], lo, BARE_MAX.get(fmt)
+    for a, b in merged + [[hi, hi]]:
+        a, b = max(a, lo), min(b, hi)
+        if a > cur and limit is not None and a - cur > limit + 1e-6:
+            w.append(f"WARN density: bare face {cur:.1f}–{a:.1f} s ({a - cur:.1f} s) — add a graphic, b-roll or chip "
+                     f"(frame.md: max {limit:g} s in {fmt})")
+        cur = max(cur, b)
+    if fmt in COVER_MIN and end > 0:
+        pct = round(100 * sum(b - a for a, b in merged) / end)
+        if pct < round(100 * COVER_MIN[fmt]):
+            w.append(f"WARN density: visuals on screen {pct} % (frame.md: ≥ {round(100 * COVER_MIN[fmt])} %)")
+    return w
+
+
+def _budget(gs: list[Graphic], end: float | None = None, fmt: str = "9:16", last_start: float | None = None,
+            plates: list[tuple[float, float]] = ()) -> list[str]:
     w = []
     bg = sum(g.end - g.start for g in gs if g.type == "bg")
     if bg > 30:
@@ -384,6 +415,8 @@ def _budget(gs: list[Graphic]) -> list[str]:
     for a, b in zip(gs, gs[1:]):
         if b.start < a.end and not _expanded_pair(a, b):
             w.append(f"WARN {a.type} ({a.start:.1f}–{a.end:.1f}s) overlaps {b.type} at {b.start:.1f}s")
+    if end is not None and last_start is not None:
+        w += _density([(g.start, g.end) for g in gs] + list(plates), end, fmt, last_start)
     return w
 
 
@@ -447,7 +480,8 @@ def load_plan(out_dir: Path, factcheck: bool = False) -> Plan:
             raise PlanError(f"{words_p}: entry {j} missing seg/word/start/end")
         if not isinstance(w.get("start"), (int, float)) or not isinstance(w.get("end"), (int, float)):
             raise PlanError(f"{words_p}: entry {j} start/end must be numbers")
-    end = float(load_timed(out)[-1]["end"])
+    timed = load_timed(out)
+    end = float(timed[-1]["end"])
     graphics_list = raw.get("graphics")
     if graphics_list is not None and not isinstance(graphics_list, list):
         raise PlanError(f"{p}: \"graphics\" must be a list")
@@ -472,13 +506,14 @@ def load_plan(out_dir: Path, factcheck: bool = False) -> Plan:
     chapters = _chapters(raw, words, end)
     face = _face(raw, words)
     if tr:
-        for s in load_timed(out):
+        for s in timed:
             sid = str(s["id"])
             if sid not in face:
                 fm = face_median(tr["tracks"], float(s["start"]), float(s["end"]))
                 if fm:
                     face[sid] = fm
-    warnings = gesture_warns + _glb_warnings(gs) + _budget(gs) + _chapter_warnings(chapters, gs, end, min((w['start'] for w in words), default=0.0)) + (_factcheck(out, gs) if factcheck else [])
+    plates = [(c["start"], min(c["start"] + PLATE, end)) for c in plate_chapters(chapters, end)]
+    warnings = gesture_warns + _glb_warnings(gs) + _budget(gs, end, fmt, float(timed[-1]["start"]), plates) + _chapter_warnings(chapters, gs, end, min((w['start'] for w in words), default=0.0)) + (_factcheck(out, gs) if factcheck else [])
     cap = raw.get("captions") or {}
     if not isinstance(cap, dict):
         raise PlanError(f"{p}: \"captions\" must be a dict")

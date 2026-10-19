@@ -140,7 +140,7 @@ def test_factcheck_digit_boundaries(tmp_path):
     out = make_out(tmp_path, {"graphics": [
         {"type": "counter", "at": "S2:75%", "to": 5, "label": "x"}]})
     (out / "factcheck.md").write_text('- „75%" ✅ OK\n', encoding="utf-8")
-    w = load_plan(out, factcheck=True).warnings
+    w = [x for x in load_plan(out, factcheck=True).warnings if "factcheck" in x]
     assert len(w) == 1 and "5" in w[0]
 
 
@@ -628,3 +628,66 @@ def test_place_gesture_warns_without_hand_shapes(tmp_path):
     pl = load_plan(out)
     assert pl.graphics[0].params["place_xy"] == [0.8, 0.4]
     assert "WARN tracks.json has no hand-shape data (open palm / index point) — run `cutmate track --force`" in pl.warnings
+
+
+def _density_out(tmp_path, graphics, timed, fmt="9:16"):
+    words = [{"seg": s["id"], "word": "x", "start": s["start"] + 0.1, "end": s["start"] + 0.3} for s in timed]
+    out = make_out(tmp_path, {"graphics": graphics}, words)
+    (out / "work" / "edl_timed.json").write_text(json.dumps(timed), encoding="utf-8")
+    if fmt == "16:9":
+        (out / "edl.json").write_text(json.dumps({"format": "16:9", "segments": []}), encoding="utf-8")
+    return out
+
+
+def _density(warnings):
+    return [w for w in warnings if w.startswith("WARN density")]
+
+
+TIMED20 = [{"id": "S1", "start": 0.0, "end": 9.0}, {"id": "S2", "start": 9.0, "end": 16.0},
+           {"id": "S3", "start": 16.0, "end": 20.0}]
+
+
+def test_density_warns_bare_stretch(tmp_path):
+    out = _density_out(tmp_path, [{"type": "chip", "at": 0.0, "until": 2.0, "text": "A"},
+                                  {"type": "chip", "at": 10.0, "until": 12.0, "text": "B"}], TIMED20)
+    bare = [w for w in _density(load_plan(out).warnings) if "bare face" in w]
+    assert bare == ["WARN density: bare face 2.0–10.0 s (8.0 s) — add a graphic, b-roll or chip (frame.md: max 4 s in 9:16)"]
+
+
+def test_density_coverage(tmp_path):
+    out = _density_out(tmp_path, [{"type": "chip", "at": 5.0, "until": 7.0, "text": "A"}], TIMED20)
+    assert "WARN density: visuals on screen 10 % (frame.md: ≥ 50 %)" in load_plan(out).warnings
+
+
+def test_density_coverage_ok_counts_every_layer(tmp_path):
+    out = _density_out(tmp_path, [
+        {"type": "title", "at": 0.0, "until": 3.0, "text": "A"},
+        {"type": "custom", "name": "burst", "from": 3.0, "to": 6.0},
+        {"type": "split", "from": 6.0, "to": 10.0, "effect": "stat-card"},
+        {"type": "stamp", "at": 10.0, "until": 13.0, "text": "NIE"},
+    ], TIMED20)
+    assert _density(load_plan(out).warnings) == []
+
+
+def test_density_169_limit(tmp_path):
+    timed = [{"id": "S1", "start": 0.0, "end": 40.0}, {"id": "S2", "start": 40.0, "end": 45.0}]
+    gs = [{"type": "chip", "at": 0.0, "until": 2.0, "text": "A"}, {"type": "chip", "at": 17.0, "until": 19.0, "text": "B"},
+          {"type": "chip", "at": 38.0, "until": 40.0, "text": "C"}]
+    out = _density_out(tmp_path, gs, timed, fmt="16:9")
+    assert _density(load_plan(out).warnings) == []          # 15 s and 19 s bare, no coverage rule in 16:9
+    gs[1] = {"type": "chip", "at": 30.0, "until": 32.0, "text": "B"}
+    out = _density_out(tmp_path / "b", gs, timed, fmt="16:9")
+    assert _density(load_plan(out).warnings) == [
+        "WARN density: bare face 2.0–30.0 s (28.0 s) — add a graphic, b-roll or chip (frame.md: max 20 s in 16:9)"]
+
+
+def test_density_exempt_hook_and_last(tmp_path):
+    timed = [{"id": "S1", "start": 0.0, "end": 6.0}, {"id": "S2", "start": 6.0, "end": 20.0}]
+    out = _density_out(tmp_path, [{"type": "chip", "at": 5.0, "until": 6.0, "text": "A"}], timed)
+    assert not any("bare face" in w for w in load_plan(out).warnings)   # 0–5 s: the first 1.5 s are the hook; S2 is the CTA
+
+
+def test_density_skips_hook_and_cta_only_video(tmp_path):
+    out = _density_out(tmp_path, [{"type": "title", "at": 0.4, "until": 2.4, "text": "A"}],
+                       [{"id": "S1", "start": 0.0, "end": 5.0}])
+    assert _density(load_plan(out).warnings) == []          # the 5 s smoke render: one segment, nothing to check
