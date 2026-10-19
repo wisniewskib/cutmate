@@ -1,4 +1,6 @@
 import json
+import re
+import shutil
 
 import pytest
 
@@ -307,14 +309,105 @@ def test_lint_random_must_not_look_like_clean():
     assert any("looks like clean" in p for p in problems), problems
 
 
-def _fake_check(monkeypatch, tmp_path):
+def test_lint_http_only_flags_fetchable_references():
+    themes.new_theme("d")
+    d = themes.draft_dir("d")
+    _edit(d, "components/title.html", lambda t: t.replace(
+        "tl.", 'document.createElementNS("http://www.w3.org/2000/svg", "svg"); tl.', 1)
+        + '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"></svg>')
+    assert themes.lint_theme(d, "d") == []
+    for bad in ('<img src="https://x.example/a.png">', '<style>.a { background: url(http://x/a.png); }</style>',
+                '<script>fetch("https://x.example/a")</script>'):
+        _edit(d, "components/chip.html", lambda t: t + bad)
+        assert any("http" in p for p in themes.lint_theme(d, "d")), bad
+        _edit(d, "components/chip.html", lambda t: t.replace(bad, ""))
+    assert themes.lint_theme(d, "d") == []
+
+
+def test_lint_rgba_card_is_composited():
+    d = themes.draft_dir("d")
+    themes.new_theme("d")
+    _edit(d, "tokens.css", lambda t: t.replace("--card: rgba(255, 255, 255, 0.94);", "--card: rgba(0, 0, 0, 0.5);")
+          .replace("--ink: #0f172a;", "--ink: #222222;"))
+    assert any("contrast" in p for p in themes.lint_theme(d, "d"))
+
+
+def _random_draft(name="r"):
+    themes.new_theme(name, mode="random", seed=1)
+    d = themes.draft_dir(name)
+    _edit(d, "tokens.css", lambda t: t.replace('--font-display: "Inter"', '--font-display: "Fraunces"'))
+    shutil.copyfile(d / "fonts" / "Inter-Black.ttf", d / "fonts" / "Display-Black.ttf")
+    tj = json.loads((d / "theme.json").read_text(encoding="utf-8"))
+    tj["fonts"]["black"] = "Display-Black.ttf"
+    (d / "theme.json").write_text(json.dumps(tj), encoding="utf-8")
+    return d
+
+
+def _restyle(d):
+    for i, t in enumerate(themes.LOOK):
+        (d / "components" / f"{t}.html").write_text(
+            f"<style>ROOT .z{i} {{ position: absolute; left: {40 + i}px; top: {90 * i}px; border: {i + 3}px dashed var(--accent);"
+            f" clip-path: polygon(0 0, 100% {10 * i}%, 90% 100%, 0 80%); background: var(--card); color: var(--ink);"
+            f" font: 700 {30 + i}px var(--font-display); padding: {12 + i}px; transform-origin: left top; }}</style>\n"
+            f'<markup><div class="z{i}">{{{{text}}}}<span class="zz{i}"></span></div></markup>\n'
+            f"<script>const el = root.querySelector('.z{i}'); tl.fromTo(el, {{ rotation: -{5 + i}, scaleX: 0.{i + 1} }}, "
+            f"{{ rotation: 0, scaleX: 1, duration: 0.{40 + i}, ease: 'back.out(2)' }}, P.at); "
+            f"tl.to(el, {{ opacity: 0, duration: 0.2 }}, P.end - 0.2);</script>\n", encoding="utf-8")
+
+
+def test_lint_trivial_edits_still_look_like_clean():
+    d = _random_draft()
+    for t in themes.LOOK:
+        _edit(d, f"components/{t}.html", lambda x: re.sub(r"\d+", lambda m: str(int(m.group()) + 1), x, count=1)
+              + "\n/* my restyle */\n")
+    assert themes.LOOKS_CLEAN in themes.lint_theme(d, "r")
+
+
+def test_lint_real_restyle_passes_the_clean_gate():
+    d = _random_draft()
+    _restyle(d)
+    assert themes.LOOKS_CLEAN not in themes.lint_theme(d, "r")
+
+
+@pytest.mark.parametrize("how", ["var", "black"])
+def test_lint_display_font_inter_is_rejected(how):
+    d = _random_draft()
+    _restyle(d)
+    if how == "var":
+        _edit(d, "tokens.css", lambda t: t.replace('--font-display: "Fraunces"', "--font-display: var(--font)"))
+    else:
+        tj = json.loads((d / "theme.json").read_text(encoding="utf-8"))
+        tj["fonts"]["black"] = "Inter-Black.ttf"
+        (d / "theme.json").write_text(json.dumps(tj), encoding="utf-8")
+    assert themes.LOOKS_CLEAN in themes.lint_theme(d, "r")
+
+
+def test_lint_draft_without_direction_is_a_problem():
+    themes.new_theme("d")
+    d = themes.draft_dir("d")
+    tj = json.loads((d / "theme.json").read_text(encoding="utf-8"))
+    del tj["direction"]
+    (d / "theme.json").write_text(json.dumps(tj), encoding="utf-8")
+    assert any("no direction" in p for p in themes.lint_theme(d, "d"))
+
+
+def test_contact_sheet_missing_look_tile_names_the_type(tmp_path, monkeypatch):
+    _fake_check(monkeypatch, tmp_path, drop="bars")
+    themes.new_theme("d")
+    with pytest.raises(CutmateError, match="bars"):
+        themes.check_theme("d")
+    assert not themes.stamp_ok(themes.draft_dir("d"))
+
+
+def _fake_check(monkeypatch, tmp_path, drop=None):
     from PIL import Image
 
     def fake(theme, workdir=None, language="pl", fmt="9:16", clip=None):
         d = tmp_path / ("fake-" + fmt.replace(":", "x"))
         d.mkdir(exist_ok=True)
         snaps, labels = [], []
-        for i, (ty, kind) in enumerate([("title", "entrance"), ("title", "settled"), ("counter", "settled")]):
+        look = [t for t in themes.LOOK if t != drop]
+        for i, (ty, kind) in enumerate([(t, k) for t in look for k in ("entrance", "settled")]):
             p = d / f"s{i}.png"
             Image.new("RGB", (270, 480) if fmt == "9:16" else (480, 270), "#336699").save(p)
             snaps.append(p)

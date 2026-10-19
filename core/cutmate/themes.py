@@ -1,4 +1,5 @@
 """Theme store: drafts, list/use, and the save gate (a draft must carry a fresh check stamp)."""
+import difflib
 import hashlib
 import json
 import os
@@ -26,6 +27,10 @@ FRAME_SELECTORS = ("#captions", ".cw", ".band")
 COMPONENTS = tuple(t for t in TYPES if t != "custom") + ("chapter",)
 DIRECTION_KEYS = ("palette", "fonts", "shapes", "motion", "captions")
 _HEX = re.compile(r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
+_NS = re.compile(r"https?://www\.w3\.org/[^\s\"'<>)]*")       # XML namespace strings are not fetched
+_FETCH = re.compile(r"@import[^;{}]*?https?://|url\(\s*[\"']?https?://|\b(?:src|href)\s*=\s*[\"']?https?://"
+                    r"|\b(?:fetch|import)\s*\(\s*[\"'`]?https?://")
+_COMMENTS = re.compile(r"/\*.*?\*/|<!--.*?-->|(?<![:\w\"'])//[^\n]*", re.S)
 LOOKS_CLEAN = "looks like clean with new colours — restyle the look components (shapes, motion) and set a display font"
 
 
@@ -295,7 +300,40 @@ def _token(tokens: str, name: str) -> str | None:
 
 
 def _norm(text: str) -> str:
-    return " ".join(text.split())
+    """Comments and all whitespace removed: what is left is the code a restyle has to change."""
+    return "".join(_COMMENTS.sub("", text).split())
+
+
+def _rgb(value: str) -> tuple[float, float, float, float] | None:
+    v = value.strip()
+    if _HEX.match(v):
+        h = v[1:] if len(v) == 7 else "".join(c * 2 for c in v[1:])
+        return (*(int(h[i:i + 2], 16) for i in (0, 2, 4)), 1.0)
+    m = re.match(r"rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)(?:\s*[,/]\s*([\d.]+%?))?\s*\)$", v)
+    if not m:
+        return None
+    a = m.group(4)
+    alpha = 1.0 if a is None else (float(a[:-1]) / 100 if a.endswith("%") else float(a))
+    return (float(m.group(1)), float(m.group(2)), float(m.group(3)), min(1.0, alpha))
+
+
+def _solid(value: str | None, bg: str | None) -> str | None:
+    """A #rrggbb for a hex / rgb() / rgba() colour, composited over `bg` (hex, else black); None if not a colour."""
+    c = _rgb(value or "")
+    if c is None:
+        return None
+    base = _rgb(bg or "") or (0, 0, 0, 1.0)
+    mix = [round(c[i] * c[3] + base[i] * (1 - c[3])) for i in range(3)]
+    return "#{:02x}{:02x}{:02x}".format(*mix)
+
+
+def _display_family(tokens: str) -> str | None:
+    val = _token(tokens, "--font-display") or ""
+    m = re.match(r"\s*var\(\s*(--[\w-]+)", val)
+    if m:
+        val = _token(tokens, m.group(1)) or ""
+    fam = re.match(r"\s*[\"']?([^\"',]+)", val)
+    return fam.group(1).strip() if fam else None
 
 
 def _read(path: Path) -> str | None:
@@ -339,8 +377,8 @@ def lint_theme(path: Path, name: str) -> list[str]:
         problems += [f"{t}: uses {api} (not allowed)" for api in FORBIDDEN if api in script]
     for extra in sorted((path / "components").glob("*.html")):
         texts.setdefault(f"components/{extra.name}", _read(extra) or "")
-    problems += [f"{rel}: has an http(s) link (themes must work offline)" for rel, text in texts.items()
-                 if re.search(r"https?://", text)]
+    problems += [f"{rel}: loads something over http(s) (themes must work offline)" for rel, text in texts.items()
+                 if _FETCH.search(_NS.sub("", text))]
     meta = None
     try:
         meta = _theme_meta(path)
@@ -361,8 +399,10 @@ def lint_theme(path: Path, name: str) -> list[str]:
         used = [e[0] for lst in meta["sfx"].values() if isinstance(lst, list) for e in lst
                 if isinstance(e, list) and e] + [meta["hit_sfx"][0]]
         problems += [f"unknown sound effect {n!r}" for n in dict.fromkeys(used) if known and n not in known]
-    ink, card, acc = (_token(tokens or "", k) for k in ("--ink", "--card", "--accent"))
-    if ink and card and _HEX.match(ink) and _HEX.match(card) and contrast(ink, card) < 4.5:
+    ink, acc = (_token(tokens or "", k) for k in ("--ink", "--accent"))
+    bg = _token(tokens or "", "--bg")
+    ink, card = _solid(ink, bg), _solid(_token(tokens or "", "--card"), bg)
+    if ink and card and contrast(ink, card) < 4.5:
         problems.append(f"contrast of --ink on --card is {contrast(ink, card):.1f} (needs 4.5)")
     direction = (meta or {}).get("direction") if isinstance((meta or {}).get("direction"), dict) else {}
     on_acc = (direction.get("palette") or {}).get("on_accent") if isinstance(direction.get("palette"), dict) else None
@@ -372,14 +412,17 @@ def lint_theme(path: Path, name: str) -> list[str]:
     m = re.search(r"(?m)^name:\s*(\S+)", (frame or "").partition("\n---\n")[0]) if frame else None
     if not m or m.group(1) != name:
         problems.append(f"frame.md name is {m.group(1) if m else 'missing'}, expected {name}")
+    if meta is not None and not direction and not path.resolve().is_relative_to((plugin_root() / "themes").resolve()):
+        problems.append("theme.json has no direction — recreate it with cutmate theme new")
     if direction.get("mode") in ("random", "clone"):
         need = DIRECTION_KEYS + (("sources",) if direction["mode"] == "clone" else ())
         problems += [f"direction lacks {k}" for k in need if not direction.get(k)]
         clean = plugin_root() / "themes" / "clean" / "components"
-        same = sum(1 for t in LOOK if _norm(_read(path / "components" / f"{t}.html") or "")
-                   == _norm(_read(clean / f"{t}.html") or "x"))
-        fam = re.match(r"\s*[\"']?([^\"',]+)", _token(tokens or "", "--font-display") or "")
-        if len(LOOK) - same < 5 or (fam and fam.group(1).strip().lower() == "inter"):
+        changed = sum(1 for t in LOOK if difflib.SequenceMatcher(
+            None, _norm(_read(path / "components" / f"{t}.html") or ""), _norm(_read(clean / f"{t}.html") or "x")).ratio() < 0.85)
+        fam = _display_family(tokens or "")
+        black = str(((meta or {}).get("fonts") or {}).get("black", "")).lower()
+        if changed < 5 or (fam and fam.lower() == "inter") or black.startswith("inter"):
             problems.append(LOOKS_CLEAN)
     return problems
 
@@ -395,7 +438,7 @@ def check_theme(name: str, clip: Path | None = None, language: str = "pl") -> di
     out = path / "check" if kind != "bundled" else config.home() / "checks" / name
     out.mkdir(parents=True, exist_ok=True)
     results, sheets = {}, {}
-    with tempfile.TemporaryDirectory(prefix="cutmate-check-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="cutmate-check-", ignore_cleanup_errors=True) as tmp:
         for fmt in STAMP_FORMATS:
             r = tc.theme_check(str(path), Path(tmp) / fmt.replace(":", "x"), language, fmt, clip)
             dst = out / f"sheet-{fmt.replace(':', 'x')}.png"
@@ -428,9 +471,10 @@ def _contact_sheet(results: dict, dest: Path) -> None:
     for kind, r, (w, h) in rows:
         found = pick(r, kind)
         for i, ty in enumerate(LOOK):
-            if ty in found:
-                with Image.open(found[ty]) as im:
-                    sheet.paste(im.convert("RGB").resize((w, h)), (i * 270, y))
+            if ty not in found:
+                raise CutmateError(f"contact sheet: no {kind} snapshot of the {ty} component")
+            with Image.open(found[ty]) as im:
+                sheet.paste(im.convert("RGB").resize((w, h)), (i * 270, y))
             label = f"{ty} {kind}"
             draw.rectangle((i * 270, y, i * 270 + 8 * len(label) + 8, y + 16), fill="black")
             draw.text((i * 270 + 4, y + 2), label, fill="white")

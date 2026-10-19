@@ -159,15 +159,20 @@ def theme_check(theme: str = "clean", workdir: Path | None = None, language: str
     for old in snaps.glob("frame-*.png"):
         old.unlink()
     graphics = load_plan(out).graphics
-    named: dict[float, tuple[str, str]] = {}      # first claim on a time wins: entrance, then mid, then settled
+    named: dict[float, tuple[str, str]] = {}      # entrance, then mid, then settled; a time clash nudges by 0.05 s
+
+    def claim(t: float, label: tuple[str, str]) -> None:
+        while t in named and named[t] != label:
+            t = round(t + 0.05, 2)
+        named[t] = label
     for g in graphics:
         if g.type in LOOK:
-            named.setdefault(round(g.start + 0.1, 2), (g.type, "entrance"))
+            claim(round(g.start + 0.1, 2), (g.type, "entrance"))
     for g in graphics:
         if g.type == "custom":
-            named.setdefault(round((g.start + g.end) / 2, 2), (g.type, "mid"))
+            claim(round((g.start + g.end) / 2, 2), (g.type, "mid"))
     for g in graphics:
-        named.setdefault(checkpoint(g), (g.type, "settled"))
+        claim(checkpoint(g), (g.type, "settled"))
     cps = sorted(set(r["checkpoints"]) | set(named))
     labels = [(t, *named.get(t, ("other", "settled"))) for t in cps]
     at = ",".join(f"{t:.2f}" for t in cps)
@@ -176,7 +181,10 @@ def theme_check(theme: str = "clean", workdir: Path | None = None, language: str
     if snap.returncode or len(shots) != len(cps):
         raise CutmateError("snapshot failed: " + " ".join((snap.stdout + snap.stderr).split())[-400:])
     tw, th = (480, 270) if fmt == "16:9" else (270, 480)
-    tiles = [Image.open(p).convert("RGB").resize((tw, th)) for p in shots]
+    tiles = []
+    for p in shots:
+        with Image.open(p) as im:
+            tiles.append(im.convert("RGB").resize((tw, th)))
     sheet = Image.new("RGB", (tw * min(5, len(tiles)), th * ((len(tiles) + 4) // 5)), "black")
     for i, t in enumerate(tiles):
         sheet.paste(t, ((i % 5) * tw, (i // 5) * th))
