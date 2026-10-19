@@ -119,6 +119,9 @@ def set_values(pairs: list[str], path: Path | None = None) -> Config:
             getattr(cfg, head)[tail] = parsed
         else:
             if key == "theme":
+                from .effects import THEME_RE
+                if not THEME_RE.match(value):
+                    raise ConfigError(f"bad theme name {value!r}: letters, digits, _ and - only")
                 paths.theme_dir(value)
             setattr(cfg, key, parsed)
     validate(cfg, str(path))

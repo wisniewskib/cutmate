@@ -33,10 +33,15 @@ def _bundled_names() -> list[str]:
     return sorted(d.name for d in root.iterdir() if (d / "theme.json").exists()) if root.is_dir() else []
 
 
+_DEVICE_RE = re.compile(r"^(con|prn|aux|nul|com[1-9]|lpt[1-9])$", re.IGNORECASE)
+
+
 def check_name(name: str) -> None:
-    if not THEME_RE.match(str(name)):
+    if not THEME_RE.match(str(name)) or str(name).endswith((".", " ")):
         raise CutmateError(f"bad theme name {name!r}: letters, digits, _ and - only")
-    if name in _bundled_names():
+    if _DEVICE_RE.match(name):
+        raise CutmateError(f"theme name {name!r} is a reserved system name — pick another")
+    if name.lower() in (b.lower() for b in _bundled_names()):
         raise CutmateError(f"theme name {name!r} is reserved (bundled theme) — pick another")
 
 
@@ -56,12 +61,29 @@ def _rm_onerror(func, path, exc):
 
 
 def _rmtree(path: Path) -> None:
-    if not Path(path).exists():
+    path = Path(path)
+    if not path.exists():
         return
-    if sys.version_info >= (3, 12):
-        shutil.rmtree(path, onexc=lambda f, p, e: _rm_onerror(f, p, e))
-    else:
-        shutil.rmtree(path, onerror=lambda f, p, e: _rm_onerror(f, p, e))
+    cause = None
+    try:
+        if sys.version_info >= (3, 12):
+            shutil.rmtree(path, onexc=lambda f, p, e: _rm_onerror(f, p, e))
+        else:
+            shutil.rmtree(path, onerror=lambda f, p, e: _rm_onerror(f, p, e))
+    except OSError as e:
+        cause = e
+    if path.exists():
+        why = " ".join(str(cause).split()) if cause else "still there after delete"
+        raise CutmateError(f"cannot delete {path} ({why}) — close programs using it and retry")
+
+
+def _ignoring(root: Path, rel: str, name: str):
+    """shutil ignore callback: skip only `<root>/<rel>/<name>`, nothing deeper or elsewhere."""
+    here = Path(root) / rel
+
+    def ignore(d, names):
+        return {name} if Path(d) == here and name in names else set()
+    return ignore
 
 
 def _read_json(path: Path) -> dict:
@@ -96,23 +118,33 @@ def new_theme(name: str | None, base: str = "clean", mode: str = "custom", seed:
     check_name(name)
     src, _ = resolve(base)
     dst = draft_dir(name)
-    _rmtree(dst)
     dst.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copytree(src, dst, ignore=shutil.ignore_patterns("check"))
-    _rmtree(dst / "components" / "custom")
-    old = dst / "fonts" / "OFL.txt"
-    if old.exists():
-        old.replace(dst / "fonts" / "OFL-inter.txt")
-    tj = _read_json(dst / "theme.json")
-    tj.update({"name": name, "base": base, "direction": direction})
-    (dst / "theme.json").write_text(json.dumps(tj, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    frame = dst / "frame.md"
-    if frame.exists():
-        text = frame.read_text(encoding="utf-8")
-        head, sep, rest = text.partition("\n---\n")
-        if text.startswith("---") and sep:
-            head = re.sub(r"(?m)^name:.*$", f"name: {name}", head, count=1)
-            frame.write_text(head + sep + rest, encoding="utf-8")
+    tmp = dst.parent / f".{name}.new-{time.strftime('%Y%m%d-%H%M%S')}"
+    _rmtree(tmp)
+    try:
+        shutil.copytree(src, tmp, ignore=_ignoring(src, "", "check"))
+        _rmtree(tmp / "components" / "custom")
+        old = tmp / "fonts" / "OFL.txt"
+        if old.exists():
+            old.replace(tmp / "fonts" / "OFL-inter.txt")
+        tj = _read_json(tmp / "theme.json")
+        tj.update({"name": name, "base": base, "direction": direction})
+        (tmp / "theme.json").write_text(json.dumps(tj, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        frame = tmp / "frame.md"
+        if frame.exists():
+            text = frame.read_text(encoding="utf-8")
+            head, sep, rest = text.partition("\n---\n")
+            if text.startswith("---") and sep:
+                head = re.sub(r"(?m)^name:.*$", f"name: {name}", head, count=1)
+                frame.write_text(head + sep + rest, encoding="utf-8")
+        _rmtree(dst)
+        os.replace(tmp, dst)
+    except BaseException:
+        try:
+            _rmtree(tmp)
+        except CutmateError:
+            pass
+        raise
     return {"name": name, "path": str(dst), "direction": direction,
             "exists": (_themes_root() / name / "theme.json").exists()}
 
@@ -142,7 +174,7 @@ def stamp_ok(path: Path) -> bool:
         s = json.loads(stamp.read_text(encoding="utf-8"))
     except (ValueError, OSError):
         return False
-    return isinstance(s, dict) and s.get("hash") == theme_hash(path)
+    return isinstance(s, dict) and s.get("hash") == theme_hash(path) and s.get("hyperframes") == HF_VERSION
 
 
 def _mode_of(path: Path) -> str | None:
@@ -168,13 +200,15 @@ def list_themes() -> list[dict]:
         drafts = root / ".drafts"
         if drafts.is_dir():
             for d in sorted(drafts.iterdir()):
-                if (d / "theme.json").exists():
+                if not d.name.startswith(".") and (d / "theme.json").exists():
                     out.append({"name": d.name, "kind": "draft", "path": str(d), "checked": stamp_ok(d),
                                 "mode": _mode_of(d)})
     return out
 
 
 def use_theme(name: str) -> None:
+    if not THEME_RE.match(str(name)):
+        raise CutmateError(f"bad theme name {name!r}: letters, digits, _ and - only")
     config.set_values([f"theme={name}"])
 
 
@@ -187,29 +221,60 @@ def save_theme(name: str, force: bool = False) -> Path:
     if not stamp_ok(draft):
         raise CutmateError(f"draft {name!r} changed since its last check (or was never checked) — "
                            f"run `cutmate theme check {name}`")
-    target = _themes_root() / name
-    if (target / "theme.json").exists():
-        if not force:
-            raise CutmateError(f"theme {name!r} already exists — ask the user, then `cutmate theme save {name} --force` "
-                               "(the old one is kept in themes/.backup)")
-        stamp = time.strftime("%Y%m%d-%H%M%S")
-        backup = _themes_root() / ".backup" / f"{name}-{stamp}"
+    root = _themes_root()
+    target = root / name
+    has_other = target.exists() and _has_other(target)
+    if has_other and not force:
+        raise CutmateError(f"theme {name!r} already exists — ask the user, then `cutmate theme save {name} --force` "
+                           "(the old one is kept in themes/.backup)")
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    tmp = root / f".{name}.saving-{stamp}"
+    old_dest = tmp.with_name(f".{name}.old-{stamp}")
+    if has_other:
+        old_dest = root / ".backup" / f"{name}-{stamp}"
         n = 1
-        while backup.exists():
+        while old_dest.exists():
             n += 1
-            backup = _themes_root() / ".backup" / f"{name}-{stamp}-{n}"
-        backup.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copytree(target, backup)
-    if target.exists():  # keep only components/custom (effects saved by `save-effect`)
-        for child in list(target.iterdir()):
-            if child.name == "components":
-                for sub in list(child.iterdir()):
-                    if sub.name != "custom":
-                        _rmtree(sub) if sub.is_dir() else sub.unlink()
-            elif child.is_dir():
-                _rmtree(child)
-            else:
-                child.unlink()
-    shutil.copytree(draft, target, dirs_exist_ok=True, ignore=shutil.ignore_patterns("custom"))
-    _rmtree(draft)
+            old_dest = root / ".backup" / f"{name}-{stamp}-{n}"
+    _rmtree(tmp)
+    moved = False
+    try:
+        shutil.copytree(draft, tmp, ignore=_ignoring(draft, "components", "custom"))
+        if (target / "components" / "custom").is_dir():
+            shutil.copytree(target / "components" / "custom", tmp / "components" / "custom")
+        if not (tmp / "theme.json").exists() or theme_hash(tmp) != theme_hash(draft):
+            raise CutmateError("copy of the draft does not match the draft")
+        if target.exists():
+            old_dest.parent.mkdir(parents=True, exist_ok=True)
+            os.rename(target, old_dest)
+            moved = True
+        os.replace(tmp, target)
+    except BaseException as e:
+        if moved and not target.exists():
+            try:
+                os.rename(old_dest, target)
+            except OSError:
+                pass
+        try:
+            _rmtree(tmp)
+        except CutmateError:
+            pass
+        where = f" (the old theme is in {old_dest})" if moved else ""
+        if isinstance(e, Exception):
+            raise CutmateError(f"saving theme {name!r} failed: {' '.join(str(e).split())}{where}") from None
+        raise
+    for leftover in ((draft,) if has_other else (draft, old_dest)):
+        try:
+            _rmtree(leftover)
+        except CutmateError:
+            pass
     return target
+
+
+def _has_other(target: Path) -> bool:
+    for child in target.iterdir():
+        if child.name != "components":
+            return True
+        if child.is_dir() and any(c.name != "custom" for c in child.iterdir()):
+            return True
+    return False

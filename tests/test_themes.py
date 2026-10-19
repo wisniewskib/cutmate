@@ -124,3 +124,92 @@ def test_use_theme():
     themes.new_theme("draft-only")
     with pytest.raises(CutmateError):
         themes.use_theme("draft-only")
+
+
+def test_rmtree_failure_is_one_line_and_keeps_state(monkeypatch):
+    _stamped()
+    themes.save_theme("mine")
+    _, d = _stamped()
+    monkeypatch.setattr(themes.shutil, "rmtree", lambda *a, **k: (_ for _ in ()).throw(PermissionError("locked")))
+    with pytest.raises(CutmateError, match="cannot delete"):
+        themes.new_theme("mine")
+    assert (d / "theme.json").exists() and themes.stamp_ok(d)
+
+
+def test_save_target_without_theme_json_needs_force_and_is_backed_up():
+    fonts = config.home() / "themes" / "mine" / "fonts"
+    fonts.mkdir(parents=True)
+    (fonts / "x.ttf").write_text("f", encoding="utf-8")
+    _stamped()
+    with pytest.raises(CutmateError, match="--force"):
+        themes.save_theme("mine")
+    themes.save_theme("mine", force=True)
+    (b,) = (config.home() / "themes" / ".backup").glob("mine-*")
+    assert (b / "fonts" / "x.ttf").read_text(encoding="utf-8") == "f"
+    assert not (config.home() / "themes" / "mine" / "fonts" / "x.ttf").exists()
+
+
+def test_save_failure_keeps_old_theme(monkeypatch):
+    _stamped()
+    themes.save_theme("mine")
+    t = config.home() / "themes" / "mine"
+    before = (t / "tokens.css").read_bytes()
+    _, d = _stamped()
+    (d / "tokens.css").write_text("new", encoding="utf-8")
+    themes.write_stamp(d)
+    real = themes.os.replace
+
+    def boom(src, dst):
+        if str(dst) == str(t):
+            raise OSError("disk says no")
+        return real(src, dst)
+    monkeypatch.setattr(themes.os, "replace", boom)
+    with pytest.raises(CutmateError, match="backup"):
+        themes.save_theme("mine", force=True)
+    assert (t / "tokens.css").read_bytes() == before
+    assert not list((config.home() / "themes").glob(".mine.saving-*"))
+
+
+def test_only_top_level_check_and_custom_are_skipped():
+    src = themes.new_theme("base")
+    b = themes.draft_dir("base")
+    (b / "fonts" / "check").mkdir()
+    (b / "fonts" / "check" / "k.txt").write_text("k", encoding="utf-8")
+    (b / "components" / "custom").mkdir()
+    themes.write_stamp(b)
+    themes.new_theme("copy", base="base")
+    c = themes.draft_dir("copy")
+    assert (c / "fonts" / "check" / "k.txt").exists() and not (c / "check").exists()
+    assert not (c / "components" / "custom").exists()
+    (c / "fonts" / "custom").mkdir()
+    themes.write_stamp(c)
+    t = themes.save_theme("copy")
+    assert (t / "fonts" / "custom").is_dir() and (t / "check" / "check.json").exists()
+
+
+def test_new_from_itself_keeps_draft():
+    themes.new_theme("mine")
+    (themes.draft_dir("mine") / "tokens.css").write_text("kept", encoding="utf-8")
+    themes.new_theme("mine", base="mine")
+    assert (themes.draft_dir("mine") / "tokens.css").read_text(encoding="utf-8") == "kept"
+    assert [t["name"] for t in themes.list_themes()].count("mine") == 1
+
+
+def test_stamp_needs_current_hyperframes_version(monkeypatch):
+    _, d = _stamped()
+    assert themes.stamp_ok(d)
+    monkeypatch.setattr(themes, "HF_VERSION", "9.9.9")
+    assert not themes.stamp_ok(d)
+
+
+@pytest.mark.parametrize("bad", ["Clean", "con", "NUL", "com1", "LPT9", "x.", "x "])
+def test_check_name_rejects_system_and_case_clashes(bad):
+    with pytest.raises(CutmateError):
+        themes.check_name(bad)
+
+
+def test_use_theme_rejects_abs_path(tmp_path):
+    with pytest.raises(CutmateError):
+        themes.use_theme(str(tmp_path))
+    with pytest.raises(CutmateError):
+        config.set_values([f"theme={tmp_path}"])

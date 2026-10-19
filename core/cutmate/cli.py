@@ -131,7 +131,7 @@ def _parser() -> argparse.ArgumentParser:
     tn.add_argument("--from", dest="base", default="clean")
     tn.add_argument("--mode", choices=["custom", "random", "clone"], default="custom")
     tn.add_argument("--seed", type=int)
-    tn.add_argument("--avoid", nargs="+", default=[], metavar="THEME")
+    tn.add_argument("--avoid", action="append", default=[], metavar="THEME")
     ts.add_parser("list", help="bundled, saved and draft themes")
     tu = ts.add_parser("use", help="make a saved theme the default")
     tu.add_argument("name")

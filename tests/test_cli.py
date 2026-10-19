@@ -203,7 +203,7 @@ def test_config_set_repairs_broken_file(tmp_path, capsys):
 
 def test_theme_cli(tmp_path, capsys):
     from PIL import Image
-    assert main(["theme", "new", "a", "--mode", "random", "--seed", "3"]) == 0
+    assert main(["theme", "new", "a", "--mode", "random", "--seed", "3", "--avoid", "clean", "--avoid", "clean"]) == 0
     assert json.loads(capsys.readouterr().out.splitlines()[0])["direction"]["seed"] == 3
     assert main(["theme", "list"]) == 0
     out = capsys.readouterr().out
