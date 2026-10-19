@@ -8,6 +8,10 @@ def _skill(name):
     return (paths.plugin_root() / "skills" / name / "SKILL.md").read_text(encoding="utf-8")
 
 
+def _theme_file(name):
+    return (paths.plugin_root() / "skills" / "theme" / name).read_text(encoding="utf-8")
+
+
 def check_cli_calls(text):
     sub = next(a for a in _parser()._actions if a.dest == "cmd")
     known = set(sub.choices)
@@ -25,7 +29,6 @@ def check_cli_calls(text):
         for flag in re.findall(r"(?<!\S)(--?[A-Za-z][\w-]*)", rest):
             assert flag in flags, (cmd, flag)
     npx = re.findall(r"npx\b[^`\n]*", text)
-    assert npx
     for call in npx:
         if "hyperframes" in call:
             assert "hyperframes@0.8.157" in call, call
@@ -41,6 +44,32 @@ def test_skill_frontmatter_and_commands():
 def test_skill_cli_calls_known():
     for name in ("edit", "setup"):
         check_cli_calls(_skill(name))
+
+
+def test_edit_setup_skills_call_hyperframes():
+    for name in ("edit", "setup"):
+        assert re.search(r"npx\b[^`\n]*", _skill(name)), name
+
+
+def test_theme_skill_frontmatter():
+    assert _skill("theme").startswith("---\nname: theme\ndescription: ")
+
+
+def test_theme_skill_covers_3b():
+    md = _skill("theme")
+    for s in ("AskUserQuestion", "\U0001f3b2", "Zaskocz mnie", "Biorę", "Losuj jeszcze raz", "$CM theme new --mode random",
+              "--avoid", "$CM theme save", "--force", "Nadpisać", "$CM theme use", "$CM theme list", "cutmate:clone-style",
+              "generate.md"):
+        assert s in md, s
+    gen = _theme_file("generate.md")
+    for s in ("$CM theme font", "$CM theme check", "--clip", "contact.png", "U.seed", "html.f169 ROOT", "Tytuł ąę",
+              "y 230–720", "cutmate:font", "Math.random", "not just colour"):
+        assert s in gen, s
+
+
+def test_theme_skill_cli_calls_known():
+    check_cli_calls(_skill("theme"))
+    check_cli_calls(_theme_file("generate.md"))
 
 
 def test_setup_skill_frontmatter():
