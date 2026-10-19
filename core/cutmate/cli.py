@@ -142,6 +142,10 @@ def _parser() -> argparse.ArgumentParser:
     tck.add_argument("name")
     tck.add_argument("--clip", type=Path, help="use this video as the A-roll instead of the test pattern")
     tck.add_argument("--language", choices=["pl", "en"], default="pl")
+    tfo = ts.add_parser("font", help="download an OFL Google Font into a draft (text or display role)")
+    tfo.add_argument("name")
+    tfo.add_argument("family")
+    tfo.add_argument("--role", choices=["text", "display"], required=True)
     tcl = ts.add_parser("colors", help="dominant colours of images")
     tcl.add_argument("images", nargs="+", type=Path)
     tcl.add_argument("--n", type=_min_one_int, default=8)
@@ -203,6 +207,13 @@ def _theme_cmd(args) -> int:
         print(f"check passed ({r['kind']}) — contact: {r['contact']}")
         for fmt, p in r["sheets"].items():
             print(f"sheet {fmt}: {p}")
+    elif args.theme_cmd == "font":
+        from . import fonts
+        d = themes.draft_dir(args.name)
+        if not (d / "theme.json").exists():
+            raise CutmateError(f"no draft theme {args.name!r} — fonts go into a draft (cutmate theme new)")
+        r = fonts.set_font(d, args.family, args.role)
+        print(f"{r['family']} ({r['role']}): " + ", ".join(r["files"]))
     elif args.theme_cmd == "colors":
         for hex_, share in themes.palette_of(args.images, args.n):
             print(f"{hex_}  {round(share * 100)}%")

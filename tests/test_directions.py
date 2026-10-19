@@ -72,7 +72,7 @@ def test_font_pairs_varied():
     assert all(d != t for d, t in fp)
     assert sum(t == "Inter" for _, t in fp) <= 1
     assert sum(d in {"Anton", "Bebas Neue", "Oswald", "Big Shoulders Display"} for d, _ in fp) <= 2
-    assert {"Space Mono", "Caveat", "Lilita One"} & {d for d, _ in fp}
+    assert {"Space Mono", "Caveat", "Titan One"} & {d for d, _ in fp}
 
 
 def test_roll_exhausted_avoid_raises(monkeypatch):

@@ -7,7 +7,7 @@ name = "cutmate"
 version = "0.1.0"
 description = "Edit talking-head videos with Claude Code"
 requires-python = ">=3.10"
-dependencies = ["numpy>=1.24", "Pillow>=10.1", "requests>=2.31"]
+dependencies = ["numpy>=1.24", "Pillow>=10.1", "requests>=2.31", "fonttools>=4.47"]
 
 [project.optional-dependencies]
 faster = ["faster-whisper>=1.2,<2"]
@@ -24,5 +24,5 @@ where = ["core"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-m 'not slow and not hf'"
-markers = ["slow: needs downloaded models or recorded samples/", "hf: needs npx hyperframes (network + Chrome)"]
+addopts = "-m 'not slow and not hf and not net'"
+markers = ["slow: needs downloaded models or recorded samples/", "hf: needs npx hyperframes (network + Chrome)", "net: downloads fonts from Google Fonts (network)"]

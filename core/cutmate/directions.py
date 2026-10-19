@@ -30,7 +30,7 @@ FONT_PAIRS: list[tuple[str, str]] = [
     ("Bricolage Grotesque", "DM Sans"), ("DM Serif Display", "DM Sans"),
     ("Playfair Display", "Source Sans 3"), ("Fraunces", "Work Sans"),
     ("Space Mono", "Space Grotesk"), ("Caveat", "Lato"),
-    ("Lilita One", "Rubik"), ("Bangers", "Manrope"),
+    ("Titan One", "Rubik"), ("Bangers", "Manrope"),
 ]
 
 SHAPES: dict[str, str] = {
