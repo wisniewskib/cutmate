@@ -5,7 +5,8 @@ clean in `${CUTMATE_HOME:-$HOME/.cutmate}/themes/.drafts/<name>/`) and its `dire
 (accent, text, ink, card, muted, on_accent), `fonts` (display, text), `shapes`, `motion`, `captions`, maybe `hints`.
 
 The goal is a look people remember — bold, "wow", never polite or empty. Strong shapes, real motion, big confident
-type; a theme that is clean with new colours is a failure (lint rejects it). Bold never beats the rules: safe zones,
+type; a theme that is clean with new colours is a failure.
+The lint gate (looks like clean) applies to random and clone themes; custom themes must meet the same bar by eye. Bold never beats the rules: safe zones,
 readable text, every component still works with every parameter.
 
 Work only inside the draft folder. Never touch the bundled themes or saved themes.
@@ -13,7 +14,9 @@ Work only inside the draft folder. Never touch the bundled themes or saved theme
 ## 1. Fonts
 
 `$CM theme font <name> "<display>" --role display`, then `$CM theme font <name> "<text>" --role text` (the family names
-from `direction.fonts`). Each prints the family and the downloaded weight files — use only those weights.
+from `direction.fonts`). Each prints the family and the downloaded weight files. Fonts have only their available
+weights: set an explicit `font-weight` to a weight that exists (e.g. Anton 400) instead of 800 / 900, or the browser
+fakes a bold.
 A refusal (no Polish letters, not OFL, not on Google Fonts) → pick another family of the same character (condensed
 grotesk → condensed grotesk, serif → serif), tell the user in one line, and update `direction.fonts`.
 Never edit the `cutmate:font` blocks in `tokens.css` by hand — only `$CM theme font` writes them. Inter as the display
@@ -59,9 +62,40 @@ inline SVG marks (inline SVG namespaces are fine).
 scale 0.96→1 · glitch = steps(4) + seeded x / clip jitter · typewriter = per-character stagger 0.03 s · slam = scale
 3→1, power4.in, rotation settle. The entrance must read in one frame of the contact sheet — clearly not clean's pop.
 
+**Rule — change the structure, not only the property values:** stacked or rotated lines, oversized numerals, cut corners, a
+different card layout (label above vs. beside the number, a split two-colour block, a strip instead of a card).
+
+**Recipes** — 1–2 worked examples per direction value, applied to title / counter / stamp:
+- sharp — title: display text on a full-width flat accent slab, kicker as a black bar above it, radius 0, no shadow.
+  counter: number on a flat card with a thick accent rule under it; label set small beside the number.
+- pill — chip/title: 999px pills with a soft shadow; title split into two stacked pills (kicker pill small, text pill
+  big). stamp: one giant pill, text in `var(--on-accent)` on accent.
+- outline — title: transparent box with a 6px accent border and display text with `-webkit-text-stroke`; counter:
+  oversized outlined numerals, label in a solid accent tag sitting on the border.
+- brutal — title = accent block + `border: 6px solid var(--ink)` + hard offset shadow `8px 8px 0 var(--ink)` +
+  uppercase display font. counter: card with the same border/shadow, number overflowing the card top. stamp: ink block,
+  accent text, rotated −3°.
+- tape — stamp = a rotated strip (−2…3°) with notched ends (`clip-path: polygon(…)` zig-zag or triangular notches);
+  title: two strips of tape at different angles, kicker on the smaller one. list items as separate taped strips.
+- snappy — expo.out 0.18–0.25 s slides of 40–80 px, items staggered 0.06 s; title words slide in from alternating sides.
+- smooth — sine.inOut 0.5–0.7 s fade + scale 0.96→1, the card first, its text 0.1 s later; counter counts over 0.9 s.
+- glitch — steps(4) entrance: 3–4 `tl.set` frames of x offsets and `clip-path: inset(…)` slices from
+  `const rnd = U.seed(n)`, then the clean frame; a second jitter burst on the stamp at P.at + 0.4.
+- typewriter — title / stamp split into per-character spans (after the font load), stagger 0.03 s, a blinking caret
+  block made with a few `tl.set` opacity steps (no loops).
+- slam — counter = digits scale 3→1 with power4.in and an overshoot (scale 0.94 → 1 settle) plus rotation −8° → 0;
+  stamp: scale 3→1 with a 0.05 s shake of the band; title lands word by word.
+
 **Keep in every component:** its `P` params (table below), `<markup>` placeholders (`{{name}}` …), class names other
 components or the build use, and an exit before `P.end` — `U.out(el, P.end - 0.2)` or an explicit
 `tl.to(…, {…, immediateRender: false}, …)` that ends by `P.end`. Animate only on `tl` (the paused timeline).
+Also keep:
+- point — the corner table (`POS` / `ORIGIN` objects and their use on the card) and the
+  `html.f169 ROOT .point { … top: 60px !important; right: 60px !important; left: auto !important; }` override (16:9
+  moves every corner to the top-right box).
+- lower-third and chapter — their `position: absolute` placement (lower-third bottom-left at left 80px / top 820px,
+  chapter `inset: 0`) and their `<markup>` with the `{{name}}` / `{{role}}` and `{{label}}` / `{{title}}` placeholders.
+- chip — the `place` / `safe` positioning code (gesture placement inside the safe zone).
 
 | component | params |
 |---|---|
@@ -102,6 +136,10 @@ deadlines). Lint error → fix what it names → re-run. Output: `check/contact.
 `check/sheet-16x9.png` in the draft.
 
 ## 7. Quality bar
+
+Once per session run `$CM theme check clean` (minutes, same timeout rule) and READ
+`${CUTMATE_HOME:-$HOME/.cutmate}/checks/clean/contact.png` side by side with the new `contact.png`; if a LOOK tile
+could pass for clean's, rewrite it.
 
 READ `contact.png` and both sheets. Fix and re-check until all of this holds:
 - Every text whole and inside its zone. 9:16: graphics y 230–720, captions y 1250–1500, nothing in the top 192 px or

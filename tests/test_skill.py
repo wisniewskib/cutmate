@@ -23,7 +23,8 @@ def check_cli_calls(text):
         parser = sub.choices[cmd]
         nested = next((a for a in parser._actions if a.choices and not a.option_strings), None)
         first = rest.split()[0] if rest.split() else ""
-        if nested is not None and first in nested.choices:
+        if nested is not None:
+            assert first in nested.choices, (cmd, first)
             parser = nested.choices[first]
         flags = {s for a in parser._actions for s in a.option_strings}
         for flag in re.findall(r"(?<!\S)(--?[A-Za-z][\w-]*)", rest):
@@ -70,6 +71,53 @@ def test_theme_skill_covers_3b():
 def test_theme_skill_cli_calls_known():
     check_cli_calls(_skill("theme"))
     check_cli_calls(_theme_file("generate.md"))
+
+
+def test_check_cli_calls_rejects_unknown_nested():
+    import pytest
+    with pytest.raises(AssertionError):
+        check_cli_calls("`$CM theme neww x`")
+    check_cli_calls("`$CM theme new x --mode random`")
+
+
+def _section(md, start, end=None):
+    i = md.index(start)
+    return md[i:md.index(end, i)] if end else md[i:]
+
+
+def test_generate_bold_recipes():
+    gen = _theme_file("generate.md")
+    rec = _section(gen, "**Recipes", "**Keep in every component")
+    for s in ("sharp", "pill", "outline", "brutal", "tape", "snappy", "smooth", "glitch", "typewriter", "slam",
+              "title", "counter", "stamp", "notched", "8px 8px 0", "steps(4)", "U.seed", "scale 3"):
+        assert s in rec, s
+    assert "change the structure, not only the property values" in gen
+    q = _section(gen, "## 7. Quality bar")
+    for s in ("$CM theme check clean", "${CUTMATE_HOME:-$HOME/.cutmate}/checks/clean/contact.png", "side by side"):
+        assert s in q, s
+    intro = gen[:gen.index("## 1.")]
+    assert "random and clone" in intro and "custom themes must meet the same bar by eye" in intro
+
+
+def test_generate_keeps_structure():
+    gen = _theme_file("generate.md")
+    keep = _section(gen, "**Keep in every component", "| component |")
+    for s in ("POS", "ORIGIN", "html.f169 ROOT .point", "!important", "lower-third", "chapter", "position: absolute",
+              "<markup>", "place", "safe"):
+        assert s in keep, s
+
+
+def test_theme_skill_fix_round_1():
+    md = _skill("theme")
+    gen = _theme_file("generate.md")
+    s3 = _section(md, "## 3.", "## 4.")
+    assert s3.count("(polecane)") >= 4
+    assert "lint checks contrast — fix and re-run" in s3
+    assert "replaces an existing draft of that name" in s3
+    s5 = _section(md, "## 5.")
+    assert "current theme first" in s5 and "name = 2nd field, path = the rest" in s5
+    s1 = _section(gen, "## 1.", "## 2.")
+    assert "font-weight" in s1 and "Anton 400" in s1
 
 
 def test_setup_skill_frontmatter():
