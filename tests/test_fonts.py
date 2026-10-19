@@ -65,6 +65,42 @@ def test_set_font_text_prunes_old():
     assert "OFL-inter.txt" not in names
     tj = json.loads((d / "theme.json").read_text(encoding="utf-8"))
     assert tj["fonts"]["text"] == "Manrope-500.ttf" and tj["fonts"]["bold"] == "Manrope-800.ttf"
+    assert '--font-display: "Manrope"' in _tokens(d)
+    assert tj["fonts"]["black"].startswith("Manrope-") and (d / "fonts" / tj["fonts"]["black"]).exists()
+    assert tj["direction"]["fonts"] == {"display": "Manrope", "text": "Manrope"}
+
+
+@responses.activate
+def test_set_font_text_keeps_display_font():
+    themes.new_theme("mine")
+    d = themes.draft_dir("mine")
+    _mock_family("Anton", (400, 900))
+    _mock_family("Manrope", (400, 500, 800))
+    fonts.set_font(d, "Anton", "display")
+    fonts.set_font(d, "Manrope", "text")
+    tj = json.loads((d / "theme.json").read_text(encoding="utf-8"))
+    assert '--font-display: "Anton"' in _tokens(d) and tj["fonts"]["black"] == "Anton-900.ttf"
+    assert (d / "fonts" / "Anton-900.ttf").exists()
+    assert tj["direction"]["fonts"] == {"display": "Anton", "text": "Manrope"}
+
+
+def test_set_font_duplicate_block():
+    themes.new_theme("mine")
+    d = themes.draft_dir("mine")
+    css = _tokens(d)
+    (d / "tokens.css").write_text(css + css[:css.index("/* cutmate:font display")], encoding="utf-8")
+    with pytest.raises(CutmateError, match="2 'cutmate:font text' blocks"):
+        fonts.set_font(d, "Anton", "text")
+
+
+@responses.activate
+def test_set_font_leaves_no_temp_in_draft():
+    themes.new_theme("mine")
+    d = themes.draft_dir("mine")
+    before = sorted(p.name for p in d.iterdir())
+    _mock_family("Anton", (400, 900))
+    fonts.set_font(d, "Anton", "display")
+    assert sorted(p.name for p in d.iterdir()) == before
 
 
 @responses.activate

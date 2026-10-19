@@ -110,54 +110,64 @@ def set_font(theme_path: Path, family: str, role: str) -> dict:
     theme_path = Path(theme_path)
     tokens = theme_path / "tokens.css"
     css = tokens.read_text(encoding="utf-8")
+    for r in ROLES:
+        n = len(_block_re(r).findall(css))
+        if n > 1:
+            raise CutmateError(f"tokens.css has {n} 'cutmate:font {r}' blocks — keep one")
     if not _block_re(role).search(css):
         raise CutmateError(f"tokens.css has no cutmate:font {role} block — cannot set the font")
     fonts_dir = theme_path / "fonts"
     fonts_dir.mkdir(exist_ok=True)
-    tmp = Path(tempfile.mkdtemp(prefix=".fonts-", dir=theme_path))
+    files: dict[int, Path] = {}
+    moved = False
     try:
-        got = download_family(family, tmp)
-        for p in got["files"].values():
-            if not has_glyphs(p):
-                raise CutmateError(f"font '{family}' lacks Polish letters (ą ę ł …) — pick another")
-        files = {}
-        for w, p in got["files"].items():
-            shutil.move(str(p), str(fonts_dir / p.name))
-            files[w] = fonts_dir / p.name
-        shutil.move(str(got["license"]), str(fonts_dir / got["license"].name))
-    finally:
-        shutil.rmtree(tmp, ignore_errors=True)
+        with tempfile.TemporaryDirectory(prefix="cutmate-font-", ignore_cleanup_errors=True) as tmp:
+            got = download_family(family, Path(tmp))
+            for p in got["files"].values():
+                if not has_glyphs(p):
+                    raise CutmateError(f"font '{family}' lacks Polish letters (ą ę ł …) — pick another")
+            moved = True
+            for w, p in got["files"].items():
+                shutil.move(str(p), str(fonts_dir / p.name))
+                files[w] = fonts_dir / p.name
+            shutil.move(str(got["license"]), str(fonts_dir / got["license"].name))
 
-    var = "--font" if role == "text" else "--font-display"
-    body = _faces(family, files) + f'\n:root {{ {var}: "{family}", sans-serif; font-synthesis: none; }}'
-    css = _block_re(role).sub(lambda _: _block(role, body), css, count=1)
+        var = "--font" if role == "text" else "--font-display"
+        body = _faces(family, files) + f'\n:root {{ {var}: "{family}", sans-serif; font-synthesis: none; }}'
+        css = _block_re(role).sub(lambda _: _block(role, body), css, count=1)
 
-    other = "display" if role == "text" else "text"
-    ovar = "--font-display" if other == "display" else "--font"
-    omatch = _block_re(other).search(css)
-    ofam = re.search(rf'{ovar}:\s*"([^"]+)"', omatch.group(0)) if omatch else None
-    defined = set(_FACE_FAMILY.findall(css))
-    if omatch and ofam and ofam.group(1) not in defined:
-        # the other role borrowed faces from the block we just replaced (bundled Inter) — follow the new family
-        css = _block_re(other).sub(lambda _: _block(other, f':root {{ {ovar}: "{family}", sans-serif; }}'), css, count=1)
-    tokens.write_text(css, encoding="utf-8")
+        other = "display" if role == "text" else "text"
+        ovar = "--font-display" if other == "display" else "--font"
+        omatch = _block_re(other).search(css)
+        ofam = re.search(rf'{ovar}:\s*"([^"]+)"', omatch.group(0)) if omatch else None
+        if omatch and ofam and ofam.group(1) not in set(_FACE_FAMILY.findall(css)):
+            # the other role borrowed faces from the block we just replaced (bundled Inter) — follow the new family
+            css = _block_re(other).sub(lambda _: _block(other, f':root {{ {ovar}: "{family}", sans-serif; }}'), css, count=1)
+            other_family = family
+        else:
+            other_family = ofam.group(1) if ofam else None
+        tokens.write_text(css, encoding="utf-8")
 
-    tj_path = theme_path / "theme.json"
-    tj = json.loads(tj_path.read_text(encoding="utf-8"))
-    tf = tj.setdefault("fonts", {})
-    if role == "text":
-        tf["text"] = files[_nearest(files, 500)].name
-        tf["bold"] = files[_nearest(files, 800)].name
-        black = tf.get("black")
-        if not black or not (fonts_dir / black).exists() or black not in _FACE_FILE.findall(css):
+        tj_path = theme_path / "theme.json"
+        tj = json.loads(tj_path.read_text(encoding="utf-8"))
+        tf = tj.setdefault("fonts", {})
+        if role == "text":
+            tf["text"] = files[_nearest(files, 500)].name
+            tf["bold"] = files[_nearest(files, 800)].name
+            if tf.get("black") not in _FACE_FILE.findall(css):
+                tf["black"] = files[max(files)].name      # the old black face was Inter's, now gone
+        else:
             tf["black"] = files[max(files)].name
-    else:
-        tf["black"] = files[max(files)].name
-    _prune(fonts_dir, css)
-    for key in ("text", "bold", "black"):                     # keep theme.json pointing at files that exist
-        if key in tf and not (fonts_dir / tf[key]).exists():
-            tf[key] = files[_nearest(files, {"text": 500, "bold": 800, "black": 900}[key])].name
-    tj_path.write_text(json.dumps(tj, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        direction = tj.get("direction")
+        if isinstance(direction, dict):
+            df = direction.setdefault("fonts", {})
+            df[role] = family
+            if other_family:
+                df[other] = other_family
+        tj_path.write_text(json.dumps(tj, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    finally:
+        if moved:
+            _prune(fonts_dir, tokens.read_text(encoding="utf-8"))
     return {"family": family, "role": role, "files": [p.name for _, p in sorted(files.items())]}
 
 
