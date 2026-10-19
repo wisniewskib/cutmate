@@ -86,3 +86,22 @@ def test_clean_tokens_font_blocks():
         assert f"/* cutmate:font {kind} */" in tokens and f"/* /cutmate:font {kind} */" in tokens
     assert "--font-display" in tokens and "--font:" in tokens
     assert (d / "fonts" / "OFL-inter.txt").exists()
+
+
+def _g(type_, start, end, **params):
+    from cutmate.plan import Graphic
+    return Graphic(type_, start, end, params, False, None, 0)
+
+
+def test_snapshot_times_nudge_only_look_clashes():
+    from cutmate.theme_check import snapshot_times
+    # a split and the custom effect it expands to settle at the same moment: one tile, no near-duplicate at +0.05
+    gs = [_g("split", 10.0, 14.0, effect="fx"), _g("custom", 10.0, 14.0, name="fx")]
+    cps, labels = snapshot_times(gs, [10.4])
+    assert cps == [10.4, 12.0] and labels == [(10.4, "split", "settled"), (12.0, "custom", "mid")]
+    # a LOOK component whose settled moment falls on an earlier claim (a custom mid) is nudged, never dropped
+    gs = [_g("custom", 0.0, 2.6, name="fx"), _g("chip", 0.9, 3.0, text="x")]
+    cps, labels = snapshot_times(gs, [])
+    assert labels == [(0.4, "custom", "settled"), (1.0, "chip", "entrance"), (1.3, "custom", "mid"),
+                      (1.35, "chip", "settled")]
+    assert cps == [t for t, _, _ in labels]

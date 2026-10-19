@@ -15,7 +15,7 @@ from PIL import Image, ImageDraw
 
 from .build import build, checkpoint
 from .errors import CutmateError
-from .hf import hf
+from .hf import check, hf
 from .media import run
 from .plan import load_plan
 
@@ -141,6 +141,29 @@ def _synthetic_rec(root: Path, fmt: str = "9:16", clip: Path | None = None) -> P
     return out
 
 
+def snapshot_times(graphics: list, checkpoints: list[float]) -> tuple[list[float], list[tuple[float, str, str]]]:
+    """Snapshot times and their (t, type, kind) labels: the entrance of every LOOK component, the middle of each custom
+    effect, every graphic settled, plus the build checkpoints. The first claim on a time wins; a LOOK label that clashes
+    is nudged by 0.05 s instead (the contact sheet needs a tile of every LOOK type), any other clash shares the tile."""
+    named: dict[float, tuple[str, str]] = {}
+
+    def claim(t: float, label: tuple[str, str]) -> None:
+        if label[0] in LOOK:
+            while t in named and named[t] != label:
+                t = round(t + 0.05, 2)
+        named.setdefault(t, label)
+    for g in graphics:
+        if g.type in LOOK:
+            claim(round(g.start + 0.1, 2), (g.type, "entrance"))
+    for g in graphics:
+        if g.type == "custom":
+            claim(round((g.start + g.end) / 2, 2), (g.type, "mid"))
+    for g in graphics:
+        claim(checkpoint(g), (g.type, "settled"))
+    cps = sorted(set(checkpoints) | set(named))
+    return cps, [(t, *named.get(t, ("other", "settled"))) for t in cps]
+
+
 def theme_check(theme: str = "clean", workdir: Path | None = None, language: str = "pl", fmt: str = "9:16",
                 clip: Path | None = None) -> dict:
     """Build the synthetic video, run `hyperframes check`, snapshot it and tile the sheet.
@@ -152,29 +175,13 @@ def theme_check(theme: str = "clean", workdir: Path | None = None, language: str
     out = _synthetic_rec(root, fmt, clip)
     r = build(out, theme=theme, language=language, captions={"16:9": "both"})
     proj = r["project"]
-    chk = run(hf("check"), cwd=proj)
+    chk = check(proj, run, hf)
     if chk.returncode:
         raise CutmateError(f"theme {theme!r} fails hyperframes check: " + " ".join((chk.stdout + chk.stderr).split())[-600:])
     snaps = proj / "snapshots"
     for old in snaps.glob("frame-*.png"):
         old.unlink()
-    graphics = load_plan(out).graphics
-    named: dict[float, tuple[str, str]] = {}      # entrance, then mid, then settled; a time clash nudges by 0.05 s
-
-    def claim(t: float, label: tuple[str, str]) -> None:
-        while t in named and named[t] != label:
-            t = round(t + 0.05, 2)
-        named[t] = label
-    for g in graphics:
-        if g.type in LOOK:
-            claim(round(g.start + 0.1, 2), (g.type, "entrance"))
-    for g in graphics:
-        if g.type == "custom":
-            claim(round((g.start + g.end) / 2, 2), (g.type, "mid"))
-    for g in graphics:
-        claim(checkpoint(g), (g.type, "settled"))
-    cps = sorted(set(r["checkpoints"]) | set(named))
-    labels = [(t, *named.get(t, ("other", "settled"))) for t in cps]
+    cps, labels = snapshot_times(load_plan(out).graphics, r["checkpoints"])
     at = ",".join(f"{t:.2f}" for t in cps)
     snap = run(hf("snapshot", "--at", at, "--no-end", "--describe", "false", "-o", "snapshots"), cwd=proj)
     shots = sorted(snaps.glob("frame-*.png"))

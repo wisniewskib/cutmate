@@ -155,3 +155,36 @@ def test_stream_writes_log(tmp_path, capsys):
     assert code == 0
     assert log.read_text(encoding="utf-8") == "a\nb\n"
     assert capsys.readouterr().out == "a\nb\n"
+
+
+def _deadline_then(codes):
+    calls = []
+
+    def fake_run(cmd, cwd=None, env=None):
+        calls.append(cmd)
+        code = codes[len(calls) - 1]
+        out = "check_runtime_failure: Check did not finish within its deadline." if code == "deadline" else "Check passed"
+        return subprocess.CompletedProcess(cmd, 1 if code == "deadline" else code, out, "")
+    return calls, fake_run
+
+
+def test_check_waits_for_render_ready_and_retries_a_deadline_once(tmp_path):
+    from cutmate.hf import CHECK_TIMEOUT_MS, check
+    calls, fake = _deadline_then(["deadline", 0])
+    r = check(tmp_path, fake, lambda *a: ["hf", *a])
+    assert r.returncode == 0 and len(calls) == 2
+    assert calls[0] == ["hf", "check", "--timeout", str(CHECK_TIMEOUT_MS)] and CHECK_TIMEOUT_MS >= 30000
+
+
+def test_check_deadline_twice_is_a_one_line_busy_error(tmp_path):
+    from cutmate.hf import check
+    calls, fake = _deadline_then(["deadline", "deadline"])
+    with pytest.raises(CutmateError, match="too busy") as e:
+        check(tmp_path, fake, lambda *a: ["hf", *a])
+    assert "\n" not in str(e.value) and len(calls) == 2
+
+
+def test_check_real_failure_is_not_retried(tmp_path):
+    from cutmate.hf import check
+    calls, fake = _deadline_then([1])
+    assert check(tmp_path, fake, lambda *a: ["hf", *a]).returncode == 1 and len(calls) == 1

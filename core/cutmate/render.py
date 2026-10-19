@@ -7,7 +7,7 @@ from pathlib import Path
 from .errors import CutmateError
 from .finalize import finalize
 from .formats import format_of
-from .hf import hf
+from .hf import check, hf
 from .media import run
 
 
@@ -29,7 +29,7 @@ def render(out_dir: Path) -> dict:
     proj = out / "composition"
     if not (proj / "index.html").exists():
         raise CutmateError(f"{proj / 'index.html'} not found — run `cutmate build` first")
-    chk = run(hf("check"), cwd=proj)
+    chk = check(proj, run, hf)
     if chk.returncode:
         raise CutmateError("hyperframes check failed: " + " ".join((chk.stdout + chk.stderr).split())[-500:])
     dst = out / "work" / "render.mp4"

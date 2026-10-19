@@ -7,6 +7,8 @@ from .errors import CutmateError
 from .media import run
 
 HF_VERSION = "0.8.157"
+CHECK_TIMEOUT_MS = 30000  # how long `check` waits for the page to become render-ready (hyperframes default: 3000)
+DEADLINE = "did not finish within its deadline"  # hyperframes' fixed 120 s limit on the whole browser pass
 
 
 def npx() -> str:
@@ -18,6 +20,18 @@ def npx() -> str:
 
 def hf(*args) -> list[str]:
     return [npx(), "--yes", f"hyperframes@{HF_VERSION}", *[str(a) for a in args]]
+
+
+def check(proj: Path, runner=run, cli=hf):
+    """`hyperframes check` with a generous render-ready wait. A run cut off by hyperframes' fixed 120 s deadline (a busy
+    or slow machine, not a broken composition) is retried once, then stops with a one-line error saying so. A script
+    that hangs is reported by hyperframes differently and is returned as a normal failure."""
+    for _ in range(2):
+        r = runner(cli("check", "--timeout", str(CHECK_TIMEOUT_MS)), cwd=proj)
+        if not (r.returncode and DEADLINE in r.stdout + r.stderr):
+            return r
+    raise CutmateError("hyperframes check ran out of time twice (its browser pass has a fixed 120 s limit) — the computer "
+                       "is too busy: close heavy apps (other renders, transcription) and run it again")
 
 
 def ensure_project(proj: Path, fmt: str = "9:16") -> None:
