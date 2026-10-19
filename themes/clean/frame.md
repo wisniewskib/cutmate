@@ -12,7 +12,7 @@ unit: 1080×1920 (9:16), 30 fps
 - **Budget:** at most 2 graphics with `"hit": true` (the punchline and the key number), at most 1 `title`, never two graphics at once.
 - **Density — never an empty short.** A visual layer (any graphic, b-roll / `split`, an explainer, an effect, a `chip` /
   `stamp` on a key word) is on screen **≥ 50 %** of the video time. Bare face (captions only) never lasts longer than
-  **4 s**, except the first hook second and the CTA (the last segment). Every key word, number and name gets a `chip`,
+  **4 s**, except the first 1.5 s (the hook) and the CTA tail (the last segment, at most its final 6 s). Every key word, number and name gets a `chip`,
   `stamp`, `counter` or b-roll. Reach it with many short visuals one after another (1.5–3 s each, a gap of ≥ 0.3 s), not
   by stacking — the budget above still holds. `cutmate build` prints `WARN density` for every stretch that breaks this.
 - **Pick components by what is said:**

@@ -236,7 +236,7 @@ Follow `frame.md`. Write `out/plan.json`:
 - Limits enforced by the planner: a `list` has at most 4 items, `bars` at most 3 rows, `stamp` is exactly one word,
   `counter.to` is a number. Budgets (warnings): at most 2 graphics with `hit`, 1 `title`, no overlapping graphics.
 - **Gęstość (density) — never a "pusty" video.** Follow the density rule of `frame.md` (9:16: a visual on screen ≥ 50 %
-  of the time, bare face — captions only — never longer than 4 s outside the hook and the CTA; 16:9: never longer than
+  of the time, bare face — captions only — never longer than 4 s outside the first 1.5 s and the CTA tail — the last segment, at most its final 6 s; 16:9: never longer than
   20 s). After the first plan run `$CM build <folder>/out` and read every `WARN density` line, then fill each named
   stretch: a `chip` / `stamp` / `counter` on its key word, number or name; b-roll (`$CM shot` of the page, a `broll/`
   file, or an image via `media-use resolve` when signed in) in a `split` (9:16) / `pip` (16:9); an explainer only when

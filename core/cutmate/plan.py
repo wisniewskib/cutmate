@@ -35,6 +35,8 @@ SPLIT_PANEL = [40, 40, 1000, 820]  # x, y, w, h in 1080x1920 px (the .split-pane
 BARE_MAX = {"9:16": 4.0, "16:9": 20.0}  # longest stretch of bare face (captions only) frame.md allows (s)
 COVER_MIN = {"9:16": 0.5}              # share of the video with a visual layer on screen (frame.md)
 HOOK = 1.5                             # the first seconds are exempt from the bare-face rule (the hook)
+CTA_TAIL = 6.0                         # at most this much of the end (within the last segment) is exempt (the CTA)
+MIN_CHECK = 8.0                        # shorter videos (the 5 s smoke render) are not density-checked
 _PUNCT = ".,!?;:…\"'„\u201c\u201d()[]–—-"
 
 
@@ -376,10 +378,11 @@ def _expanded_pair(a: Graphic, b: Graphic) -> bool:
 def _density(spans: list[tuple[float, float]], end: float, fmt: str, last_start: float) -> list[str]:
     """Bare-face stretches over the frame.md limit and (9:16) the share of the video with a visual on screen.
     Every graphic counts (b-roll, split / pip / side, effects, chips, stamps); captions alone do not. The first HOOK
-    seconds and the last segment (the CTA) are exempt; a video that is only hook + CTA is not checked."""
-    lo, hi = HOOK, last_start
-    if hi <= lo:
+    seconds and the CTA tail (the last segment, at most CTA_TAIL s) are exempt from the bare-face rule; videos shorter
+    than MIN_CHECK are not checked."""
+    if end < MIN_CHECK:
         return []
+    lo, hi = HOOK, end - min(end - last_start, CTA_TAIL)
     merged = []
     for a, b in sorted(spans):
         if merged and a <= merged[-1][1]:
@@ -387,16 +390,16 @@ def _density(spans: list[tuple[float, float]], end: float, fmt: str, last_start:
         else:
             merged.append([a, b])
     w, cur, limit = [], lo, BARE_MAX.get(fmt)
-    for a, b in merged + [[hi, hi]]:
+    for a, b in [m for m in merged if m[1] > lo and m[0] < hi] + [[hi, hi]]:
         a, b = max(a, lo), min(b, hi)
-        if a > cur and limit is not None and a - cur > limit + 1e-6:
+        if limit is not None and a - cur > limit + 1e-6:
             w.append(f"WARN density: bare face {cur:.1f}–{a:.1f} s ({a - cur:.1f} s) — add a graphic, b-roll or chip "
                      f"(frame.md: max {limit:g} s in {fmt})")
         cur = max(cur, b)
-    if fmt in COVER_MIN and end > 0:
-        pct = round(100 * sum(b - a for a, b in merged) / end)
-        if pct < round(100 * COVER_MIN[fmt]):
-            w.append(f"WARN density: visuals on screen {pct} % (frame.md: ≥ {round(100 * COVER_MIN[fmt])} %)")
+    if fmt in COVER_MIN:
+        ratio = sum(b - a for a, b in merged) / end
+        if ratio < COVER_MIN[fmt] - 1e-9:
+            w.append(f"WARN density: visuals on screen {round(100 * ratio)} % (frame.md: ≥ {round(100 * COVER_MIN[fmt])} %)")
     return w
 
 

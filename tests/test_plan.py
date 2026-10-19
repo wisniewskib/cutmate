@@ -683,11 +683,39 @@ def test_density_169_limit(tmp_path):
 
 def test_density_exempt_hook_and_last(tmp_path):
     timed = [{"id": "S1", "start": 0.0, "end": 6.0}, {"id": "S2", "start": 6.0, "end": 20.0}]
-    out = _density_out(tmp_path, [{"type": "chip", "at": 5.0, "until": 6.0, "text": "A"}], timed)
-    assert not any("bare face" in w for w in load_plan(out).warnings)   # 0–5 s: the first 1.5 s are the hook; S2 is the CTA
+    out = _density_out(tmp_path, [{"type": "chip", "at": 5.0, "until": 6.0, "text": "A"},
+                                  {"type": "split", "from": 6.0, "to": 14.0, "effect": "stat-card"}], timed)
+    # 0–5 s bare, but the first 1.5 s are the hook (3.5 s left); 14–20 s bare = the 6 s CTA tail
+    assert not any("bare face" in w for w in load_plan(out).warnings)
 
 
 def test_density_skips_hook_and_cta_only_video(tmp_path):
     out = _density_out(tmp_path, [{"type": "title", "at": 0.4, "until": 2.4, "text": "A"}],
                        [{"id": "S1", "start": 0.0, "end": 5.0}])
     assert _density(load_plan(out).warnings) == []          # the 5 s smoke render: one segment, nothing to check
+
+
+def test_density_single_segment_60s_warns(tmp_path):
+    out = _density_out(tmp_path, [], [{"id": "S1", "start": 0.0, "end": 60.0}])
+    w = _density(load_plan(out).warnings)
+    assert "WARN density: bare face 1.5–54.0 s (52.5 s) — add a graphic, b-roll or chip (frame.md: max 4 s in 9:16)" in w
+    assert "WARN density: visuals on screen 0 % (frame.md: ≥ 50 %)" in w
+
+
+def test_density_short_first_segment_warns(tmp_path):
+    out = _density_out(tmp_path, [], [{"id": "S1", "start": 0.0, "end": 1.2}, {"id": "S2", "start": 1.2, "end": 30.0}])
+    w = _density(load_plan(out).warnings)
+    assert any("bare face 1.5–24.0 s" in x for x in w) and any("visuals on screen 0 %" in x for x in w)
+
+
+def test_density_cta_graphic_in_tail_no_false_warn():
+    from cutmate.plan import _density as density
+    assert density([(1.5, 13.0), (18.0, 19.0)], 20, "9:16", 16.0) == []
+
+
+def test_density_long_last_segment_tail_capped(tmp_path):
+    timed = [{"id": "S1", "start": 0.0, "end": 10.0}, {"id": "S2", "start": 10.0, "end": 35.0}]
+    out = _density_out(tmp_path, [{"type": "split", "from": 0.0, "to": 10.0, "effect": "stat-card"},
+                                  {"type": "chip", "at": 30.0, "until": 34.0, "text": "CTA"}], timed)
+    w = _density(load_plan(out).warnings)
+    assert "WARN density: bare face 10.0–29.0 s (19.0 s) — add a graphic, b-roll or chip (frame.md: max 4 s in 9:16)" in w
