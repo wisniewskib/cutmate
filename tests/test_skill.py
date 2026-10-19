@@ -290,3 +290,11 @@ def test_density_rule_in_skill_and_frame():
         assert s in md, s
     frame = (paths.plugin_root() / "themes" / "clean" / "frame.md").read_text(encoding="utf-8")
     assert "≥ 50 %" in frame and "4 s" in frame
+
+
+def test_theme_check_and_render_prefer_background_and_explain_the_deadline_warn():
+    for name in ("theme", "edit", "setup"):
+        md = " ".join(_skill(name).split())
+        assert "prefer Bash run_in_background: true" in md, name
+    for name in ("theme", "edit"):
+        assert "WARN hyperframes check ran out of time" in _skill(name), name

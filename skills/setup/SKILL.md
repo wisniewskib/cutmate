@@ -143,8 +143,8 @@ default answer.
 1. Ask in words (plain text, one short question): how should the videos look — the vibe, colours, fonts, creators or
    videos they like.
 2. Show what each option means before the picker:
-   - Clean — the neutral starter look. `$CM theme check clean` (long-running: Bash timeout 600000 or
-     run_in_background: true; `--clip <step-6 clip>` when the user gave one), then READ
+   - Clean — the neutral starter look. `$CM theme check clean` (long-running: prefer Bash
+     run_in_background: true, else Bash timeout 600000; `--clip <step-6 clip>` when the user gave one), then READ
      `${CUTMATE_HOME:-$HOME/.cutmate}/checks/clean/contact.png`, send its path and say in one line what it shows.
    - 🎲 Zaskocz mnie — a random bold look (colours, fonts, shapes, motion) built and shown as the same contact sheet; it
      can be re-rolled.

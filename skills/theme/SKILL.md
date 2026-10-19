@@ -13,8 +13,8 @@ Rules:
 - Set the CLI once per session (setup venv first, so a dev `cutmate` on PATH never shadows it):
   `CM="$(ls "${CUTMATE_HOME:-$HOME/.cutmate}/venv/bin/cutmate" "${CUTMATE_HOME:-$HOME/.cutmate}/venv/Scripts/cutmate.exe" 2>/dev/null | head -1)"; [ -n "$CM" ] || CM="$(command -v cutmate)"`;
   if it doesn't run, tell the user to run `/cutmate:setup` and stop.
-- Long-running: `$CM theme check` renders every component in both formats (minutes) → Bash timeout 600000 or
-  run_in_background: true; never two checks at once.
+- Long-running: `$CM theme check` renders every component in both formats (minutes) → prefer Bash
+  run_in_background: true (else Bash timeout 600000); never two checks at once. `WARN hyperframes check ran out of time` = a busy machine, not an error (it goes on).
 - New themes are drafts in `${CUTMATE_HOME:-$HOME/.cutmate}/themes/.drafts/<name>/` until `$CM theme save`; the
   user's videos never change before that.
 - Any failing command: one line with the cause + the fix.

@@ -16,7 +16,8 @@ steps.factcheck / qa / thumbnail, music, captions).
 `* name kind checked|unchecked|- path`; the first 2 characters are the marker column — cut them, then name = 1st
 field, path = the rest after the check field; paths may contain spaces on Windows). READ `<path>/frame.md` BEFORE
 writing plan.json. Marked `unchecked` → run `$CM theme check <theme> --language <lang>` once (renders every
-component in both formats and reports problems; minutes — Bash timeout 600000 or run_in_background: true); lint
+component in both formats and reports problems; minutes — prefer Bash run_in_background: true, else Bash timeout
+600000; `WARN hyperframes check ran out of time` = a busy machine, not an error (it goes on)); lint
 errors → tell the user in one line each and offer `/cutmate:theme` or the config theme.
 
 **Resume:** if `out/` already has files, continue from the first missing one:
@@ -261,7 +262,7 @@ about every `WARN`. The last line prints `checkpoints: t1,t2,...`. Then, from th
 
 ## 7. Render and QA
 
-`$CM render <folder>/out` (check → render → finalize; writes `out/final.mp4`). 9:16 takes ~1–2 min. 16:9 takes ~45–60 min per 15 min of video: run it in the background (Bash `run_in_background: true`), follow `out/work/render.log`, and tell the user the ETA. READ every `check_*.png` it
+`$CM render <folder>/out` (check → render → finalize; writes `out/final.mp4`). 9:16 takes ~1–2 min. 16:9 takes ~45–60 min per 15 min of video. Prefer running it in the background (Bash `run_in_background: true`) for both formats, follow `out/work/render.log`, and tell the user the ETA. `WARN hyperframes check ran out of time` = a busy machine, not an error (it goes on). READ every `check_*.png` it
 writes and describe each in one line. If `steps.qa`: `$CM qa <folder>/out` and handle every hit: probe/rms, fix the
 EDL (then cut → align → track (if used) → build → render; graphics move with their words automatically) or explain why it's fine.
 

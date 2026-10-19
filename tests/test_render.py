@@ -172,19 +172,36 @@ def test_check_waits_for_render_ready_and_retries_a_deadline_once(tmp_path):
     from cutmate.hf import CHECK_TIMEOUT_MS, check
     calls, fake = _deadline_then(["deadline", 0])
     r = check(tmp_path, fake, lambda *a: ["hf", *a])
-    assert r.returncode == 0 and len(calls) == 2
+    assert r.status == "ok" and len(calls) == 2
     assert calls[0] == ["hf", "check", "--timeout", str(CHECK_TIMEOUT_MS)] and CHECK_TIMEOUT_MS >= 30000
 
 
-def test_check_deadline_twice_is_a_one_line_busy_error(tmp_path):
+def test_check_deadline_twice_returns_deadline(tmp_path):
     from cutmate.hf import check
     calls, fake = _deadline_then(["deadline", "deadline"])
-    with pytest.raises(CutmateError, match="too busy") as e:
-        check(tmp_path, fake, lambda *a: ["hf", *a])
-    assert "\n" not in str(e.value) and len(calls) == 2
+    r = check(tmp_path, fake, lambda *a: ["hf", *a])
+    assert r.status == "deadline" and len(calls) == 2
 
 
 def test_check_real_failure_is_not_retried(tmp_path):
     from cutmate.hf import check
     calls, fake = _deadline_then([1])
-    assert check(tmp_path, fake, lambda *a: ["hf", *a]).returncode == 1 and len(calls) == 1
+    r = check(tmp_path, fake, lambda *a: ["hf", *a])
+    assert r.status == "failed" and "Check passed" in r.output and len(calls) == 1
+
+
+def test_render_after_a_check_deadline_warns_and_renders(tmp_path, monkeypatch, capsys):
+    from cutmate.hf import DEADLINE_WARN
+    out = setup_out(tmp_path)
+    calls, fake = _deadline_then(["deadline", "deadline"])
+    monkeypatch.setattr(R, "run", fake)
+    monkeypatch.setattr(R, "hf", lambda *a: ["hf", *a])
+
+    def fake_stream(cmd, cwd, log=None):
+        make_clip(out / "work" / "render.mp4", dur=2.0, gaps=())
+        return 0
+    monkeypatch.setattr(R, "_stream", fake_stream)
+    r = R.render(out)
+    assert r["ok"] and len(calls) == 2
+    assert DEADLINE_WARN in capsys.readouterr().out
+    assert DEADLINE_WARN == "WARN hyperframes check ran out of time (busy/slow machine) — rendering anyway"

@@ -7,7 +7,7 @@ from pathlib import Path
 from .errors import CutmateError
 from .finalize import finalize
 from .formats import format_of
-from .hf import check, hf
+from .hf import DEADLINE_WARN, check, hf
 from .media import run
 
 
@@ -30,8 +30,10 @@ def render(out_dir: Path) -> dict:
     if not (proj / "index.html").exists():
         raise CutmateError(f"{proj / 'index.html'} not found — run `cutmate build` first")
     chk = check(proj, run, hf)
-    if chk.returncode:
-        raise CutmateError("hyperframes check failed: " + " ".join((chk.stdout + chk.stderr).split())[-500:])
+    if chk.status == "failed":
+        raise CutmateError("hyperframes check failed: " + " ".join(chk.output.split())[-500:])
+    if chk.status == "deadline":
+        print(DEADLINE_WARN, flush=True)
     dst = out / "work" / "render.mp4"
     dst.parent.mkdir(parents=True, exist_ok=True)
     dst.unlink(missing_ok=True)

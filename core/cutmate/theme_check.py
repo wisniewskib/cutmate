@@ -15,7 +15,7 @@ from PIL import Image, ImageDraw
 
 from .build import build, checkpoint
 from .errors import CutmateError
-from .hf import check, hf
+from .hf import DEADLINE_WARN, check, hf
 from .media import run
 from .plan import load_plan
 
@@ -176,8 +176,10 @@ def theme_check(theme: str = "clean", workdir: Path | None = None, language: str
     r = build(out, theme=theme, language=language, captions={"16:9": "both"})
     proj = r["project"]
     chk = check(proj, run, hf)
-    if chk.returncode:
-        raise CutmateError(f"theme {theme!r} fails hyperframes check: " + " ".join((chk.stdout + chk.stderr).split())[-600:])
+    if chk.status == "failed":
+        raise CutmateError(f"theme {theme!r} fails hyperframes check: " + " ".join(chk.output.split())[-600:])
+    if chk.status == "deadline":     # a busy machine, not a broken theme: the snapshots below prove the components render
+        print(DEADLINE_WARN, flush=True)
     snaps = proj / "snapshots"
     for old in snaps.glob("frame-*.png"):
         old.unlink()

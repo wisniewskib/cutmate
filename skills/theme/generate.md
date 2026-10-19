@@ -131,7 +131,7 @@ Also keep:
 
 `$CM theme check <name> --clip <recording>` — `--clip` when a recording of the user is known (the clip setup's
 selftest used, or a clip from a folder they edited); without it the busy test pattern is the background.
-It takes minutes: Bash timeout 600000 or run_in_background: true; never two checks at once (they flake on render
+It takes minutes: prefer Bash run_in_background: true (else Bash timeout 600000); never two checks at once (they flake on render
 deadlines). Lint error → fix what it names → re-run. Output: `check/contact.png`, `check/sheet-9x16.png`,
 `check/sheet-16x9.png` in the draft.
 
