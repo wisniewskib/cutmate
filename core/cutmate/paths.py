@@ -20,6 +20,10 @@ def web_dir() -> Path:
 
 
 def theme_dir(name: str) -> Path:
+    if Path(name).is_absolute():  # drafts are built and checked by path
+        if (Path(name) / "theme.json").exists():
+            return Path(name)
+        raise CutmateError(f"theme {name!r} not found (no theme.json there)")
     places = [home() / "themes" / name, _ROOT / "themes" / name]
     for d in places:
         if (d / "theme.json").exists():

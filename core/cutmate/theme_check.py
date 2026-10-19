@@ -155,6 +155,6 @@ def theme_check(theme: str = "clean", workdir: Path | None = None, language: str
     sheet = Image.new("RGB", (tw * min(5, len(tiles)), th * ((len(tiles) + 4) // 5)), "black")
     for i, t in enumerate(tiles):
         sheet.paste(t, ((i % 5) * tw, (i // 5) * th))
-    sheet_path = out / f"theme-check-{theme}-{fmt.replace(':', 'x')}.png"
+    sheet_path = out / f"theme-check-{Path(theme).name}-{fmt.replace(':', 'x')}.png"
     sheet.save(sheet_path)
     return {"project": proj, "sheet": sheet_path, "snapshots": shots, "times": cps}

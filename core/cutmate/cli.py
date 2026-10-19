@@ -124,6 +124,23 @@ def _parser() -> argparse.ArgumentParser:
     se.add_argument("--theme")
     se.add_argument("--description", default="")
     se.add_argument("--force", action="store_true")
+    th = sub.add_parser("theme", help="theme drafts: new, list, use, save, colors")
+    ts = th.add_subparsers(dest="theme_cmd", required=True)
+    tn = ts.add_parser("new", help="start a draft theme (copy of a base theme)")
+    tn.add_argument("name", nargs="?")
+    tn.add_argument("--from", dest="base", default="clean")
+    tn.add_argument("--mode", choices=["custom", "random", "clone"], default="custom")
+    tn.add_argument("--seed", type=int)
+    tn.add_argument("--avoid", nargs="+", default=[], metavar="THEME")
+    ts.add_parser("list", help="bundled, saved and draft themes")
+    tu = ts.add_parser("use", help="make a saved theme the default")
+    tu.add_argument("name")
+    tsv = ts.add_parser("save", help="move a checked draft into your themes")
+    tsv.add_argument("name")
+    tsv.add_argument("--force", action="store_true")
+    tcl = ts.add_parser("colors", help="dominant colours of images")
+    tcl.add_argument("images", nargs="+", type=Path)
+    tcl.add_argument("--n", type=_min_one_int, default=8)
     rq = sub.add_parser("requests", help="match out/requests.md (\"zrozumiałem tak\") against the plan")
     rq.add_argument("out")
     cf = sub.add_parser("config", help="show or change the cutmate config")
@@ -159,9 +176,35 @@ def _config_cmd(args) -> int:
     return 0
 
 
+def _theme_cmd(args) -> int:
+    import json
+    from . import themes
+    if args.theme_cmd == "new":
+        r = themes.new_theme(args.name, args.base, args.mode, args.seed, args.avoid)
+        print(json.dumps(r, ensure_ascii=False))
+        if r["exists"]:
+            print(f"WARN theme {r['name']} exists — saving will need --force")
+    elif args.theme_cmd == "list":
+        cur = config.load().theme
+        for t in themes.list_themes():
+            chk = "-" if t["checked"] is None else ("checked" if t["checked"] else "unchecked")
+            print(f"{'* ' if t['name'] == cur and t['kind'] != 'draft' else '  '}{t['name']} {t['kind']} {chk} {t['path']}")
+    elif args.theme_cmd == "use":
+        themes.use_theme(args.name)
+        print(f"theme: {args.name}")
+    elif args.theme_cmd == "save":
+        print(themes.save_theme(args.name, args.force))
+    elif args.theme_cmd == "colors":
+        for hex_, share in themes.palette_of(args.images, args.n):
+            print(f"{hex_}  {round(share * 100)}%")
+    return 0
+
+
 def _dispatch(args) -> int:
     if args.cmd == "config":
         return _config_cmd(args)
+    if args.cmd == "theme":
+        return _theme_cmd(args)
     if args.cmd == "doctor":
         import json
         from .doctor import doctor

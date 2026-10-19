@@ -199,3 +199,19 @@ def test_config_set_repairs_broken_file(tmp_path, capsys):
     p.write_text("{nope", encoding="utf-8")
     assert main(["config", "set", "language=en"]) == 0
     assert config.load(p).language == "en"
+
+
+def test_theme_cli(tmp_path, capsys):
+    from PIL import Image
+    assert main(["theme", "new", "a", "--mode", "random", "--seed", "3"]) == 0
+    assert json.loads(capsys.readouterr().out.splitlines()[0])["direction"]["seed"] == 3
+    assert main(["theme", "list"]) == 0
+    out = capsys.readouterr().out
+    assert any(ln.split()[:3] == ["a", "draft", "unchecked"] for ln in out.splitlines())
+    assert main(["theme", "save", "a"]) == 2
+    err = capsys.readouterr().err
+    assert err.startswith("cutmate:") and len(err.strip().splitlines()) == 1
+    png = tmp_path / "c.png"
+    Image.new("RGB", (40, 40), "#336699").save(png)
+    assert main(["theme", "colors", str(png), "--n", "2"]) == 0
+    assert "#" in capsys.readouterr().out
