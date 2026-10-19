@@ -482,3 +482,41 @@ def test_check_theme_draft_real():
     r = themes.check_theme("d")
     assert Image.open(r["contact"]).width == 1620
     themes.save_theme("d")
+
+
+def test_save_onto_a_plain_file_is_a_one_line_error():
+    _stamped()
+    target = config.home() / "themes" / "mine"
+    target.write_text("not a theme", encoding="utf-8")
+    with pytest.raises(CutmateError) as e:
+        themes.save_theme("mine")
+    assert "\n" not in str(e.value) and "not a folder" in str(e.value)
+    assert target.read_text(encoding="utf-8") == "not a theme"
+
+
+def test_check_saved_skips_a_draft_of_the_same_name(tmp_path, monkeypatch):
+    _fake_check(monkeypatch, tmp_path)
+    _stamped("x")
+    themes.save_theme("x")
+    themes.new_theme("x")                                    # a new draft that shadows the saved theme
+    assert themes.resolve("x")[1] == "draft"
+    assert themes.resolve("x", saved=True) == (config.home() / "themes" / "x", "user")
+    r = themes.check_theme("x", saved=True)
+    assert r["kind"] == "user" and r["path"] == config.home() / "themes" / "x"
+    assert themes.stamp_ok(config.home() / "themes" / "x") and not themes.stamp_ok(themes.draft_dir("x"))
+
+
+def test_check_theme_changed_during_the_check_is_not_stamped(tmp_path, monkeypatch):
+    _fake_check(monkeypatch, tmp_path)
+    import cutmate.theme_check as tc
+    fake = tc.theme_check
+
+    def editing(theme, *a, **kw):
+        tokens = themes.draft_dir("d") / "tokens.css"
+        tokens.write_text(tokens.read_text(encoding="utf-8") + "\n/* edited mid-check */\n", encoding="utf-8")
+        return fake(theme, *a, **kw)
+    monkeypatch.setattr(tc, "theme_check", editing)
+    themes.new_theme("d")
+    with pytest.raises(CutmateError, match="theme changed during the check — run theme check again"):
+        themes.check_theme("d")
+    assert not themes.stamp_ok(themes.draft_dir("d"))

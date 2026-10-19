@@ -115,7 +115,7 @@ def test_theme_skill_fix_round_1():
     assert "lint checks contrast — fix and re-run" in s3
     assert "replaces an existing draft of that name" in s3
     s5 = _section(md, "## 5.")
-    assert "current theme first" in s5 and "name = 2nd field, path = the rest" in s5
+    assert "current theme first" in s5 and "name = 2nd column, path = 5th" in s5
     s1 = _section(gen, "## 1.", "## 2.")
     assert "font-weight" in s1 and "Anton 400" in s1
 
@@ -298,3 +298,13 @@ def test_theme_check_and_render_prefer_background_and_explain_the_deadline_warn(
         assert "prefer Bash run_in_background: true" in md, name
     for name in ("theme", "edit"):
         assert "WARN hyperframes check ran out of time" in _skill(name), name
+
+
+def test_theme_list_parsing_is_tab_based_and_edit_checks_the_saved_theme():
+    rule = "split on tabs: name = 2nd column, path = 5th"
+    for name in ("theme", "edit"):
+        md = " ".join(_skill(name).split())
+        assert "marker\\tname\\tkind\\tchecked\\tpath" in md and rule in md, name
+        assert "first 2 characters" not in md, name
+    edit = " ".join(_skill("edit").split())
+    assert "kind is not `draft`" in edit and "$CM theme check <theme> --saved" in edit

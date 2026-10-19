@@ -60,8 +60,9 @@ def check_name(name: str) -> None:
         raise CutmateError(f"theme name {name!r} is reserved (bundled theme) — pick another")
 
 
-def resolve(name: str) -> tuple[Path, str]:
-    if THEME_RE.match(str(name)) and (draft_dir(name) / "theme.json").exists():
+def resolve(name: str, saved: bool = False) -> tuple[Path, str]:
+    """The folder and kind of a theme name: a draft wins over a saved / bundled theme of the same name unless `saved`."""
+    if not saved and THEME_RE.match(str(name)) and (draft_dir(name) / "theme.json").exists():
         return draft_dir(name), "draft"
     d = theme_dir(name)
     return d, ("bundled" if d.is_relative_to(plugin_root() / "themes") else "user")
@@ -177,10 +178,11 @@ def theme_hash(path: Path) -> str:
     return h.hexdigest()
 
 
-def write_stamp(path: Path) -> None:
+def write_stamp(path: Path, checked_hash: str | None = None) -> None:
     stamp = Path(path) / "check" / "check.json"
     stamp.parent.mkdir(parents=True, exist_ok=True)
-    stamp.write_text(json.dumps({"hash": theme_hash(path), "hyperframes": HF_VERSION, "formats": STAMP_FORMATS}),
+    h = checked_hash or theme_hash(path)
+    stamp.write_text(json.dumps({"hash": h, "hyperframes": HF_VERSION, "formats": STAMP_FORMATS}),
                      encoding="utf-8")
 
 
@@ -288,6 +290,8 @@ def save_theme(name: str, force: bool = False) -> Path:
 
 
 def _has_other(target: Path) -> bool:
+    if not target.is_dir():
+        raise CutmateError(f"{target} is a file, not a folder — move it away, then save again")
     for child in target.iterdir():
         if child.name != "components":
             return True
@@ -436,14 +440,16 @@ def lint_theme(path: Path, name: str) -> list[str]:
     return problems
 
 
-def check_theme(name: str, clip: Path | None = None, language: str = "pl") -> dict:
-    """Lint + render the theme in both formats, write the sheets and contact.png, stamp drafts / user themes."""
+def check_theme(name: str, clip: Path | None = None, language: str = "pl", saved: bool = False) -> dict:
+    """Lint + render the theme in both formats, write the sheets and contact.png, stamp drafts / user themes.
+    `saved`: check the saved (or bundled) theme even when a draft of the same name exists."""
     import tempfile
     from . import theme_check as tc
-    path, kind = resolve(name)
+    path, kind = resolve(name, saved)
     problems = lint_theme(path, name)
     if problems:
         raise CutmateError(f"theme '{name}' fails lint: " + "; ".join(problems))
+    checked = theme_hash(path)
     out = path / "check" if kind != "bundled" else config.home() / "checks" / name
     out.mkdir(parents=True, exist_ok=True)
     results, sheets = {}, {}
@@ -457,7 +463,9 @@ def check_theme(name: str, clip: Path | None = None, language: str = "pl") -> di
         contact = out / "contact.png"
         _contact_sheet(results, contact)
     if kind != "bundled":
-        write_stamp(path)
+        if theme_hash(path) != checked:
+            raise CutmateError("theme changed during the check — run theme check again")
+        write_stamp(path, checked)
     return {"name": name, "kind": kind, "path": path, "contact": contact, "sheets": sheets}
 
 

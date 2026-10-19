@@ -207,7 +207,11 @@ def test_theme_cli(tmp_path, capsys):
     assert json.loads(capsys.readouterr().out.splitlines()[0])["direction"]["seed"] == 3
     assert main(["theme", "list"]) == 0
     out = capsys.readouterr().out
-    assert any(ln.split()[:3] == ["a", "draft", "unchecked"] for ln in out.splitlines())
+    rows = [ln.split("\t") for ln in out.splitlines()]
+    assert all(len(r) == 5 for r in rows)                    # marker, name, kind, checked, path
+    assert ["-", "a", "draft", "unchecked"] in [r[:4] for r in rows]
+    clean = next(r for r in rows if r[1] == "clean")
+    assert clean[0] == "*" and clean[2:4] == ["bundled", "-"] and clean[4].endswith("clean")
     assert main(["theme", "save", "a"]) == 2
     err = capsys.readouterr().err
     assert err.startswith("cutmate:") and len(err.strip().splitlines()) == 1
@@ -215,3 +219,16 @@ def test_theme_cli(tmp_path, capsys):
     Image.new("RGB", (40, 40), "#336699").save(png)
     assert main(["theme", "colors", str(png), "--n", "2"]) == 0
     assert "#" in capsys.readouterr().out
+
+
+def test_theme_check_cli_saved_flag(monkeypatch, capsys):
+    from cutmate import themes
+    seen = {}
+
+    def fake(name, clip=None, language="pl", saved=False):
+        seen.update(name=name, saved=saved)
+        return {"name": name, "kind": "user", "path": "p", "contact": "c.png", "sheets": {}}
+    monkeypatch.setattr(themes, "check_theme", fake)
+    assert main(["theme", "check", "x", "--saved"]) == 0
+    assert seen == {"name": "x", "saved": True}
+    assert main(["theme", "check", "x"]) == 0 and seen["saved"] is False

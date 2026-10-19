@@ -142,6 +142,7 @@ def _parser() -> argparse.ArgumentParser:
     tck.add_argument("name")
     tck.add_argument("--clip", type=Path, help="use this video as the A-roll instead of the test pattern")
     tck.add_argument("--language", choices=["pl", "en"], default="pl")
+    tck.add_argument("--saved", action="store_true", help="check the saved theme even if a draft has the same name")
     tfo = ts.add_parser("font", help="download an OFL Google Font into a draft (text or display role)")
     tfo.add_argument("name")
     tfo.add_argument("family")
@@ -196,14 +197,15 @@ def _theme_cmd(args) -> int:
         cur = config.load().theme
         for t in themes.list_themes():
             chk = "-" if t["checked"] is None else ("checked" if t["checked"] else "unchecked")
-            print(f"{'* ' if t['name'] == cur and t['kind'] != 'draft' else '  '}{t['name']} {t['kind']} {chk} {t['path']}")
+            mark = "*" if t["name"] == cur and t["kind"] != "draft" else "-"
+            print("\t".join((mark, t["name"], t["kind"], chk, t["path"])))
     elif args.theme_cmd == "use":
         themes.use_theme(args.name)
         print(f"theme: {args.name}")
     elif args.theme_cmd == "save":
         print(themes.save_theme(args.name, args.force))
     elif args.theme_cmd == "check":
-        r = themes.check_theme(args.name, args.clip, args.language)
+        r = themes.check_theme(args.name, args.clip, args.language, args.saved)
         print(f"check passed ({r['kind']}) — contact: {r['contact']}")
         for fmt, p in r["sheets"].items():
             print(f"sheet {fmt}: {p}")

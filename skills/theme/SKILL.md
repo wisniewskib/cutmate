@@ -96,10 +96,9 @@ Then AskUserQuestion "Ustawić jako domyślny?": Tak (polecane) / Nie → Tak: `
 
 ## 5. Zmień aktywny theme
 
-`$CM theme list` → lines `* name kind checked|unchecked|- path` (`*` = current default; kind bundled / user / draft).
-The first 2 characters are the marker column (`* ` or two spaces) — count it as field 1:
-name = 2nd field, path = the rest after the check field (paths may contain spaces on Windows). Cut the 2 marker
-characters before splitting on spaces, since a blank marker disappears in a plain split.
+`$CM theme list` → one tab-separated line per theme: `marker\tname\tkind\tchecked\tpath` (marker `*` = current
+default, `-` = not; kind bundled / user / draft; checked `checked` / `unchecked` / `-`). Always split on tabs: name = 2nd column, path = 5th
+(paths may contain spaces on Windows).
 AskUserQuestion with the bundled and saved themes — current theme first (≤ 4; more themes → the free-text answer
 takes a name). A draft → offer to finish it instead: `generate.md` steps 6–7, then §4.
 - `unchecked` → `$CM theme check <name>` first. Lint errors → one line each; fix them in a draft copy

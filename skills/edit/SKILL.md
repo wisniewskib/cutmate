@@ -12,10 +12,11 @@ the user to run `/cutmate:setup` and stop. Read the config with `$CM config show
 steps.factcheck / qa / thumbnail, music, captions).
 
 **Theme:** the config `theme`. A theme the user names in the chat ("w stylu neon-brutal") wins for this video: pass
-`--theme <name>` to every `$CM build`, `$CM preview` and `$CM thumb`. Find it with `$CM theme list` (lines
-`* name kind checked|unchecked|- path`; the first 2 characters are the marker column — cut them, then name = 1st
-field, path = the rest after the check field; paths may contain spaces on Windows). READ `<path>/frame.md` BEFORE
-writing plan.json. Marked `unchecked` → run `$CM theme check <theme> --language <lang>` once (renders every
+`--theme <name>` to every `$CM build`, `$CM preview` and `$CM thumb`. Find it with `$CM theme list` (one tab-separated
+line per theme: `marker\tname\tkind\tchecked\tpath`; split on tabs: name = 2nd column, path = 5th; paths may contain
+spaces on Windows). Use only rows whose kind is not `draft` (a draft of the same name is unfinished work in
+`/cutmate:theme`). READ `<path>/frame.md` BEFORE writing plan.json. Marked `unchecked` → run
+`$CM theme check <theme> --saved --language <lang>` once (renders every
 component in both formats and reports problems; minutes — prefer Bash run_in_background: true, else Bash timeout
 600000; `WARN hyperframes check ran out of time` = a busy machine, not an error (it goes on)); lint
 errors → tell the user in one line each and offer `/cutmate:theme` or the config theme.
