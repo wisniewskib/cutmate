@@ -47,6 +47,7 @@ SUBCOMP = """<!doctype html>
       el(tag, cls, text, parent) {{ const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; (parent || root).appendChild(e); return e; }},
       counter(el, fmt) {{ const d = {{}}; let v = 0; Object.defineProperty(d, "v", {{ get: () => v, set: (n) => {{ v = n; el.textContent = fmt(n); }} }}); return d; }},
       out(target, t) {{ tl.to(target, {{ opacity: 0, y: -30, duration: 0.2, ease: "power2.in", immediateRender: false }}, Math.max(0, t)); }},
+      seed(n) {{ let a = (n >>> 0) || 1; return () => {{ a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }}; }},
     }}{u_close};
 {script}{fade}
     window.__timelines["{cid}"] = tl;
@@ -453,8 +454,12 @@ def subcomp(cid: str, g: Graphic, host_start: float, theme: Path, assets: Path, 
     if g.type == "custom" and re.search(THREE_MARK, script):
         # hyperframes lint checks each composition for a Three.js import; ours comes from the importmap in index.html
         script = '// import("three") is resolved by the importmap in index.html (U.three)\n' + script
+    style = sec.get("style", "")
+    if W > H:                                            # hyperframes scopes every selector under the composition, so an
+        style = style.replace("html.f169 ROOT", "ROOT")  # `html.f169` ancestor never matches: 16:9 rules apply by build
+    style = style.replace("ROOT", f"#{cid} > .cm-region" if region else f"#{cid}")
     return SUBCOMP.format(lang=lang, cid=cid, w=W, h=H, dur=round(g.end - host_start, 3), root=root, u_open=u_open,
-                          u_close=u_close, fade=fade, style=sec.get("style", "").replace("ROOT", f"#{cid} > .cm-region" if region else f"#{cid}"),
+                          u_close=u_close, fade=fade, style=style,
                           markup=markup, params=_js(P), script=script)
 
 

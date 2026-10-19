@@ -25,7 +25,7 @@ def test_inter_fonts_render_polish():
     for f in ("Inter-Medium.ttf", "Inter-ExtraBold.ttf", "Inter-Black.ttf"):
         font = ImageFont.truetype(str(d / f), 64)
         assert font.getlength("ąęłśżźćńó ĄĘŁŚŻŹĆŃÓ") > 400
-    assert "SIL Open Font License" in (d / "OFL.txt").read_text(encoding="utf-8")
+    assert "SIL Open Font License" in (d / "OFL-inter.txt").read_text(encoding="utf-8")
 
 
 def test_theme_dir_prefers_user_home(tmp_path, monkeypatch):

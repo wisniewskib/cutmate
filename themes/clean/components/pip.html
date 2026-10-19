@@ -1,3 +1,16 @@
+<style>
+ROOT .pip-wrap { position: absolute; inset: 0; opacity: 0; }
+ROOT .pip-media { position: absolute; inset: 0; background: #0b0b0f; overflow: hidden; }
+ROOT .pip-media video { width: 100%; height: 100%; object-fit: contain; }
+ROOT .pip-media .img { position: absolute; inset: 0; background-size: contain; background-position: center; background-repeat: no-repeat; }
+ROOT .pip-media.fit-cover video { object-fit: cover; object-position: top; }
+ROOT .pip-media.fit-cover .img { background-size: cover; background-position: top center; }
+ROOT .pip-face { position: absolute; bottom: 60px; width: 320px; height: 320px; border-radius: 50%; overflow: hidden;
+            border: 8px solid var(--accent); box-shadow: var(--shadow); background: #000; }
+ROOT .pip-face.pip-br { right: 60px; }
+ROOT .pip-face.pip-bl { left: 60px; }
+ROOT .pip-face video { width: 100%; height: 100%; object-fit: cover; }
+</style>
 <markup><div class="pip-wrap"><div class="pip-media fit-{{fit}}">{{media_tag}}</div><div class="pip-face pip-{{corner}}">{{face_tag}}</div></div></markup>
 <script>
 const w = root.querySelector(".pip-wrap"), f = root.querySelector(".pip-face");

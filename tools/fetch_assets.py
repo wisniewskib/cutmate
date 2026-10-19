@@ -70,7 +70,7 @@ def fonts() -> None:
         (dst / want).write_bytes(z.read(src))
         print("font", src)
     lic = next(n for n in names if n.upper().endswith("LICENSE.TXT"))
-    (dst / "OFL.txt").write_bytes(z.read(lic))
+    (dst / "OFL-inter.txt").write_bytes(z.read(lic))
 
 
 def sfx() -> None:

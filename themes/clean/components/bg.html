@@ -1,3 +1,12 @@
+<style>
+ROOT .bg-wrap { position: absolute; inset: 0; opacity: 0; }
+ROOT .bg-back { position: absolute; inset: 0; overflow: hidden; }
+ROOT .bg-back:empty { display: none; }
+ROOT .bg-back video { width: 100%; height: 100%; object-fit: cover; }
+ROOT .bg-back .img { position: absolute; inset: 0; background-size: cover; background-position: center; }
+ROOT .bg-cut { position: absolute; inset: 0; }
+ROOT .bg-cut video { width: 100%; height: 100%; object-fit: cover; }
+</style>
 <markup><div class="bg-wrap"><div class="bg-back fit-cover">{{back_tag}}</div><div class="bg-cut">{{cut_tag}}</div></div></markup>
 <script>
 const w = root.querySelector(".bg-wrap");

@@ -1,3 +1,13 @@
+<style>
+ROOT .split-wrap { position: absolute; left: 0; right: 0; top: 0; height: 900px; }
+ROOT .split-panel { position: absolute; inset: 0; background: #0b0b0f; overflow: hidden; }
+ROOT .split-panel .media { position: absolute; left: 40px; right: 40px; top: 40px; bottom: 40px; border-radius: 28px; overflow: hidden; background: #000; }
+ROOT .split-panel .media video { width: 100%; height: 100%; object-fit: contain; }
+ROOT .split-panel .media .img { position: absolute; inset: 0; background-size: contain; background-position: center; background-repeat: no-repeat; }
+ROOT .split-panel .media.fit-cover video { object-fit: cover; object-position: top; }
+ROOT .split-panel .media.fit-cover .img { background-size: cover; background-position: top center; }
+ROOT .split-edge { position: absolute; left: 0; right: 0; top: 896px; height: 8px; background: var(--accent); }
+</style>
 <markup><div class="split-wrap"><div class="split-panel"><div class="media fit-{{fit}}">{{media_tag}}</div></div><div class="split-edge"></div></div></markup>
 <script>
 const w = root.querySelector(".split-wrap");

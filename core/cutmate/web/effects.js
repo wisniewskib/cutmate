@@ -61,7 +61,8 @@
     // resolves once the theme font is loaded in these weights (text is measured after this)
     U.fonts = function (weights, family) {
       if (typeof document === "undefined" || !document.fonts) return Promise.resolve();
-      return Promise.all((weights || [500, 800, 900]).map((wt) => document.fonts.load(wt + " 10px " + (family || "Inter"))))
+      const fam = family || getComputedStyle(document.documentElement).getPropertyValue("--font").trim() || "Inter";
+      return Promise.all((weights || [500, 800, 900]).map((wt) => document.fonts.load(wt + " 10px " + fam)))
         .catch(() => null);
     };
     U.clock = function (fn) {

@@ -1,3 +1,17 @@
+<style>
+ROOT .ttl { display: block; text-align: center; }
+ROOT .ttl .kicker { display: block; font: 800 40px var(--font); letter-spacing: 0.2em; color: var(--accent); margin-bottom: 24px; text-transform: uppercase; text-shadow: 0 2px 10px rgba(0, 0, 0, 0.6); }
+ROOT .ttl .logo { display: block; height: 120px; margin: 0 auto 24px; }
+ROOT .ttl .title { display: block; max-width: 960px; margin: 0 auto; font: 900 150px/1 var(--font); color: var(--text); text-transform: uppercase; text-shadow: var(--shadow); }
+ROOT .ttl .title.sm { font-size: 120px; }
+ROOT .ttl .title.xs { font-size: 96px; }
+html.f169 ROOT .ttl { text-align: right; }
+html.f169 ROOT .ttl .kicker { font-size: 24px; margin-bottom: 12px; }
+html.f169 ROOT .ttl .logo { height: 72px; margin: 0 0 12px auto; }
+html.f169 ROOT .ttl .title { max-width: 520px; margin: 0 0 0 auto; font-size: 84px; }
+html.f169 ROOT .ttl .title.sm { font-size: 68px; }
+html.f169 ROOT .ttl .title.xs { font-size: 54px; }
+</style>
 <script>
 const band = U.el("div", "band");
 const box = U.el("div", "ttl", null, band);

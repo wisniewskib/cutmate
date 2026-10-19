@@ -695,6 +695,43 @@ def test_2b_user_theme_without_new_components_builds(tmp_path, monkeypatch, caps
     assert any(n.endswith("-custom.html") and "fx-orb" in t for n, t in subs.items())
 
 
+def _old_theme(home: Path) -> None:
+    """A pre-3b user theme: no bg/side components, no custom/, theme.css still holds the (non-bg/side) component rules."""
+    dst = home / "themes" / "old"
+    shutil.copytree(paths.plugin_root() / "themes" / "clean", dst, ignore=shutil.ignore_patterns("bg.html", "side.html", "custom"))
+    fixture = Path(__file__).parent / "fixtures" / "theme_css_2c_no_bg_side.css"
+    (dst / "theme.css").write_text(fixture.read_text(encoding="utf-8"), encoding="utf-8")
+
+
+def test_old_theme_without_bg_side_rules_builds(tmp_path, monkeypatch, capsys):
+    """A pre-3b theme whose theme.css has no .bg-*/.side-* rules still gets them, from clean's self-styled components."""
+    from cutmate.theme_check import _synthetic_rec
+    home = tmp_path / "home"
+    _old_theme(home)
+    monkeypatch.setenv("CUTMATE_HOME", str(home))
+    monkeypatch.setattr(B, "ensure_project", lambda proj, fmt="9:16": (proj.mkdir(parents=True, exist_ok=True),
+                                                                       (proj / "hyperframes.json").write_text("{}")))
+
+    def fake_cut(aroll, a, b, media):
+        (media / "bgcut-x.webm").write_bytes(b"w")
+        return "bgcut-x.webm"
+    monkeypatch.setattr(B, "bg_cutout", fake_cut)
+    out = _synthetic_rec(tmp_path, "16:9")
+    proj = B.build(out, theme="old", captions={"16:9": "both"})["project"]
+    capsys.readouterr()
+    subs = {p.name: p.read_text(encoding="utf-8") for p in (proj / "compositions").glob("gx-*.html")}
+    bg = next(t for n, t in subs.items() if n.endswith("-bg.html"))
+    side = next(t for n, t in subs.items() if n.endswith("-side.html"))
+    assert re.search(r"#gx-[\w-]*-bg \.bg-wrap \{", bg)
+    assert re.search(r"#(gx-[\w-]*-side) \.side-panel\.side-[lr]", side)
+
+
+def test_subcomp_u_has_seed(out169, theme):
+    write_plan(out169, {"graphics": [{"type": "chip", "at": "S2:minus", "text": "X"}]})
+    sub = (B.build(out169, theme=theme)["project"] / "compositions" / "gx-01-chip.html").read_text(encoding="utf-8")
+    assert "seed(n)" in sub
+
+
 def test_custom_effect_assets_folder(out169, theme):
     _fx(out169)
     d = out169 / "custom" / "orb"

@@ -1,3 +1,17 @@
+<style>
+ROOT .bars { width: 100%; background: var(--card); border-radius: 40px; padding: 26px 44px; box-shadow: var(--shadow); font-family: var(--font); color: var(--ink); }
+ROOT .bars .head { display: block; font-weight: 800; font-size: 40px; letter-spacing: 0.14em; color: var(--muted); margin-bottom: 8px; text-transform: uppercase; }
+ROOT .bars .row { display: block; margin: 10px 0; }
+ROOT .bars .lbl { display: flex; justify-content: space-between; font-weight: 800; font-size: 40px; line-height: 1.15; }
+ROOT .bars .track { display: block; height: 28px; background: rgba(15, 23, 42, 0.08); border-radius: 14px; margin-top: 6px; overflow: hidden; }
+ROOT .bars .fill { display: block; height: 100%; width: 100%; background: var(--accent); border-radius: 14px; transform-origin: 0 50%; }
+ROOT .bars .note { display: block; font-weight: 500; font-size: 26px; color: var(--muted); margin-top: 8px; letter-spacing: 0.1em; }
+html.f169 ROOT .bars { border-radius: 28px; padding: 18px 28px; }
+html.f169 ROOT .bars .head { font-size: 24px; }
+html.f169 ROOT .bars .lbl { font-size: 26px; }
+html.f169 ROOT .bars .track { height: 18px; }
+html.f169 ROOT .bars .note { font-size: 18px; }
+</style>
 <script>
 const band = U.el("div", "band");
 const b = U.el("div", "bars", null, band);

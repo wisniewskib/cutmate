@@ -1,3 +1,13 @@
+<style>
+ROOT .list { display: flex; flex-direction: column; gap: 14px; width: 100%; }
+ROOT .list .head { display: block; font: 800 34px var(--font); letter-spacing: 0.2em; color: var(--accent); text-align: center; text-transform: uppercase; text-shadow: 0 2px 10px rgba(0, 0, 0, 0.6); }
+ROOT .list .item { display: block; background: var(--card); color: var(--ink); border-radius: 24px; padding: 16px 30px; font: 800 50px/1.1 var(--font); opacity: 0; }
+ROOT .list .item.sm { font-size: 42px; }
+html.f169 ROOT .list { gap: 10px; }
+html.f169 ROOT .list .head { font-size: 22px; text-align: right; }
+html.f169 ROOT .list .item { border-radius: 16px; padding: 10px 20px; font-size: 30px; }
+html.f169 ROOT .list .item.sm { font-size: 26px; }
+</style>
 <script>
 const band = U.el("div", "band");
 const list = U.el("div", "list", null, band);

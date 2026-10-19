@@ -1,3 +1,16 @@
+<style>
+ROOT .side-panel { position: absolute; top: 60px; width: 840px; height: 960px; border-radius: 28px; overflow: hidden;
+              background: var(--card); box-shadow: var(--shadow); opacity: 0; }
+ROOT .side-panel.side-l { left: 60px; }
+ROOT .side-panel.side-r { left: 1020px; }
+ROOT .side-panel.side-fx { background: transparent; box-shadow: none; }
+ROOT .side-media { position: absolute; inset: 0; }
+ROOT .side-media video { width: 100%; height: 100%; object-fit: contain; }
+ROOT .side-media .img { position: absolute; inset: 0; background-size: contain; background-position: center; background-repeat: no-repeat; }
+ROOT .side-media.fit-cover video { object-fit: cover; }
+ROOT .side-media.fit-cover .img { background-size: cover; }
+ROOT .side-media:empty { display: none; }
+</style>
 <markup><div class="side-panel side-{{side}}"><div class="side-media fit-{{fit}}">{{media_tag}}</div></div></markup>
 <script>
 const p = root.querySelector(".side-panel");

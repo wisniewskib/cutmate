@@ -1,3 +1,10 @@
+<style>
+ROOT .chapter { position: absolute; inset: 0; background: #0b0b0f; display: flex; flex-direction: column; align-items: center;
+           justify-content: center; gap: 28px; opacity: 0; font-family: var(--font); }
+ROOT .chapter .ch-num { font-weight: 800; font-size: 40px; letter-spacing: 0.3em; color: var(--accent); }
+ROOT .chapter .ch-title { max-width: 900px; font-weight: 900; font-size: 96px; line-height: 1.05; color: var(--text); text-align: center; }
+html.f169 ROOT .chapter .ch-title { max-width: 1500px; font-size: 110px; }
+</style>
 <markup><div class="chapter"><span class="ch-num">{{label}}</span><span class="ch-title">{{title}}</span></div></markup>
 <script>
 const c = root.querySelector(".chapter");

@@ -1,3 +1,11 @@
+<style>
+ROOT .card { background: var(--card); color: var(--ink); border-radius: 40px; padding: 36px 56px; box-shadow: var(--shadow); text-align: center; font-family: var(--font); }
+ROOT .card .big { display: block; font-weight: 900; font-size: 190px; line-height: 1; letter-spacing: -4px; }
+ROOT .card .label { display: block; font-weight: 800; font-size: 44px; letter-spacing: 0.12em; color: var(--muted); margin-top: 12px; }
+html.f169 ROOT .card { border-radius: 28px; padding: 22px 36px; }
+html.f169 ROOT .card .big { font-size: 110px; letter-spacing: -2px; }
+html.f169 ROOT .card .label { font-size: 26px; margin-top: 8px; }
+</style>
 <script>
 const band = U.el("div", "band");
 const card = U.el("div", "card", null, band);

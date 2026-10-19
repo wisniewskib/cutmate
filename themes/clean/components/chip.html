@@ -1,3 +1,11 @@
+<style>
+ROOT .chip { display: flex; align-items: center; gap: 24px; max-width: 960px; background: var(--card); color: var(--ink); border-radius: 999px; padding: 24px 48px; font: 800 64px var(--font); box-shadow: var(--shadow); }
+ROOT .chip img { height: 72px; }
+ROOT .chip.sm { font-size: 52px; }
+html.f169 ROOT .chip { max-width: 520px; gap: 16px; padding: 16px 32px; font-size: 40px; }
+html.f169 ROOT .chip img { height: 44px; }
+html.f169 ROOT .chip.sm { font-size: 32px; }
+</style>
 <script>
 const band = U.el("div", "band");
 const c = U.el("div", "chip" + (String(P.text).length > 14 ? " sm" : ""), null, band);
@@ -15,7 +23,7 @@ if (Array.isArray(P.place)) {
     band.style.top = Math.max(z[1], Math.min(z[1] + z[3] - h, P.place[1] - h / 2)) + "px";
   };
   put();
-  const waits = [document.fonts ? document.fonts.load("800 10px Inter") : null, im && im.decode ? im.decode() : null]
+  const waits = [document.fonts ? document.fonts.load("800 10px " + getComputedStyle(c).fontFamily) : null, im && im.decode ? im.decode() : null]
     .map((p) => (p ? p.catch(() => null) : null));
   const hf = (window.__hf = window.__hf || {});
   hf.buildReady = hf.buildReady || {};

@@ -1,6 +1,12 @@
+/* cutmate:font text */
 @font-face { font-family: "Inter"; src: url("fonts/Inter-Medium.ttf") format("truetype"); font-weight: 500; }
 @font-face { font-family: "Inter"; src: url("fonts/Inter-ExtraBold.ttf") format("truetype"); font-weight: 800; }
 @font-face { font-family: "Inter"; src: url("fonts/Inter-Black.ttf") format("truetype"); font-weight: 900; }
+:root { --font: "Inter", sans-serif; }
+/* /cutmate:font text */
+/* cutmate:font display */
+:root { --font-display: "Inter", sans-serif; }
+/* /cutmate:font display */
 :root {
   --accent: #7dd3fc;
   --text: #ffffff;
@@ -8,5 +14,4 @@
   --muted: #475569;
   --card: rgba(255, 255, 255, 0.94);
   --shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
-  --font: "Inter", sans-serif;
 }
