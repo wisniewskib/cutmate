@@ -20,5 +20,23 @@
     "side": [["whoosh", -0.05, 0.3]]
   },
   "hit_sfx": ["impact", 0.3],
-  "direction": {"mode": "bundled", "palette": {"name": "clean", "accent": "#7dd3fc", "text": "#ffffff", "ink": "#0f172a", "card": "#ffffff", "muted": "#475569"}, "fonts": {"display": "Inter", "text": "Inter"}, "shapes": "rounded", "motion": "bouncy", "captions": "shadow"}
+  "direction": {
+    "mode": "bundled",
+    "palette": {
+      "name": "clean",
+      "accent": "#7dd3fc",
+      "on_accent": "#000000",
+      "text": "#ffffff",
+      "ink": "#0f172a",
+      "card": "#ffffff",
+      "muted": "#475569"
+    },
+    "fonts": {
+      "display": "Inter",
+      "text": "Inter"
+    },
+    "shapes": "rounded",
+    "motion": "bouncy",
+    "captions": "shadow"
+  }
 }

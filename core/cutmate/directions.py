@@ -6,31 +6,31 @@ from pathlib import Path
 
 from .errors import CutmateError
 
-# name, accent, text (on video), ink (on cards), card, muted
+# accent doubles as text/border on card (>= 3:1); on_accent is text on an accent fill (>= 4.5:1); ink is text on card.
+# 6 light-card + 6 dark-card palettes, accents spread around the hue wheel.
 PALETTES: list[dict] = [
-    {"name": "acid", "accent": "#c6ff00", "text": "#ffffff", "ink": "#0a0a0a", "card": "#f4f4ee", "muted": "#5c5c52"},
-    {"name": "ember", "accent": "#ff5a1f", "text": "#fff7f0", "ink": "#1a0f0a", "card": "#ffe8d6", "muted": "#7a4a33"},
-    {"name": "mint", "accent": "#2ee6a6", "text": "#f2fffa", "ink": "#06241b", "card": "#d9fbee", "muted": "#3f7a66"},
-    {"name": "bubblegum", "accent": "#ff4fa3", "text": "#ffffff", "ink": "#2b0a1c", "card": "#ffe3f1", "muted": "#8a4468"},
-    {"name": "noir", "accent": "#ffd400", "text": "#ffffff", "ink": "#f5f5f5", "card": "#121212", "muted": "#a0a0a0"},
-    {"name": "ocean", "accent": "#00b4ff", "text": "#f0faff", "ink": "#e8f6ff", "card": "#06263d", "muted": "#8fb8d4"},
-    {"name": "grape", "accent": "#b388ff", "text": "#fbf7ff", "ink": "#f3ecff", "card": "#241040", "muted": "#b9a3de"},
-    {"name": "sand", "accent": "#d9480f", "text": "#fffaf0", "ink": "#2a1d10", "card": "#f3e6cf", "muted": "#7d6a4f"},
-    {"name": "forest", "accent": "#a3e635", "text": "#f5fff0", "ink": "#e9f5df", "card": "#0f2a1a", "muted": "#8fb08f"},
-    {"name": "cherry", "accent": "#ff1744", "text": "#ffffff", "ink": "#ffffff", "card": "#2a0a12", "muted": "#d99aa6"},
-    {"name": "arctic", "accent": "#0057ff", "text": "#ffffff", "ink": "#0b1b3a", "card": "#eaf2ff", "muted": "#5a6f96"},
-    {"name": "sunset", "accent": "#ffb703", "text": "#fff8ec", "ink": "#fff1d6", "card": "#3a1030", "muted": "#e0a8c0"},
-    {"name": "mono", "accent": "#ffffff", "text": "#ffffff", "ink": "#101010", "card": "#e6e6e6", "muted": "#666666"},
-    {"name": "teal-coral", "accent": "#ff6f61", "text": "#f2fffe", "ink": "#e6fbf9", "card": "#0b3b3c", "muted": "#8cc7c4"},
+    {"name": "paper-red", "accent": "#c1121f", "on_accent": "#ffffff", "text": "#ffffff", "ink": "#2b0a0d", "card": "#fdebeb", "muted": "#7a3b40"},
+    {"name": "bubblegum", "accent": "#d6007a", "on_accent": "#ffffff", "text": "#ffffff", "ink": "#2b0a1c", "card": "#ffe3f1", "muted": "#8a4468"},
+    {"name": "arctic", "accent": "#0057ff", "on_accent": "#ffffff", "text": "#ffffff", "ink": "#0b1b3a", "card": "#eaf2ff", "muted": "#5a6f96"},
+    {"name": "mint", "accent": "#00875a", "on_accent": "#000000", "text": "#ffffff", "ink": "#06241b", "card": "#d9fbee", "muted": "#3f7a66"},
+    {"name": "sand", "accent": "#8f4d00", "on_accent": "#ffffff", "text": "#ffffff", "ink": "#2a1d10", "card": "#f3e6cf", "muted": "#7d6a4f"},
+    {"name": "violet", "accent": "#6d28d9", "on_accent": "#ffffff", "text": "#ffffff", "ink": "#1e0f3d", "card": "#f1ebff", "muted": "#6f5a9c"},
+    {"name": "noir", "accent": "#ffd400", "on_accent": "#000000", "text": "#ffffff", "ink": "#f5f5f5", "card": "#121212", "muted": "#a0a0a0"},
+    {"name": "lime", "accent": "#8dff3a", "on_accent": "#000000", "text": "#ffffff", "ink": "#e9f5df", "card": "#0f2a1a", "muted": "#8fb08f"},
+    {"name": "ocean", "accent": "#00c8ff", "on_accent": "#000000", "text": "#ffffff", "ink": "#e8f6ff", "card": "#06263d", "muted": "#8fb8d4"},
+    {"name": "magenta", "accent": "#ff3df0", "on_accent": "#000000", "text": "#ffffff", "ink": "#f6e9ff", "card": "#1c0a2e", "muted": "#b79ad6"},
+    {"name": "coral", "accent": "#ff6f61", "on_accent": "#000000", "text": "#ffffff", "ink": "#e6fbf9", "card": "#0b3b3c", "muted": "#8cc7c4"},
+    {"name": "periwinkle", "accent": "#8c9eff", "on_accent": "#000000", "text": "#ffffff", "ink": "#eceeff", "card": "#10143a", "muted": "#9aa3d9"},
 ]
 
 # (display, text) - OFL Google families with Latin-Extended (Polish) glyphs
 FONT_PAIRS: list[tuple[str, str]] = [
-    ("Anton", "Inter"), ("Bebas Neue", "Manrope"), ("Archivo Black", "Archivo"),
-    ("Space Grotesk", "Space Grotesk"), ("Syne", "Inter"), ("Unbounded", "Manrope"),
-    ("Bricolage Grotesque", "Inter"), ("DM Serif Display", "DM Sans"),
+    ("Anton", "Inter"), ("Oswald", "Lato"), ("Archivo Black", "Archivo"),
+    ("Space Grotesk", "Manrope"), ("Syne", "Rubik"), ("Unbounded", "Manrope"),
+    ("Bricolage Grotesque", "DM Sans"), ("DM Serif Display", "DM Sans"),
     ("Playfair Display", "Source Sans 3"), ("Fraunces", "Work Sans"),
-    ("Oswald", "Lato"), ("Big Shoulders Display", "Rubik"),
+    ("Space Mono", "Space Grotesk"), ("Caveat", "Lato"),
+    ("Lilita One", "Rubik"), ("Bangers", "Manrope"),
 ]
 
 SHAPES: dict[str, str] = {
@@ -58,7 +58,7 @@ CAPTIONS: dict[str, str] = {
 
 CLEAN: dict = {
     "mode": "bundled",
-    "palette": {"name": "clean", "accent": "#7dd3fc", "text": "#ffffff", "ink": "#0f172a",
+    "palette": {"name": "clean", "accent": "#7dd3fc", "on_accent": "#000000", "text": "#ffffff", "ink": "#0f172a",
                 "card": "#ffffff", "muted": "#475569"},
     "fonts": {"display": "Inter", "text": "Inter"},
     "shapes": "rounded",
@@ -97,11 +97,10 @@ def contrast(a: str, b: str) -> float:
 def roll(seed: int, avoid: list[dict] = ()) -> dict:
     """Deterministic random direction; palette, display font, shapes and motion differ from clean and from `avoid`."""
     rng = random.Random(seed)
-    banned = [CLEAN, *avoid]
 
-    def clash(pal, fonts, shapes, motion) -> bool:
+    def clash(banned, pal, fonts, shapes, motion) -> bool:
         for d in banned:
-            if (d.get("palette") or {}).get("name") == pal["name"] and "palette" in d:
+            if "palette" in d and (d["palette"] or {}).get("name") == pal["name"]:
                 return True
             if (d.get("fonts") or {}).get("display") == fonts[0]:
                 return True
@@ -109,19 +108,24 @@ def roll(seed: int, avoid: list[dict] = ()) -> dict:
                 return True
         return False
 
-    for _ in range(500):
-        pal = rng.choice(PALETTES)
-        fonts = rng.choice(FONT_PAIRS)
-        shapes = rng.choice(list(SHAPES))
-        motion = rng.choice(list(MOTION))
-        captions = rng.choice(list(CAPTIONS))
-        if clash(pal, fonts, shapes, motion):
-            continue
-        return {"mode": "random", "seed": seed, "palette": dict(pal),
-                "fonts": {"display": fonts[0], "text": fonts[1]},
-                "shapes": shapes, "motion": motion, "captions": captions,
-                "hints": {"shapes": SHAPES[shapes], "motion": MOTION[motion], "captions": CAPTIONS[captions]}}
-    raise CutmateError("no fresh style left to roll - too many themes to differ from; pass a different seed or fewer themes")
+    # Strict: differ from clean and every avoided theme. If that is exhausted (many themes), relax to
+    # clean + the most recent avoided one so users with lots of themes still get a roll.
+    for banned in ([CLEAN, *avoid], [CLEAN, *list(avoid)[-1:]]):
+        for _ in range(500):
+            pal = rng.choice(PALETTES)
+            fonts = rng.choice(FONT_PAIRS)
+            shapes = rng.choice(list(SHAPES))
+            motion = rng.choice(list(MOTION))
+            captions = rng.choice(list(CAPTIONS))
+            if clash(banned, pal, fonts, shapes, motion):
+                continue
+            return {"mode": "random", "seed": seed, "palette": dict(pal),
+                    "fonts": {"display": fonts[0], "text": fonts[1]},
+                    "shapes": shapes, "motion": motion, "captions": captions,
+                    "hints": {"shapes": SHAPES[shapes], "motion": MOTION[motion], "captions": CAPTIONS[captions]}}
+        if len(avoid) <= 1:
+            break
+    raise CutmateError("no fresh style left - drop some --avoid themes or pick custom")
 
 
 def suggest_name(direction: dict, taken: set[str]) -> str:
