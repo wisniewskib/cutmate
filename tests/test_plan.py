@@ -719,3 +719,10 @@ def test_density_long_last_segment_tail_capped(tmp_path):
                                   {"type": "chip", "at": 30.0, "until": 34.0, "text": "CTA"}], timed)
     w = _density(load_plan(out).warnings)
     assert "WARN density: bare face 10.0–29.0 s (19.0 s) — add a graphic, b-roll or chip (frame.md: max 4 s in 9:16)" in w
+
+
+def test_density_coverage_clamps_spans_to_the_video():
+    from cutmate.plan import _density
+    # unclamped the spans sum to 46 s of a 20 s video (no warning); on screen are only 0–5 s and 19–20 s (30 %)
+    w = _density([(-20.0, 5.0), (19.0, 40.0)], 20.0, "9:16", 19.0)
+    assert "WARN density: visuals on screen 30 % (frame.md: ≥ 50 %)" in w

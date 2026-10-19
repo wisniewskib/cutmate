@@ -383,6 +383,7 @@ def _density(spans: list[tuple[float, float]], end: float, fmt: str, last_start:
     if end < MIN_CHECK:
         return []
     lo, hi = HOOK, end - min(end - last_start, CTA_TAIL)
+    spans = [(max(0.0, a), min(end, b)) for a, b in spans if min(end, b) > max(0.0, a)]  # only what is on screen
     merged = []
     for a, b in sorted(spans):
         if merged and a <= merged[-1][1]:

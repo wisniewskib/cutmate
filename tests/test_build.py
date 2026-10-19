@@ -922,3 +922,18 @@ def test_checkpoint_is_shared():
     g2 = Graphic("list", 1.0, 3.2, hit=False, sfx=None, index=0, params={"items": [{"text": "a", "at": 3.0}]})
     assert checkpoint(g2) == 3.15
     assert checkpoint(Graphic("title", 2.0, 4.0, params={}, hit=False, sfx=None, index=0)) == 2.4
+
+
+@pytest.mark.parametrize("fmt", ["9:16", "16:9"])
+def test_f169_component_rules_built_per_format(fmt, request):
+    """clean's chip carries `html.f169 ROOT .chip {…}` 16:9 overrides: a 16:9 build turns them into plain `#<cid> .chip {`
+    (hyperframes scopes every selector under the composition, so an `html.f169` ancestor would never match); a 9:16 build
+    keeps the `html.f169 #<cid>` form (inert there)."""
+    o = request.getfixturevalue("out169" if fmt == "16:9" else "out")
+    write_plan(o, {"graphics": [{"type": "chip", "at": "S2:minus", "text": "X"}]})
+    sub = (B.build(o, theme="clean")["project"] / "compositions" / "gx-01-chip.html").read_text(encoding="utf-8")
+    cid = re.search(r'data-composition-id="([^"]+)"', sub).group(1)
+    if fmt == "16:9":
+        assert f"#{cid} .chip {{" in sub and "html.f169" not in sub
+    else:
+        assert f"html.f169 #{cid} .chip {{" in sub
