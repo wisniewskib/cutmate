@@ -1,5 +1,6 @@
 import json
 import re
+from pathlib import Path
 
 import pytest
 import requests
@@ -52,6 +53,35 @@ def test_set_font_display():
         assert (d / "fonts" / f).exists()
     assert "https://" not in css
     assert r["family"] == "Anton" and r["role"] == "display" and "Anton-900.ttf" in r["files"]
+
+
+@responses.activate
+def test_new_from_pre3b_theme_then_display_font():
+    from conftest import make_pre3b_theme
+    make_pre3b_theme("old")
+    themes.new_theme("x", base="old")
+    d = themes.draft_dir("x")
+    _mock_family("Anton", (400, 900))
+    fonts.set_font(d, "Anton", "display")
+    css = _tokens(d)
+    assert '--font-display: "Anton"' in css and '--font: "Inter"' in css
+    assert (d / "fonts" / "Inter-Medium.ttf").exists() and (d / "fonts" / "Anton-900.ttf").exists()
+    tj = json.loads((d / "theme.json").read_text(encoding="utf-8"))
+    assert tj["direction"]["fonts"] == {"display": "Anton", "text": "Inter"}
+    assert themes.lint_theme(d, "x") == []
+
+
+@responses.activate
+def test_set_font_migrates_tokens_without_blocks(tmp_path):
+    """A hand-copied pre-3b theme folder (no cutmate:font blocks) is migrated by set_font itself."""
+    from conftest import make_pre3b_theme
+    d = make_pre3b_theme("old")
+    _mock_family("Manrope", (400, 500, 800))
+    fonts.set_font(d, "Manrope", "text")
+    css = _tokens(d)
+    assert '--font: "Manrope"' in css and '--font-display: "Manrope"' in css
+    assert css.count("/* cutmate:font text */") == 1 and css.count("/* cutmate:font display */") == 1
+    assert not any(p.name.startswith("Inter-") for p in (d / "fonts").iterdir())
 
 
 @responses.activate
@@ -183,3 +213,10 @@ def test_font_pairs_download(tmp_path):
         except (CutmateError, AssertionError) as e:
             bad.append(f"{fam}: {e}")
     assert not bad, bad
+
+
+def test_migrate_pre3b_clean_tokens_gives_the_3b_layout():
+    old = Path(__file__).parent / "fixtures" / "pre3b_clean" / "tokens.css"
+    new = fonts.migrate_tokens(old.read_text(encoding="utf-8"))
+    assert new == (plugin_root() / "themes" / "clean" / "tokens.css").read_text(encoding="utf-8")
+    assert fonts.migrate_tokens(new) == new

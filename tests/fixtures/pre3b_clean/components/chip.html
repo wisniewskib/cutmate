@@ -1,0 +1,26 @@
+<script>
+const band = U.el("div", "band");
+const c = U.el("div", "chip" + (String(P.text).length > 14 ? " sm" : ""), null, band);
+let im = null;
+if (P.logo || P.icon) { im = U.el("img", null, null, c); im.src = P.logo || P.icon; }
+U.el("span", null, P.text, c);
+if (Array.isArray(P.place)) {
+  // place: gesture: centre the chip on the pointed spot (frame px), kept inside the safe zone P.safe [x, y, w, h];
+  // measured again once the font (and logo) have loaded, before the first frame is taken
+  const z = P.safe || [0, 0, 1e9, 1e9];
+  Object.assign(band.style, { right: "auto", height: "auto" });
+  const put = () => {
+    const w = c.offsetWidth, h = c.offsetHeight;
+    band.style.left = Math.max(z[0], Math.min(z[0] + z[2] - w, P.place[0] - w / 2)) + "px";
+    band.style.top = Math.max(z[1], Math.min(z[1] + z[3] - h, P.place[1] - h / 2)) + "px";
+  };
+  put();
+  const waits = [document.fonts ? document.fonts.load("800 10px Inter") : null, im && im.decode ? im.decode() : null]
+    .map((p) => (p ? p.catch(() => null) : null));
+  const hf = (window.__hf = window.__hf || {});
+  hf.buildReady = hf.buildReady || {};
+  hf.buildReady[root.id] = Promise.all([hf.buildReady[root.id], ...waits]).then(put);
+}
+tl.fromTo(c, { opacity: 0, y: 40, scale: 0.9 }, { opacity: 1, y: 0, scale: 1, duration: 0.3, ease: "back.out(2)" }, P.at);
+U.out(band, P.end - 0.2);
+</script>

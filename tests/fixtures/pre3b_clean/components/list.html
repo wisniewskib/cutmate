@@ -1,0 +1,13 @@
+<script>
+const band = U.el("div", "band");
+const list = U.el("div", "list", null, band);
+if (P.head) {
+  const h = U.el("div", "head", P.head, list);
+  tl.fromTo(h, { opacity: 0 }, { opacity: 1, duration: 0.2 }, Math.min(...P.items.map((it) => it.at)));
+}
+P.items.forEach((it) => {
+  const e = U.el("div", "item" + (String(it.text).length > 22 ? " sm" : ""), it.text, list);
+  tl.fromTo(e, { opacity: 0, x: -60 }, { opacity: 1, x: 0, duration: 0.25, ease: "power3.out" }, it.at);
+});
+U.out(band, P.end - 0.2);
+</script>

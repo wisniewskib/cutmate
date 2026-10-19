@@ -1,0 +1,6 @@
+<markup><div class="bg-wrap"><div class="bg-back fit-cover">{{back_tag}}</div><div class="bg-cut">{{cut_tag}}</div></div></markup>
+<script>
+const w = root.querySelector(".bg-wrap");
+tl.fromTo(w, { opacity: 0 }, { opacity: 1, duration: 0.3, ease: "power2.out" }, P.at);
+tl.to(w, { opacity: 0, duration: 0.3, ease: "power2.in", immediateRender: false }, Math.max(P.at + 0.3, P.end - 0.3));
+</script>

@@ -37,3 +37,21 @@ def isolated_cutmate_home(tmp_path, monkeypatch):
 @pytest.fixture
 def clip(tmp_path):
     return make_clip(tmp_path / "rec" / "take1.mp4")
+
+
+def make_pre3b_theme(name: str = "old") -> Path:
+    """A user theme copied from the frozen pre-3b clean (tests/fixtures/pre3b_clean + the bundled Inter files): no
+    `--font-display`, no `cutmate:font` blocks, no theme.json `direction`, fonts/OFL.txt."""
+    import shutil
+    from cutmate import config
+    from cutmate.paths import plugin_root
+    dst = config.home() / "themes" / name
+    shutil.copytree(Path(__file__).parent / "fixtures" / "pre3b_clean", dst)
+    fonts = plugin_root() / "themes" / "clean" / "fonts"
+    (dst / "fonts").mkdir()
+    for p in fonts.glob("Inter-*.ttf"):
+        shutil.copyfile(p, dst / "fonts" / p.name)
+    shutil.copyfile(fonts / "OFL-inter.txt", dst / "fonts" / "OFL.txt")
+    frame = dst / "frame.md"
+    frame.write_text(frame.read_text(encoding="utf-8").replace("name: clean", f"name: {name}", 1), encoding="utf-8")
+    return dst

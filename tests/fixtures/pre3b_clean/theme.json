@@ -1,0 +1,23 @@
+{
+  "name": "clean",
+  "accent": "#7dd3fc",
+  "fonts": {"text": "Inter-Medium.ttf", "bold": "Inter-ExtraBold.ttf", "black": "Inter-Black.ttf"},
+  "sfx": {
+    "title": [["whoosh", -0.05, 0.35]],
+    "counter": [["pop", 0.0, 0.35], ["ping", 0.65, 0.3]],
+    "list": [],
+    "custom": [],
+    "list.item": [["click", 0.0, 0.35]],
+    "chip": [["pop", 0.0, 0.3]],
+    "stamp": [["impact", 0.0, 0.4]],
+    "bars": [["whoosh", -0.05, 0.3]],
+    "point": [["pop", 0.0, 0.3]],
+    "split": [["whoosh", -0.05, 0.35]],
+    "pip": [["whoosh", -0.05, 0.3]],
+    "lower-third": [["pop", 0.0, 0.25]],
+    "chapter": [["swell", -0.2, 0.3]],
+    "bg": [["swell", -0.2, 0.3]],
+    "side": [["whoosh", -0.05, 0.3]]
+  },
+  "hit_sfx": ["impact", 0.3]
+}

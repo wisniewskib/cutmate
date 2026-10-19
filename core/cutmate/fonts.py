@@ -104,6 +104,51 @@ def _nearest(files: dict[int, Path], target: int) -> int:
     return min(files, key=lambda w: (abs(w - target), w))
 
 
+_FACE_RULE = re.compile(r"[ \t]*@font-face\s*\{[^}]*\}[ \t]*\n?")
+
+
+def _decl(var: str) -> re.Pattern:
+    return re.compile(rf"[ \t]*(?<![\w-]){re.escape(var)}\s*:\s*([^;}}]+);?[ \t]*\n?")
+
+
+def migrate_tokens(css: str) -> str:
+    """A pre-3b tokens.css (no `cutmate:font` blocks, maybe no --font-display) → the 3b layout: the @font-face rules and
+    `--font` wrapped into a text block, and a display block (`--font-display`, the text family when it had none).
+    Already-migrated text, or text with no `--font` to wrap, is returned unchanged."""
+    blocks = []
+    if not _block_re("text").search(css):
+        if not _decl("--font").search(css):
+            return css
+        faces = "".join(m.group(0).strip() + "\n" for m in _FACE_RULE.finditer(css))
+        css = _FACE_RULE.sub("", css)
+        value = _decl("--font").search(css).group(1).strip()
+        css = _decl("--font").sub("", css, count=1)
+        blocks.append(_block("text", f"{faces}:root {{ --font: {value}; }}"))
+    if not _block_re("display").search(css):
+        m = _decl("--font-display").search(css)
+        if m:
+            value = m.group(1).strip()
+            css = _decl("--font-display").sub("", css, count=1)
+        else:
+            tm = re.search(r"(?<![\w-])--font\s*:\s*([^;}]+)", "".join(blocks) or css)
+            value = tm.group(1).strip() if tm else '"Inter", sans-serif'
+        blocks.append(_block("display", f":root {{ --font-display: {value}; }}"))
+    if not blocks:
+        return css
+    css = re.sub(r":root\s*\{\s*\}\s*\n?", "", css)                # a :root left empty by the moves
+    return "\n".join(blocks) + "\n" + css.lstrip("\n")
+
+
+def migrate_theme(theme_path: Path) -> None:
+    """Bring a pre-3b theme folder's tokens.css to the 3b font-block layout (no-op when it already is)."""
+    tokens = Path(theme_path) / "tokens.css"
+    if tokens.is_file():
+        css = tokens.read_text(encoding="utf-8")
+        new = migrate_tokens(css)
+        if new != css:
+            tokens.write_text(new, encoding="utf-8")
+
+
 def set_font(theme_path: Path, family: str, role: str) -> dict:
     if role not in ROLES:
         raise CutmateError(f"unknown font role {role!r} (text or display)")
@@ -114,6 +159,7 @@ def set_font(theme_path: Path, family: str, role: str) -> dict:
         n = len(_block_re(r).findall(css))
         if n > 1:
             raise CutmateError(f"tokens.css has {n} 'cutmate:font {r}' blocks — keep one")
+    css = migrate_tokens(css)                                # a pre-3b theme: wrap its fonts into the blocks first
     if not _block_re(role).search(css):
         raise CutmateError(f"tokens.css has no cutmate:font {role} block — cannot set the font")
     fonts_dir = theme_path / "fonts"

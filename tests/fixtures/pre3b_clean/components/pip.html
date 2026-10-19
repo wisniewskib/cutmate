@@ -1,0 +1,7 @@
+<markup><div class="pip-wrap"><div class="pip-media fit-{{fit}}">{{media_tag}}</div><div class="pip-face pip-{{corner}}">{{face_tag}}</div></div></markup>
+<script>
+const w = root.querySelector(".pip-wrap"), f = root.querySelector(".pip-face");
+tl.fromTo(w, { opacity: 0, scale: 1.04 }, { opacity: 1, scale: 1, duration: 0.35, ease: "power2.out" }, P.at);
+tl.fromTo(f, { scale: 0 }, { scale: 1, duration: 0.35, ease: "back.out(2)" }, P.at + 0.15);
+tl.to(w, { opacity: 0, duration: 0.3, ease: "power2.in", immediateRender: false }, Math.max(P.at + 0.5, P.end - 0.3));
+</script>

@@ -1,0 +1,12 @@
+<script>
+const POS = { tl: { left: "60px", top: "240px" }, tr: { right: "60px", top: "240px" },
+              bl: { left: "60px", top: "340px" }, br: { right: "60px", top: "340px" } };
+const ORIGIN = { tl: "0% 0%", tr: "100% 0%", bl: "0% 100%", br: "100% 100%" };
+const p = U.el("div", "point");
+Object.assign(p.style, POS[P.corner]);
+p.style.transformOrigin = ORIGIN[P.corner];
+const s = U.el("div", "shot", null, p);
+s.style.backgroundImage = "url('" + P.image + "')";
+tl.fromTo(p, { opacity: 0, scale: 0.4 }, { opacity: 1, scale: 1, duration: 0.3, ease: "back.out(2)" }, P.at);
+U.out(p, P.end - 0.2);
+</script>

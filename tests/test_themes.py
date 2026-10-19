@@ -382,13 +382,37 @@ def test_lint_display_font_inter_is_rejected(how):
     assert themes.LOOKS_CLEAN in themes.lint_theme(d, "r")
 
 
-def test_lint_draft_without_direction_is_a_problem():
+def test_lint_pre3b_user_theme_is_legacy_and_ok():
+    """A theme copied from the pre-3b clean (no direction, no --font-display, no font blocks) still passes lint."""
+    from conftest import make_pre3b_theme
+    d = make_pre3b_theme("old")
+    tj = json.loads((d / "theme.json").read_text(encoding="utf-8"))
+    assert "direction" not in tj and "--font-display" not in (d / "tokens.css").read_text(encoding="utf-8")
+    assert themes.lint_theme(d, "old") == []
+
+
+def test_lint_theme_with_direction_still_needs_font_display():
     themes.new_theme("d")
     d = themes.draft_dir("d")
-    tj = json.loads((d / "theme.json").read_text(encoding="utf-8"))
-    del tj["direction"]
-    (d / "theme.json").write_text(json.dumps(tj), encoding="utf-8")
-    assert any("no direction" in p for p in themes.lint_theme(d, "d"))
+    css = (d / "tokens.css").read_text(encoding="utf-8")
+    (d / "tokens.css").write_text(css.replace("--font-display", "--font-x"), encoding="utf-8")
+    assert "tokens.css lacks --font-display" in themes.lint_theme(d, "d")
+
+
+def test_new_from_pre3b_theme_migrates_font_blocks():
+    from conftest import make_pre3b_theme
+    make_pre3b_theme("old")
+    themes.new_theme("x", base="old")
+    d = themes.draft_dir("x")
+    css = (d / "tokens.css").read_text(encoding="utf-8")
+    assert css.count("/* cutmate:font text */") == 1 and css.count("/* cutmate:font display */") == 1
+    text = re.search(r"/\* cutmate:font text \*/(.*?)/\* /cutmate:font text \*/", css, re.S).group(1)
+    disp = re.search(r"/\* cutmate:font display \*/(.*?)/\* /cutmate:font display \*/", css, re.S).group(1)
+    assert text.count("@font-face") == 3 and '--font: "Inter", sans-serif' in text
+    assert '--font-display: "Inter", sans-serif' in disp
+    assert css.count("@font-face") == 3 and len(re.findall(r"(?<![\w-])--font\s*:", css)) == 1
+    assert json.loads((d / "theme.json").read_text(encoding="utf-8"))["direction"] == {"mode": "custom"}
+    assert themes.lint_theme(d, "x") == []
 
 
 def test_contact_sheet_missing_look_tile_names_the_type(tmp_path, monkeypatch):

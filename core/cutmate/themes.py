@@ -16,6 +16,7 @@ from .build import _SECTION, _sections, _theme_meta
 from .directions import CLEAN, contrast, palette_of, roll, suggest_name  # noqa: F401  (palette_of: used by the CLI)
 from .effects import FORBIDDEN, THEME_RE
 from .errors import CutmateError
+from .fonts import migrate_theme
 from .hf import HF_VERSION
 from .paths import assets_dir, plugin_root, theme_dir
 from .plan import TYPES
@@ -138,6 +139,7 @@ def new_theme(name: str | None, base: str = "clean", mode: str = "custom", seed:
     try:
         shutil.copytree(src, tmp, ignore=_ignoring(src, "", "check"))
         _rmtree(tmp / "components" / "custom")
+        migrate_theme(tmp)                                   # a pre-3b base: font blocks + --font-display
         old = tmp / "fonts" / "OFL.txt"
         if old.exists():
             old.replace(tmp / "fonts" / "OFL-inter.txt")
@@ -349,10 +351,16 @@ def lint_theme(path: Path, name: str) -> list[str]:
     problems: list[str] = []
     tokens = _read(path / "tokens.css")
     css = _read(path / "theme.css")
+    try:
+        raw = json.loads(_read(path / "theme.json") or "")
+    except ValueError:
+        raw = None
+    legacy = isinstance(raw, dict) and "direction" not in raw   # a pre-3b theme: --font-display falls back to --font
     if tokens is None:
         problems.append("tokens.css missing")
     else:
-        problems += [f"tokens.css lacks {t}" for t in REQUIRED_TOKENS if _token(tokens, t) is None]
+        problems += [f"tokens.css lacks {t}" for t in REQUIRED_TOKENS if _token(tokens, t) is None
+                     and not (legacy and t == "--font-display")]
         for rel in dict.fromkeys(re.findall(r"url\(\s*[\"']?(fonts/[^\"')]+)", tokens)):
             if not (path / rel).is_file():
                 problems.append(f"tokens.css points to missing {rel}")
@@ -412,8 +420,9 @@ def lint_theme(path: Path, name: str) -> list[str]:
     m = re.search(r"(?m)^name:\s*(\S+)", (frame or "").partition("\n---\n")[0]) if frame else None
     if not m or m.group(1) != name:
         problems.append(f"frame.md name is {m.group(1) if m else 'missing'}, expected {name}")
-    if meta is not None and not direction and not path.resolve().is_relative_to((plugin_root() / "themes").resolve()):
-        problems.append("theme.json has no direction — recreate it with cutmate theme new")
+    if meta is not None and not legacy and not direction \
+            and not path.resolve().is_relative_to((plugin_root() / "themes").resolve()):
+        problems.append("theme.json direction is not a valid object — recreate it with cutmate theme new")
     if direction.get("mode") in ("random", "clone"):
         need = DIRECTION_KEYS + (("sources",) if direction["mode"] == "clone" else ())
         problems += [f"direction lacks {k}" for k in need if not direction.get(k)]

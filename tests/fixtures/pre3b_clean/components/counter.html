@@ -1,0 +1,20 @@
+<script>
+const band = U.el("div", "band");
+const card = U.el("div", "card", null, band);
+const n = U.el("span", "big", null, card);
+U.el("span", "label", P.label, card);
+const dec = (String(P.to).split(".")[1] || "").length;
+const pl = P.lang === "pl";
+const fmt = (v) => {
+  const fixed = v.toFixed(dec);
+  const [i, f] = fixed.replace("-", "").split(".");
+  const neg = fixed.startsWith("-") && Number(fixed) !== 0;
+  return (P.prefix || "") + (neg ? "-" : "") + i.replace(/\B(?=(\d{3})+(?!\d))/g, pl ? "\u00a0" : ",")
+    + (f ? (pl ? "," : ".") + f : "") + (P.suffix || "");
+};
+n.textContent = fmt(0);
+const cv = U.counter(n, fmt);
+tl.fromTo(card, { opacity: 0, scale: 0.7 }, { opacity: 1, scale: 1, duration: 0.3, ease: "back.out(2)" }, P.at);
+tl.fromTo(cv, { v: 0 }, { v: P.to, duration: 0.6, ease: "expo.out" }, P.at + 0.05);
+U.out(band, P.end - 0.2);
+</script>
