@@ -220,3 +220,43 @@ def test_migrate_pre3b_clean_tokens_gives_the_3b_layout():
     new = fonts.migrate_tokens(old.read_text(encoding="utf-8"))
     assert new == (plugin_root() / "themes" / "clean" / "tokens.css").read_text(encoding="utf-8")
     assert fonts.migrate_tokens(new) == new
+
+
+def test_has_glyphs_on_a_non_font_is_a_one_line_error(tmp_path):
+    p = tmp_path / "x.ttf"
+    p.write_bytes(b"<html>rate limited</html>")
+    with pytest.raises(CutmateError) as e:
+        fonts.has_glyphs(p)
+    assert "\n" not in str(e.value) and "not a valid font" in str(e.value)
+
+
+@responses.activate
+def test_set_font_corrupt_download_is_a_one_line_error():
+    themes.new_theme("mine")
+    d = themes.draft_dir("mine")
+    before = _tokens(d)
+    responses.add(responses.GET, fonts.OFL_URL.format(slug="anton"), body="OFL text", status=200)
+    for w in fonts.WEIGHTS:
+        url = f"{fonts.CSS2}?family=Anton:wght@{w}"
+        responses.add(responses.GET, url, body=_css(w) if w == 400 else "no", status=200 if w == 400 else 400)
+    responses.add(responses.GET, GSTATIC, body=b"<html>not a font</html>", status=200)
+    with pytest.raises(CutmateError, match="not a valid font"):
+        fonts.set_font(d, "Anton", "display")
+    assert _tokens(d) == before and not (d / "fonts" / "Anton-400.ttf").exists()
+
+
+@responses.activate
+def test_set_font_locked_old_file_is_a_one_line_error(monkeypatch):
+    themes.new_theme("mine")
+    d = themes.draft_dir("mine")
+    _mock_family("Manrope", (400, 500, 800))
+    real = Path.unlink
+
+    def locked(self, *a, **kw):
+        if self.name.startswith("Inter-"):
+            raise PermissionError(13, "The process cannot access the file", str(self))
+        return real(self, *a, **kw)
+    monkeypatch.setattr(Path, "unlink", locked)
+    with pytest.raises(CutmateError) as e:
+        fonts.set_font(d, "Manrope", "text")
+    assert "\n" not in str(e.value) and "close programs using it" in str(e.value)

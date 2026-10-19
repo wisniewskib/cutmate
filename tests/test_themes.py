@@ -520,3 +520,23 @@ def test_check_theme_changed_during_the_check_is_not_stamped(tmp_path, monkeypat
     with pytest.raises(CutmateError, match="theme changed during the check — run theme check again"):
         themes.check_theme("d")
     assert not themes.stamp_ok(themes.draft_dir("d"))
+
+
+def test_check_clip_without_video_is_a_one_line_error(tmp_path, monkeypatch):
+    from conftest import make_wav
+    _fake_check(monkeypatch, tmp_path)
+    themes.new_theme("d")
+    wav = make_wav(tmp_path / "voice.wav")
+    with pytest.raises(CutmateError) as e:
+        themes.check_theme("d", clip=wav)
+    assert str(e.value) == f"clip has no video stream: {wav}"
+    assert not themes.stamp_ok(themes.draft_dir("d"))
+
+
+def test_theme_check_clip_without_video_stops_before_building(tmp_path):
+    from conftest import make_wav
+    from cutmate.theme_check import theme_check
+    wav = make_wav(tmp_path / "voice.wav")
+    with pytest.raises(CutmateError, match="clip has no video stream"):
+        theme_check("clean", tmp_path / "w", clip=wav)
+    assert not (tmp_path / "w").exists()

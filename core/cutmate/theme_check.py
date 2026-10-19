@@ -164,6 +164,15 @@ def snapshot_times(graphics: list, checkpoints: list[float]) -> tuple[list[float
     return cps, [(t, *named.get(t, ("other", "settled"))) for t in cps]
 
 
+def require_video(clip: Path) -> None:
+    """A --clip must exist and carry a video stream (it becomes the A-roll)."""
+    if not Path(clip).is_file():
+        raise CutmateError(f"clip not found: {clip}")
+    r = run(["ffprobe", "-v", "error", "-select_streams", "v", "-show_entries", "stream=index", "-of", "csv=p=0", clip])
+    if not r.stdout.strip():
+        raise CutmateError(f"clip has no video stream: {clip}")
+
+
 def theme_check(theme: str = "clean", workdir: Path | None = None, language: str = "pl", fmt: str = "9:16",
                 clip: Path | None = None) -> dict:
     """Build the synthetic video, run `hyperframes check`, snapshot it and tile the sheet.
@@ -171,6 +180,8 @@ def theme_check(theme: str = "clean", workdir: Path | None = None, language: str
     Snapshots: every graphic settled (build.checkpoint), the middle of each custom effect, and the entrance
     (start + 0.1 s) of every LOOK component. `labels` = [(t, type, "entrance" | "settled" | "mid")], aligned with
     `snapshots`."""
+    if clip is not None:
+        require_video(clip)
     root = Path(workdir) if workdir else Path(tempfile.mkdtemp(prefix="cutmate-theme-"))
     out = _synthetic_rec(root, fmt, clip)
     r = build(out, theme=theme, language=language, captions={"16:9": "both"})

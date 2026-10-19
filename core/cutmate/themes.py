@@ -449,6 +449,8 @@ def check_theme(name: str, clip: Path | None = None, language: str = "pl", saved
     problems = lint_theme(path, name)
     if problems:
         raise CutmateError(f"theme '{name}' fails lint: " + "; ".join(problems))
+    if clip is not None:
+        tc.require_video(clip)
     checked = theme_hash(path)
     out = path / "check" if kind != "bundled" else config.home() / "checks" / name
     out.mkdir(parents=True, exist_ok=True)

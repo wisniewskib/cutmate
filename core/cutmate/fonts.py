@@ -2,6 +2,7 @@
 import json
 import re
 import shutil
+import struct
 import tempfile
 from pathlib import Path
 
@@ -76,14 +77,18 @@ def download_family(family: str, dest: Path) -> dict:
 
 def has_glyphs(path: Path, chars: str = POLISH) -> bool:
     try:
-        from fontTools.ttLib import TTFont
+        from fontTools.ttLib import TTFont, TTLibError
     except ImportError as e:
         raise CutmateError("fonttools missing — re-run /cutmate:setup (step 4)") from e
-    font = TTFont(str(path), lazy=True)
     try:
-        cmap = font.getBestCmap() or {}
-    finally:
-        font.close()
+        font = TTFont(str(path), lazy=True)
+        try:
+            cmap = font.getBestCmap() or {}
+        finally:
+            font.close()
+    except (TTLibError, OSError, ValueError, KeyError, struct.error, AssertionError) as e:
+        raise CutmateError(f"downloaded {Path(path).name} is not a valid font ({' '.join(str(e).split())[:120]}) — "
+                           "try again or pick another font") from None
     return all(ord(c) in cmap for c in chars)
 
 
@@ -165,7 +170,7 @@ def set_font(theme_path: Path, family: str, role: str) -> dict:
     fonts_dir = theme_path / "fonts"
     fonts_dir.mkdir(exist_ok=True)
     files: dict[int, Path] = {}
-    moved = False
+    moved = done = False
     try:
         with tempfile.TemporaryDirectory(prefix="cutmate-font-", ignore_cleanup_errors=True) as tmp:
             got = download_family(family, Path(tmp))
@@ -211,18 +216,25 @@ def set_font(theme_path: Path, family: str, role: str) -> dict:
             if other_family:
                 df[other] = other_family
         tj_path.write_text(json.dumps(tj, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        done = True
     finally:
         if moved:
-            _prune(fonts_dir, tokens.read_text(encoding="utf-8"))
+            try:
+                _prune(fonts_dir, tokens.read_text(encoding="utf-8"))
+            except CutmateError:
+                if done:                                     # never hide the error that stopped set_font
+                    raise
     return {"family": family, "role": role, "files": [p.name for _, p in sorted(files.items())]}
 
 
 def _prune(fonts_dir: Path, css: str) -> None:
     used = set(_FACE_FILE.findall(css))
     keep_lic = {f"OFL-{slug(f)}.txt" for f in _FACE_FAMILY.findall(css)}
-    for p in fonts_dir.glob("*.ttf"):
-        if p.name not in used:
+    old = [p for p in fonts_dir.glob("*.ttf") if p.name not in used]
+    old += [p for p in fonts_dir.glob("OFL-*.txt") if p.name not in keep_lic]
+    for p in old:
+        try:
             p.unlink()
-    for p in fonts_dir.glob("OFL-*.txt"):
-        if p.name not in keep_lic:
-            p.unlink()
+        except OSError as e:
+            raise CutmateError(f"cannot delete the old font file {p} ({' '.join(str(e).split())}) — "
+                               "close programs using it and retry") from None
