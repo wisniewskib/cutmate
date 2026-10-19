@@ -237,3 +237,13 @@ def test_skill_puts_effects_on_every_gesture():
     for s in ("**Every gesture gets an effect.**", "open / presenting palm", "clear index-finger point",
               "every 0.25 s", "never cover the face", "hand-sparks", "anchor it on the GESTURE", "no hand-shape data"):
         assert s in md, s
+
+
+def test_clone_skill_download_rules():
+    md = _skill("clone-style")
+    assert md.startswith("---\nname: clone-style\ndescription: ")
+    for s in ("only after", "yt-dlp --no-playlist", "--cookies", "--cookies-from-browser", "never sign in", "screenshots",
+              "${CUTMATE_HOME:-$HOME/.cutmate}/clone/", "$CM sheet", "$CM theme colors", "Co widzę", "--mode clone",
+              "generate.md", "never copied"):
+        assert s in md, s
+    check_cli_calls(md)

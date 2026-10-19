@@ -1,0 +1,113 @@
+---
+name: clone-style
+description: Turn a style source (a reel / video link, a local video, screenshots, a folder) into a cutmate theme that looks like it — palette, fonts, shapes, captions and motion read from the frames, then built, checked side by side with the source and saved. Use when the user runs /cutmate:clone-style or says "zrób theme jak u …" / "chcę styl jak w tej rolce".
+---
+
+# /cutmate:clone-style
+
+Rules:
+- Talk to the user in their language (config `language`). Replies short: the action first, a few lines.
+- Ask EVERY question with **AskUserQuestion** (≤ 4 options per question, the recommended option first and marked
+  "(polecane)"), never as an A/B/C text list. The labels below are Polish; translate them to the user's language, keep
+  the mapping.
+- Set the CLI once per session (setup venv first, so a dev `cutmate` on PATH never shadows it):
+  `CM="$(ls "${CUTMATE_HOME:-$HOME/.cutmate}/venv/bin/cutmate" "${CUTMATE_HOME:-$HOME/.cutmate}/venv/Scripts/cutmate.exe" 2>/dev/null | head -1)"; [ -n "$CM" ] || CM="$(command -v cutmate)"`;
+  if it doesn't run, tell the user to run `/cutmate:setup` and stop.
+- The theme must LOOK like the source — same palette, font character, corners, caption style and motion — but it is
+  our own work: logos, watermarks, handles, the source's text, its images and its artwork are never copied into the
+  theme (not as files, not traced into SVG, not as sample text). Fonts only through `$CM theme font` (OFL Google
+  Fonts).
+- Work files go to the clone dir `${CUTMATE_HOME:-$HOME/.cutmate}/clone/<name>/` (`<name>` = the theme name you
+  pick in §1). Quote every path (spaces on Windows).
+- Any failing command: one line with the cause + the fix.
+
+## 1. Sources
+
+Take them from the arguments; none → AskUserQuestion "Skąd wziąć styl?": Link do rolki / filmu (polecane) / Plik
+wideo / Screenshoty / Folder → then the free-text answer gives the link or the path(s).
+Pick a working `<name>` now (the look, not the creator's brand: e.g. `neon-pill`; letters, digits, `_`, `-`) and
+`mkdir -p "${CUTMATE_HOME:-$HOME/.cutmate}/clone/<name>"`.
+
+- **Local files / folders** — read them as they are, nothing is copied: videos (`.mp4 .mov .mkv .webm`) → §2,
+  images (`.png .jpg .jpeg .webp`) → READ each one. A folder → list it and take both kinds.
+- **A URL** — AskUserQuestion "Pobrać <url> (yt-dlp, tylko do analizy stylu)?": **Tak (polecane)** / **Nie, dam
+  screenshoty** (→ ask for screenshots or a local file and continue with those). Download only after Tak:
+  1. `yt-dlp --version` (Git Bash on Windows finds `yt-dlp.exe` the same way). Missing → the user installs it himself
+     (`pipx install yt-dlp`; Windows also `winget install yt-dlp`; macOS `brew install yt-dlp`) and says when — or
+     gives screenshots / a local file instead. Never install it for him.
+  2. `yt-dlp --no-playlist -o "${CUTMATE_HOME:-$HOME/.cutmate}/clone/<name>/%(id)s.%(ext)s" "<url>"`, then
+     `ls "${CUTMATE_HOME:-$HOME/.cutmate}/clone/<name>"` for the file name.
+  - Never pass `--cookies`, `--cookies-from-browser`, `--username`, `--password` or `--netrc`; never sign in and never
+    ask for a login. Public content only.
+  - A login / private / age-gate / rate-limit / "unavailable" error → one line with the cause, then ask for screenshots
+    (3–6 frames with the graphics and captions on screen) or a local file. Do not retry with other options.
+
+## 2. Look
+
+Let `CL="${CUTMATE_HOME:-$HOME/.cutmate}/clone/<name>"`.
+
+Videos (each source video, max ~60 s per video — use `--end 60` for longer ones):
+1. `$CM sheet "<video>" -o "$CL/sheet.png" --step 0.5` → it prints the sheet path(s) (more than 48 frames →
+   `sheet_01.png`, `sheet_02.png` …). READ every sheet. Note when graphics enter (the tile labels are seconds).
+2. Motion: for 2–3 graphic entrances (a title, a number, a sticker / chip):
+   `$CM sheet "<video>" -o "$CL/motion-<t>.png" --step 0.1 --start <t-0.3> --end <t+0.9>` and READ — how it enters
+   (slide / scale / slam / glitch / typewriter / fade), how fast (frames to settle), the ease (overshoot, hard stop).
+3. Full-size stills for the font and the side-by-side check (sheets are small): 2–4 frames where graphics or
+   captions are on screen, `ffmpeg -nostdin -v error -ss <t> -i "<video>" -frames:v 1 "$CL/frame-<t>.png"`; READ them.
+
+Colours: `$CM theme colors "$CL"/frame-*.png "<screenshots…>" --n 12` → hex + share lines. Skin, walls and
+the room dominate; take the accent / card / text colours from what you SEE on the graphics and captions and use the
+list to get exact hex values.
+
+Screenshots only: READ them, `$CM theme colors` on them, and say that motion is guessed from the look (no video).
+
+## 3. Co widzę
+
+Tell the user what you see — ≤ 8 lines, concrete:
+- **Paleta:** accent, card, text, ink, muted as hex (+ which is on accent fills).
+- **Fonty:** category (condensed grotesk, rounded sans, serif, mono, handwritten …), weight, case → the closest OFL
+  Google family with Polish letters (ą ę ł ń ó ś ź ż) for display and for text. The original font only if it is OFL.
+- **Kształty:** corners (sharp / rounded / pill), borders, shadows, strips, tilts.
+- **Napisy:** position, case, words per page, box / outline / shadow, key-word colour.
+- **Ruch:** entrances, speed, ease.
+- **Gęstość grafik:** how often graphics appear and how big they are.
+
+AskUserQuestion "Zgadza się?": **Zgadza się (polecane)** / **Popraw** (the user says what → change it, show the
+lines again only if much changed).
+
+## 4. Build
+
+1. `$CM theme new <name> --mode clone` (prints JSON with `path`). `WARN theme <name> exists` → ask now, as in
+   `/cutmate:theme` §3 step 4 (its §4 overwrite question; Nowa nazwa → `$CM theme new` again with the new name).
+2. Write the direction into the draft's `theme.json`:
+   `"direction": {"mode": "clone", "sources": […], "palette": {name, accent, on_accent, text, ink, card, muted},
+   "fonts": {"display": …, "text": …}, "shapes": …, "motion": …, "captions": …, "hints": {…}}`.
+   - `sources` = short descriptions only, e.g. `"instagram reel <url>"`, `"local video reel.mp4"`, `"3 screenshots"` —
+     never file contents, frames or text from the source.
+   - `shapes` (sharp / pill / outline / brutal / tape), `motion` (snappy / smooth / glitch / typewriter / slam),
+     `captions` (boxed / highlight / outline / shadow) = the closest values; `hints` = what makes this source itself
+     (e.g. `"title": "yellow slab, black kicker bar, tilted 2°"`, `"motion": "fast slide from left, small overshoot"`).
+   - Contrast: `ink` on `card` ≥ 4.5, `on_accent` on `accent` ≥ 4.5 — nudge the source colours if needed.
+3. Follow `${CLAUDE_PLUGIN_ROOT}/skills/theme/generate.md` with this draft. Build the look from the hints, not just the
+   recipe of the closest value. In its step 7 (quality bar) also compare with the source:
+   READ `check/contact.png` of the draft side by side with the source frames (`$CL/frame-*.png`, the motion sheets,
+   the screenshots) and go through:
+   - palette — the same colours in the same roles (what is accent, what is the card);
+   - font character — weight, width, case, serif or not;
+   - corners and shapes — radius, borders, shadows, tilts, strips;
+   - captions — position, case, box / outline, key-word colour;
+   - motion — the entrance row matches the source's entrances (direction, speed, overshoot).
+   Fix what differs in the `generate.md` step it belongs to and re-check, until a viewer would say "same style". Max 3
+   rounds; what still differs goes into the §5 summary.
+
+## 5. Decision and save
+
+Exactly as `${CLAUDE_PLUGIN_ROOT}/skills/theme/SKILL.md` §4 (Decision): send `contact.png` with 2–3 lines (plus one
+line on how close it is to the source), then AskUserQuestion "Jak ci się podoba?": **Biorę (polecane)** / **Popraw
+coś** (instead of Losuj: ask what, fix it in its `generate.md` step, re-check, compare with the source again, back
+here) / **Anuluj**. Biorę → `$CM theme save <name>` with the same overwrite rules, then "Ustawić jako domyślny?" →
+`$CM theme use <name>`.
+
+The clone dir `${CUTMATE_HOME:-$HOME/.cutmate}/clone/<name>/` (download, sheets, frames) is never part of the theme;
+logos, text and images of the source are never copied into it. At the end tell the user the clone dir path in one
+line — they can delete it.
