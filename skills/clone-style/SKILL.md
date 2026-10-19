@@ -30,13 +30,17 @@ Pick a working `<name>` now (the look, not the creator's brand: e.g. `neon-pill`
 
 - **Local files / folders** — read them as they are, nothing is copied: videos (`.mp4 .mov .mkv .webm`) → §2,
   images (`.png .jpg .jpeg .webp`) → READ each one. A folder → list it and take both kinds.
-- **A URL** — AskUserQuestion "Pobrać <url> (yt-dlp, tylko do analizy stylu)?": **Tak (polecane)** / **Nie, dam
-  screenshoty** (→ ask for screenshots or a local file and continue with those). Download only after Tak:
+- **A URL** — AskUserQuestion naming the source, e.g. "Pobrać jeden film z <site> (<url>) przez yt-dlp — tylko do
+  analizy stylu, ~ kilkadziesiąt MB, zostaje w folderze clone?": **Tak (polecane)** / **Nie, dam screenshoty** (→ ask
+  for screenshots or a local file and continue with those). Nothing runs before Tak (not even `yt-dlp --version`);
+  download only after Tak:
   1. `yt-dlp --version` (Git Bash on Windows finds `yt-dlp.exe` the same way). Missing → the user installs it himself
      (`pipx install yt-dlp`; Windows also `winget install yt-dlp`; macOS `brew install yt-dlp`) and says when — or
      gives screenshots / a local file instead. Never install it for him.
-  2. `yt-dlp --no-playlist -o "${CUTMATE_HOME:-$HOME/.cutmate}/clone/<name>/%(id)s.%(ext)s" "<url>"`, then
-     `ls "${CUTMATE_HOME:-$HOME/.cutmate}/clone/<name>"` for the file name.
+  2. `yt-dlp --no-playlist --ignore-config -S "vcodec:h264,res:1080" -o "${CUTMATE_HOME:-$HOME/.cutmate}/clone/<name>/%(id)s.%(ext)s" "<url>"`,
+     then `ls "${CUTMATE_HOME:-$HOME/.cutmate}/clone/<name>"` for the file name. `--ignore-config` keeps the user's
+     yt-dlp config (which may hold cookies or a login) out; `-S` prefers H.264 up to 1080p (ffmpeg decodes it, the
+     file stays small).
   - Never pass `--cookies`, `--cookies-from-browser`, `--username`, `--password` or `--netrc`; never sign in and never
     ask for a login. Public content only.
   - A login / private / age-gate / rate-limit / "unavailable" error → one line with the cause, then ask for screenshots
@@ -46,10 +50,13 @@ Pick a working `<name>` now (the look, not the creator's brand: e.g. `neon-pill`
 
 Let `CL="${CUTMATE_HOME:-$HOME/.cutmate}/clone/<name>"`.
 
+Budget: at most 2 source videos and 4 sheets read in total (overview + motion sheets together; the stills and
+screenshots don't count). More videos given → AskUserQuestion which 2 to use (the free-text answer names them).
+
 Videos (each source video, max ~60 s per video — use `--end 60` for longer ones):
 1. `$CM sheet "<video>" -o "$CL/sheet.png" --step 0.5` → it prints the sheet path(s) (more than 48 frames →
-   `sheet_01.png`, `sheet_02.png` …). READ every sheet. Note when graphics enter (the tile labels are seconds).
-2. Motion: for 2–3 graphic entrances (a title, a number, a sticker / chip):
+   `sheet_01.png`, `sheet_02.png` …). READ them within the budget (the first 1–2 of a video). Note when graphics enter (the tile labels are seconds).
+2. Motion: for 1–2 graphic entrances (a title, a number, a sticker / chip — as many as the budget leaves):
    `$CM sheet "<video>" -o "$CL/motion-<t>.png" --step 0.1 --start <t-0.3> --end <t+0.9>` and READ — how it enters
    (slide / scale / slam / glitch / typewriter / fade), how fast (frames to settle), the ease (overshoot, hard stop).
 3. Full-size stills for the font and the side-by-side check (sheets are small): 2–4 frames where graphics or
@@ -90,8 +97,11 @@ lines again only if much changed).
    - Contrast: `ink` on `card` ≥ 4.5, `on_accent` on `accent` ≥ 4.5 — nudge the source colours if needed.
 3. Follow `${CLAUDE_PLUGIN_ROOT}/skills/theme/generate.md` with this draft. Build the look from the hints, not just the
    recipe of the closest value. In its step 7 (quality bar) also compare with the source:
-   READ `check/contact.png` of the draft side by side with the source frames (`$CL/frame-*.png`, the motion sheets,
-   the screenshots) and go through:
+   build ONE composite image per comparison and READ that image (two separate images are hard to compare):
+   `ffmpeg -nostdin -v error -y -i "<draft path>/check/contact.png" -i "<source still>" -filter_complex "[0:v]scale=-2:1080[a];[1:v]scale=-2:1080[b];[a][b]hstack=inputs=2" "$CL/side-by-side.png"`
+   (`<draft path>` = `path` from `$CM theme new`; `<source still>` = a `$CL/frame-<t>.png` or a screenshot).
+   For motion, the same command with a motion sheet as the second input → `$CL/side-by-side-motion.png`, and compare
+   the entrance row (top row of contact.png) pairwise with the source's entrance frames. Then go through:
    - palette — the same colours in the same roles (what is accent, what is the card);
    - font character — weight, width, case, serif or not;
    - corners and shapes — radius, borders, shadows, tilts, strips;

@@ -247,3 +247,19 @@ def test_clone_skill_download_rules():
               "generate.md", "never copied"):
         assert s in md, s
     check_cli_calls(md)
+
+
+def test_clone_skill_fix_round_1():
+    md = _skill("clone-style")
+    lines = re.findall(r"yt-dlp --no-playlist[^`\n]*", md)
+    assert lines
+    for line in lines:
+        assert "--ignore-config" in line and '-S "vcodec:h264,res:1080"' in line, line
+        for bad in ("--cookies", "--cookies-from-browser", "--username", "--password", "--netrc"):
+            assert bad not in line, (bad, line)
+    src = _section(md, "## 1.", "## 2.")
+    assert "jeden film" in src and "kilkadziesiąt MB" in src and "Nothing runs before Tak" in src
+    look = _section(md, "## 2.", "## 3.")
+    assert "at most 2 source videos" in look and "4 sheets" in look
+    build = _section(md, "## 4.", "## 5.")
+    assert "hstack" in build and "side-by-side.png" in build and "entrance row" in build
