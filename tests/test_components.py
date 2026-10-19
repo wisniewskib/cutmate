@@ -28,12 +28,12 @@ def test_split_uses_media_tag():
 
 
 @pytest.mark.hf
-@pytest.mark.parametrize("fmt, n", [("9:16", 19), ("16:9", 23)])
+@pytest.mark.parametrize("fmt, n", [("9:16", 25), ("16:9", 29)])
 def test_theme_check_clean(tmp_path, fmt, n):
     from PIL import Image
     from cutmate.theme_check import theme_check
     r = theme_check("clean", tmp_path, fmt=fmt)
-    assert r["sheet"].exists() and len(r["snapshots"]) == n
+    assert r["sheet"].exists() and len(r["snapshots"]) == n and len(r["labels"]) == n
     w, h = Image.open(r["snapshots"][0]).size
     assert (w > h) == (fmt == "16:9")
 
@@ -47,7 +47,7 @@ def test_theme_check_old_theme_169(tmp_path, monkeypatch):
     monkeypatch.setenv("CUTMATE_HOME", str(tmp_path / "home"))
     _old_theme(tmp_path / "home")
     r = theme_check("old", tmp_path / "work", fmt="16:9")
-    assert r["sheet"].exists() and len(r["snapshots"]) == 23
+    assert r["sheet"].exists() and len(r["snapshots"]) == 29
 
 
 def test_theme_css_is_frame_only():

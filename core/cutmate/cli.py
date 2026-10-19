@@ -138,6 +138,10 @@ def _parser() -> argparse.ArgumentParser:
     tsv = ts.add_parser("save", help="move a checked draft into your themes")
     tsv.add_argument("name")
     tsv.add_argument("--force", action="store_true")
+    tck = ts.add_parser("check", help="lint a theme, render it in both formats and stamp it (the gate before save)")
+    tck.add_argument("name")
+    tck.add_argument("--clip", type=Path, help="use this video as the A-roll instead of the test pattern")
+    tck.add_argument("--language", choices=["pl", "en"], default="pl")
     tcl = ts.add_parser("colors", help="dominant colours of images")
     tcl.add_argument("images", nargs="+", type=Path)
     tcl.add_argument("--n", type=_min_one_int, default=8)
@@ -194,6 +198,11 @@ def _theme_cmd(args) -> int:
         print(f"theme: {args.name}")
     elif args.theme_cmd == "save":
         print(themes.save_theme(args.name, args.force))
+    elif args.theme_cmd == "check":
+        r = themes.check_theme(args.name, args.clip, args.language)
+        print(f"check passed ({r['kind']}) — contact: {r['contact']}")
+        for fmt, p in r["sheets"].items():
+            print(f"sheet {fmt}: {p}")
     elif args.theme_cmd == "colors":
         for hex_, share in themes.palette_of(args.images, args.n):
             print(f"{hex_}  {round(share * 100)}%")

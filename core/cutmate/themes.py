@@ -11,13 +11,22 @@ import time
 from pathlib import Path
 
 from . import config
-from .directions import CLEAN, palette_of, roll, suggest_name  # noqa: F401  (palette_of: used by the CLI)
-from .effects import THEME_RE
+from .build import _SECTION, _sections, _theme_meta
+from .directions import CLEAN, contrast, palette_of, roll, suggest_name  # noqa: F401  (palette_of: used by the CLI)
+from .effects import FORBIDDEN, THEME_RE
 from .errors import CutmateError
 from .hf import HF_VERSION
-from .paths import plugin_root, theme_dir
+from .paths import assets_dir, plugin_root, theme_dir
+from .plan import TYPES
+from .theme_check import LOOK
 
 STAMP_FORMATS = ["9:16", "16:9"]
+REQUIRED_TOKENS = ("--accent", "--text", "--ink", "--muted", "--card", "--shadow", "--font", "--font-display")
+FRAME_SELECTORS = ("#captions", ".cw", ".band")
+COMPONENTS = tuple(t for t in TYPES if t != "custom") + ("chapter",)
+DIRECTION_KEYS = ("palette", "fonts", "shapes", "motion", "captions")
+_HEX = re.compile(r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
+LOOKS_CLEAN = "looks like clean with new colours — restyle the look components (shapes, motion) and set a display font"
 
 
 def _themes_root() -> Path:
@@ -278,3 +287,152 @@ def _has_other(target: Path) -> bool:
         if child.is_dir() and any(c.name != "custom" for c in child.iterdir()):
             return True
     return False
+
+
+def _token(tokens: str, name: str) -> str | None:
+    m = re.search(rf"(?<![\w-]){re.escape(name)}\s*:\s*([^;}}]+)", tokens)
+    return m.group(1).strip() if m else None
+
+
+def _norm(text: str) -> str:
+    return " ".join(text.split())
+
+
+def _read(path: Path) -> str | None:
+    try:
+        return Path(path).read_text(encoding="utf-8")
+    except (OSError, ValueError):
+        return None
+
+
+def lint_theme(path: Path, name: str) -> list[str]:
+    """Everything wrong with a theme folder, as short problems (empty list = clean)."""
+    path = Path(path)
+    problems: list[str] = []
+    tokens = _read(path / "tokens.css")
+    css = _read(path / "theme.css")
+    if tokens is None:
+        problems.append("tokens.css missing")
+    else:
+        problems += [f"tokens.css lacks {t}" for t in REQUIRED_TOKENS if _token(tokens, t) is None]
+        for rel in dict.fromkeys(re.findall(r"url\(\s*[\"']?(fonts/[^\"')]+)", tokens)):
+            if not (path / rel).is_file():
+                problems.append(f"tokens.css points to missing {rel}")
+    if css is None:
+        problems.append("theme.css missing")
+    else:
+        problems += [f"theme.css lacks the {s} rule" for s in FRAME_SELECTORS if s not in css]
+    texts = {"tokens.css": tokens or "", "theme.css": css or ""}
+    for t in COMPONENTS:
+        f = path / "components" / f"{t}.html"
+        text = _read(f)
+        if text is None:
+            problems.append(f"component {t} missing")
+            continue
+        texts[f"components/{t}.html"] = text
+        script = dict(_SECTION.findall(text)).get("script")
+        if script is None:
+            problems.append(f"{t}: no <script> section")
+            continue
+        if "tl." not in script:
+            problems.append(f"{t}: script never uses tl. (no timeline animation)")
+        problems += [f"{t}: uses {api} (not allowed)" for api in FORBIDDEN if api in script]
+    for extra in sorted((path / "components").glob("*.html")):
+        texts.setdefault(f"components/{extra.name}", _read(extra) or "")
+    problems += [f"{rel}: has an http(s) link (themes must work offline)" for rel, text in texts.items()
+                 if re.search(r"https?://", text)]
+    meta = None
+    try:
+        meta = _theme_meta(path)
+    except CutmateError as e:
+        problems.append(f"theme.json invalid ({' '.join(str(e).split())[-120:]})")
+    if meta is not None:
+        fonts = meta.get("fonts") if isinstance(meta.get("fonts"), dict) else {}
+        for k in ("text", "bold", "black"):
+            if not fonts.get(k) or not (path / "fonts" / str(fonts[k])).is_file():
+                problems.append(f"theme.json fonts.{k} file {fonts.get(k)!r} missing in fonts/")
+        acc = _token(tokens or "", "--accent")
+        if acc and str(meta.get("accent", "")).lower() != acc.lower():
+            problems.append(f"theme.json accent {meta.get('accent')!r} differs from tokens.css --accent {acc}")
+        try:
+            known = set(json.loads((assets_dir() / "sfx" / "manifest.json").read_text(encoding="utf-8")))
+        except (OSError, ValueError):
+            known = set()
+        used = [e[0] for lst in meta["sfx"].values() if isinstance(lst, list) for e in lst
+                if isinstance(e, list) and e] + [meta["hit_sfx"][0]]
+        problems += [f"unknown sound effect {n!r}" for n in dict.fromkeys(used) if known and n not in known]
+    ink, card, acc = (_token(tokens or "", k) for k in ("--ink", "--card", "--accent"))
+    if ink and card and _HEX.match(ink) and _HEX.match(card) and contrast(ink, card) < 4.5:
+        problems.append(f"contrast of --ink on --card is {contrast(ink, card):.1f} (needs 4.5)")
+    direction = (meta or {}).get("direction") if isinstance((meta or {}).get("direction"), dict) else {}
+    on_acc = (direction.get("palette") or {}).get("on_accent") if isinstance(direction.get("palette"), dict) else None
+    if on_acc and acc and _HEX.match(str(on_acc)) and _HEX.match(acc) and contrast(on_acc, acc) < 4.5:
+        problems.append(f"palette on_accent {on_acc} on --accent {acc} has contrast {contrast(on_acc, acc):.1f} (needs 4.5)")
+    frame = _read(path / "frame.md")
+    m = re.search(r"(?m)^name:\s*(\S+)", (frame or "").partition("\n---\n")[0]) if frame else None
+    if not m or m.group(1) != name:
+        problems.append(f"frame.md name is {m.group(1) if m else 'missing'}, expected {name}")
+    if direction.get("mode") in ("random", "clone"):
+        need = DIRECTION_KEYS + (("sources",) if direction["mode"] == "clone" else ())
+        problems += [f"direction lacks {k}" for k in need if not direction.get(k)]
+        clean = plugin_root() / "themes" / "clean" / "components"
+        same = sum(1 for t in LOOK if _norm(_read(path / "components" / f"{t}.html") or "")
+                   == _norm(_read(clean / f"{t}.html") or "x"))
+        fam = re.match(r"\s*[\"']?([^\"',]+)", _token(tokens or "", "--font-display") or "")
+        if len(LOOK) - same < 5 or (fam and fam.group(1).strip().lower() == "inter"):
+            problems.append(LOOKS_CLEAN)
+    return problems
+
+
+def check_theme(name: str, clip: Path | None = None, language: str = "pl") -> dict:
+    """Lint + render the theme in both formats, write the sheets and contact.png, stamp drafts / user themes."""
+    import tempfile
+    from . import theme_check as tc
+    path, kind = resolve(name)
+    problems = lint_theme(path, name)
+    if problems:
+        raise CutmateError(f"theme '{name}' fails lint: " + "; ".join(problems))
+    out = path / "check" if kind != "bundled" else config.home() / "checks" / name
+    out.mkdir(parents=True, exist_ok=True)
+    results, sheets = {}, {}
+    with tempfile.TemporaryDirectory(prefix="cutmate-check-") as tmp:
+        for fmt in STAMP_FORMATS:
+            r = tc.theme_check(str(path), Path(tmp) / fmt.replace(":", "x"), language, fmt, clip)
+            dst = out / f"sheet-{fmt.replace(':', 'x')}.png"
+            shutil.copyfile(r["sheet"], dst)
+            sheets[fmt] = dst
+            results[fmt] = r
+        contact = out / "contact.png"
+        _contact_sheet(results, contact)
+    if kind != "bundled":
+        write_stamp(path)
+    return {"name": name, "kind": kind, "path": path, "contact": contact, "sheets": sheets}
+
+
+def _contact_sheet(results: dict, dest: Path) -> None:
+    """Width 1620: 9:16 entrance row + settled row of the LOOK components (6 x 270x480), 16:9 settled row (6 x 270x152)."""
+    from PIL import Image, ImageDraw
+
+    def pick(r, kind):
+        by = {}
+        for p, (_, ty, k) in zip(r["snapshots"], r["labels"]):
+            if k == kind and ty in LOOK:
+                by.setdefault(ty, p)
+        return by
+    rows = [("entrance", results["9:16"], (270, 480)), ("settled", results["9:16"], (270, 480)),
+            ("settled", results["16:9"], (270, 152))]
+    height = sum(sz[1] for _, _, sz in rows)
+    sheet = Image.new("RGB", (270 * len(LOOK), height), "black")
+    draw = ImageDraw.Draw(sheet)
+    y = 0
+    for kind, r, (w, h) in rows:
+        found = pick(r, kind)
+        for i, ty in enumerate(LOOK):
+            if ty in found:
+                with Image.open(found[ty]) as im:
+                    sheet.paste(im.convert("RGB").resize((w, h)), (i * 270, y))
+            label = f"{ty} {kind}"
+            draw.rectangle((i * 270, y, i * 270 + 8 * len(label) + 8, y + 16), fill="black")
+            draw.text((i * 270 + 4, y + 2), label, fill="white")
+        y += h
+    sheet.save(dest)

@@ -912,3 +912,13 @@ def test_split_explainer_params_media_copied(out, theme):
     proj = B.build(out, theme=theme)["project"]
     P = _P((proj / "compositions" / "gx-02-custom.html").read_text(encoding="utf-8"))
     assert P["media"].startswith("assets/media/") and (proj / P["media"]).exists() and P["value"] == 75
+
+
+def test_checkpoint_is_shared():
+    from cutmate.build import checkpoint
+    from cutmate.plan import Graphic
+    g = Graphic("list", 1.0, 6.0, hit=False, sfx=None, index=0, params={"items": [{"text": "a", "at": 1.5}, {"text": "b", "at": 3.0}]})
+    assert checkpoint(g) == 3.4
+    g2 = Graphic("list", 1.0, 3.2, hit=False, sfx=None, index=0, params={"items": [{"text": "a", "at": 3.0}]})
+    assert checkpoint(g2) == 3.15
+    assert checkpoint(Graphic("title", 2.0, 4.0, params={}, hit=False, sfx=None, index=0)) == 2.4

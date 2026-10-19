@@ -13,7 +13,7 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw
 
-from .build import build
+from .build import build, checkpoint
 from .errors import CutmateError
 from .hf import hf
 from .media import run
@@ -85,6 +85,7 @@ tl.fromTo(dot, { x: 0 }, { x: P.w, duration: Math.max(0.3, P.end - P.at), ease: 
 """
 CHAPTERS_169 = [{"at": "S1:0%", "title": "Intro"}, {"at": "S2:0%", "title": "Drugi rozdział ąę"}]
 SEG = 12.0
+LOOK = ("title", "counter", "list", "chip", "stamp", "bars")  # snapshotted at their entrance as well
 
 
 def _hand_track(a: float, b: float) -> list[list[float]]:
@@ -94,7 +95,7 @@ def _hand_track(a: float, b: float) -> list[list[float]]:
             for i in range(n + 1)]
 
 
-def _synthetic_rec(root: Path, fmt: str = "9:16") -> Path:
+def _synthetic_rec(root: Path, fmt: str = "9:16", clip: Path | None = None) -> Path:
     rec = root / f"theme-check-{fmt.replace(':', 'x')}"
     out = rec / "out"
     (out / "work").mkdir(parents=True, exist_ok=True)
@@ -103,9 +104,17 @@ def _synthetic_rec(root: Path, fmt: str = "9:16") -> Path:
     nseg = 4
     (out / "edl.json").write_text(json.dumps({"format": fmt, "segments": []}), encoding="utf-8")
     for dst, size, d in ((out / "aroll.mp4", aroll_size, round(nseg * SEG)), (rec / "broll" / "clip.mp4", "1280x720", 3)):
-        r = run(["ffmpeg", "-nostdin", "-v", "error", "-y", "-f", "lavfi", "-i", f"testsrc2=size={size}:rate=30:duration={d}",
-                 "-f", "lavfi", "-i", f"sine=frequency=220:duration={d}", "-c:v", "libx264", "-pix_fmt", "yuv420p",
-                 "-c:a", "aac", "-shortest", str(dst)])
+        if clip is not None and dst.name == "aroll.mp4":     # the user's own footage, filling the frame, looped
+            w, h = size.split("x")
+            src = ["-stream_loop", "-1", "-i", str(clip)]
+            vf = ["-vf", f"scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},fps=30", "-map", "0:v:0", "-map", "1:a:0"]
+            cmd = ["ffmpeg", "-nostdin", "-v", "error", "-y", *src, "-f", "lavfi", "-i", f"sine=frequency=220:duration={d}",
+                   *vf, "-t", str(d), "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", str(dst)]
+        else:
+            cmd = ["ffmpeg", "-nostdin", "-v", "error", "-y", "-f", "lavfi", "-i", f"testsrc2=size={size}:rate=30:duration={d}",
+                   "-f", "lavfi", "-i", f"sine=frequency=220:duration={d}", "-c:v", "libx264", "-pix_fmt", "yuv420p",
+                   "-c:a", "aac", "-shortest", str(dst)]
+        r = run(cmd)
         if r.returncode:
             raise CutmateError("ffmpeg failed creating theme-check media: " + " ".join(r.stderr.split())[-300:])
     img = Image.new("RGB", (1600, 1000), "#1e293b")
@@ -132,9 +141,15 @@ def _synthetic_rec(root: Path, fmt: str = "9:16") -> Path:
     return out
 
 
-def theme_check(theme: str = "clean", workdir: Path | None = None, language: str = "pl", fmt: str = "9:16") -> dict:
+def theme_check(theme: str = "clean", workdir: Path | None = None, language: str = "pl", fmt: str = "9:16",
+                clip: Path | None = None) -> dict:
+    """Build the synthetic video, run `hyperframes check`, snapshot it and tile the sheet.
+
+    Snapshots: every graphic settled (build.checkpoint), the middle of each custom effect, and the entrance
+    (start + 0.1 s) of every LOOK component. `labels` = [(t, type, "entrance" | "settled" | "mid")], aligned with
+    `snapshots`."""
     root = Path(workdir) if workdir else Path(tempfile.mkdtemp(prefix="cutmate-theme-"))
-    out = _synthetic_rec(root, fmt)
+    out = _synthetic_rec(root, fmt, clip)
     r = build(out, theme=theme, language=language, captions={"16:9": "both"})
     proj = r["project"]
     chk = run(hf("check"), cwd=proj)
@@ -143,8 +158,18 @@ def theme_check(theme: str = "clean", workdir: Path | None = None, language: str
     snaps = proj / "snapshots"
     for old in snaps.glob("frame-*.png"):
         old.unlink()
-    mids = {round((g.start + g.end) / 2, 2) for g in load_plan(out).graphics if g.type == "custom"}
-    cps = sorted(set(r["checkpoints"]) | mids)
+    graphics = load_plan(out).graphics
+    named: dict[float, tuple[str, str]] = {}      # first claim on a time wins: entrance, then mid, then settled
+    for g in graphics:
+        if g.type in LOOK:
+            named.setdefault(round(g.start + 0.1, 2), (g.type, "entrance"))
+    for g in graphics:
+        if g.type == "custom":
+            named.setdefault(round((g.start + g.end) / 2, 2), (g.type, "mid"))
+    for g in graphics:
+        named.setdefault(checkpoint(g), (g.type, "settled"))
+    cps = sorted(set(r["checkpoints"]) | set(named))
+    labels = [(t, *named.get(t, ("other", "settled"))) for t in cps]
     at = ",".join(f"{t:.2f}" for t in cps)
     snap = run(hf("snapshot", "--at", at, "--no-end", "--describe", "false", "-o", "snapshots"), cwd=proj)
     shots = sorted(snaps.glob("frame-*.png"))
@@ -157,4 +182,4 @@ def theme_check(theme: str = "clean", workdir: Path | None = None, language: str
         sheet.paste(t, ((i % 5) * tw, (i // 5) * th))
     sheet_path = out / f"theme-check-{Path(theme).name}-{fmt.replace(':', 'x')}.png"
     sheet.save(sheet_path)
-    return {"project": proj, "sheet": sheet_path, "snapshots": shots, "times": cps}
+    return {"project": proj, "sheet": sheet_path, "snapshots": shots, "times": cps, "labels": labels}

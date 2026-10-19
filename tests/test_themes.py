@@ -213,3 +213,155 @@ def test_use_theme_rejects_abs_path(tmp_path):
         themes.use_theme(str(tmp_path))
     with pytest.raises(CutmateError):
         config.set_values([f"theme={tmp_path}"])
+
+
+# ---- theme check: lint, contact sheet, stamp -------------------------------------------------------------------
+
+def _edit(d, rel, fn):
+    p = d / rel
+    p.write_text(fn(p.read_text(encoding="utf-8")), encoding="utf-8")
+
+
+def test_lint_clean_draft_ok():
+    themes.new_theme("d")
+    assert themes.lint_theme(themes.draft_dir("d"), "d") == []
+
+
+def test_lint_bundled_clean_ok():
+    assert themes.lint_theme(plugin_root() / "themes" / "clean", "clean") == []
+
+
+def _rm_stamp(d):
+    (d / "components" / "stamp.html").unlink()
+
+
+def _title_random(d):
+    _edit(d, "components/title.html", lambda t: t.replace("tl.", "Math.random(); tl.", 1))
+
+
+def _import_http(d):
+    _edit(d, "tokens.css", lambda t: '@import url("https://fonts.googleapis.com/css2?family=X");\n' + t)
+
+
+def _accent(d):
+    tj = json.loads((d / "theme.json").read_text(encoding="utf-8"))
+    tj["accent"] = "#000000"
+    (d / "theme.json").write_text(json.dumps(tj), encoding="utf-8")
+
+
+def _contrast(d):
+    _edit(d, "tokens.css", lambda t: t.replace("--card: rgba(255, 255, 255, 0.94);", "--card: #111111;")
+          .replace("--ink: #0f172a;", "--ink: #222222;"))
+
+
+def _sfx(d):
+    tj = json.loads((d / "theme.json").read_text(encoding="utf-8"))
+    tj["sfx"]["stamp"] = [["boom", 0, 0.4]]
+    (d / "theme.json").write_text(json.dumps(tj), encoding="utf-8")
+
+
+def _frame_name(d):
+    _edit(d, "frame.md", lambda t: t.replace("name: d", "name: other", 1))
+
+
+def _on_accent(d):
+    tj = json.loads((d / "theme.json").read_text(encoding="utf-8"))
+    tj["direction"]["palette"] = {"on_accent": "#7dd3fd"}  # same as --accent: unreadable text on the accent
+    (d / "theme.json").write_text(json.dumps(tj), encoding="utf-8")
+
+
+def _no_token(d):
+    _edit(d, "tokens.css", lambda t: t.replace("--shadow:", "--shade:"))
+
+
+def _no_frame_sel(d):
+    _edit(d, "theme.css", lambda t: t.replace("#captions", "#caps"))
+
+
+def _missing_font(d):
+    (d / "fonts" / "Inter-Black.ttf").unlink()
+
+
+@pytest.mark.parametrize("edit, expect", [
+    (_rm_stamp, "stamp"), (_title_random, "Math.random"), (_import_http, "http"), (_accent, "accent"),
+    (_contrast, "contrast"), (_sfx, "boom"), (_frame_name, "frame.md"), (_on_accent, "on_accent"),
+    (_no_token, "--shadow"), (_no_frame_sel, "#captions"), (_missing_font, "Inter-Black.ttf")])
+def test_lint_problems(edit, expect):
+    themes.new_theme("d")
+    d = themes.draft_dir("d")
+    edit(d)
+    problems = themes.lint_theme(d, "d")
+    assert any(expect in p for p in problems), problems
+
+
+def test_lint_accepts_f169_override_pattern():
+    themes.new_theme("d")
+    d = themes.draft_dir("d")
+    assert "html.f169 ROOT" in (d / "components" / "counter.html").read_text(encoding="utf-8")
+    assert themes.lint_theme(d, "d") == []
+
+
+def test_lint_random_must_not_look_like_clean():
+    themes.new_theme("r", mode="random", seed=1)
+    problems = themes.lint_theme(themes.draft_dir("r"), "r")
+    assert any("looks like clean" in p for p in problems), problems
+
+
+def _fake_check(monkeypatch, tmp_path):
+    from PIL import Image
+
+    def fake(theme, workdir=None, language="pl", fmt="9:16", clip=None):
+        d = tmp_path / ("fake-" + fmt.replace(":", "x"))
+        d.mkdir(exist_ok=True)
+        snaps, labels = [], []
+        for i, (ty, kind) in enumerate([("title", "entrance"), ("title", "settled"), ("counter", "settled")]):
+            p = d / f"s{i}.png"
+            Image.new("RGB", (270, 480) if fmt == "9:16" else (480, 270), "#336699").save(p)
+            snaps.append(p)
+            labels.append((float(i), ty, kind))
+        sheet = d / "sheet.png"
+        Image.new("RGB", (100, 100), "red").save(sheet)
+        return {"sheet": sheet, "snapshots": snaps, "labels": labels, "times": [l[0] for l in labels]}
+    monkeypatch.setattr("cutmate.theme_check.theme_check", fake)
+
+
+def test_check_theme_writes_contact_and_stamp(tmp_path, monkeypatch):
+    from PIL import Image
+    _fake_check(monkeypatch, tmp_path)
+    themes.new_theme("d")
+    d = themes.draft_dir("d")
+    r = themes.check_theme("d")
+    assert r["kind"] == "draft" and r["contact"] == d / "check" / "contact.png"
+    assert Image.open(r["contact"]).width == 1620
+    assert (d / "check" / "sheet-9x16.png").exists() and (d / "check" / "sheet-16x9.png").exists()
+    assert set(r["sheets"]) == {"9:16", "16:9"}
+    assert themes.stamp_ok(d)
+
+
+def test_check_lint_failure_is_one_line_and_unstamped(tmp_path, monkeypatch):
+    _fake_check(monkeypatch, tmp_path)
+    themes.new_theme("d")
+    d = themes.draft_dir("d")
+    _rm_stamp(d)
+    with pytest.raises(CutmateError) as e:
+        themes.check_theme("d")
+    assert "\n" not in str(e.value) and "fails lint" in str(e.value)
+    assert not themes.stamp_ok(d)
+
+
+def test_check_bundled_goes_to_home(tmp_path, monkeypatch):
+    _fake_check(monkeypatch, tmp_path)
+    before = sorted(p for p in (plugin_root() / "themes" / "clean").rglob("*"))
+    r = themes.check_theme("clean")
+    assert r["kind"] == "bundled"
+    assert r["contact"] == config.home() / "checks" / "clean" / "contact.png" and r["contact"].exists()
+    assert sorted(p for p in (plugin_root() / "themes" / "clean").rglob("*")) == before
+
+
+@pytest.mark.hf
+def test_check_theme_draft_real():
+    from PIL import Image
+    themes.new_theme("d")
+    r = themes.check_theme("d")
+    assert Image.open(r["contact"]).width == 1620
+    themes.save_theme("d")

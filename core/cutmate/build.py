@@ -505,6 +505,12 @@ def chapter_plates(plan, end: float, lang: str) -> list[Graphic]:
             for c in plate_chapters(plan.chapters, end)]
 
 
+def checkpoint(g: Graphic) -> float:
+    """The time a graphic is fully on screen (a list: its last item in) — where theme-check snapshots it."""
+    t = max(it["at"] for it in g.params["items"]) if g.type == "list" else g.start
+    return round(min(t + 0.4, g.end - 0.05), 2)
+
+
 def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: bool = False,
           music: dict | None = None, captions: dict | None = None) -> dict:
     out = Path(out_dir).resolve()
@@ -650,9 +656,6 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
             f'data-volume="{vol}" data-audio-group="music"', f'data-volume="{half}" data-audio-group="music"'),
             encoding="utf-8")
         print(f"WARN music: no voice carve — bed volume halved to {half}")
-    def checkpoint(g: Graphic) -> float:
-        t = max(it["at"] for it in g.params["items"]) if g.type == "list" else g.start
-        return round(min(t + 0.4, g.end - 0.05), 2)
     checkpoints = sorted({checkpoint(g) for g in items})
     (out / "work" / "checkpoints.json").write_text(json.dumps(checkpoints), encoding="utf-8")
     return {"project": proj, "warnings": warnings, "checkpoints": checkpoints}
