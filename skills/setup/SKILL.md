@@ -1,6 +1,6 @@
 ---
 name: setup
-description: Install and configure cutmate — detect the system, install dependencies after a yes, pick the transcription backend and test it, download language models, set music, captions and optional steps, then a 5 s smoke render. Use when the user runs /cutmate:setup, installs cutmate, or wants to change the transcription backend, language, music or captions.
+description: Install and configure cutmate — detect the system, install dependencies after a yes, pick the transcription backend and test it, download language models, set music, captions, optional steps and the look (theme), then a 5 s smoke render. Use when the user runs /cutmate:setup, installs cutmate, or wants to change the transcription backend, language, music, captions or theme.
 ---
 
 # /cutmate:setup
@@ -36,10 +36,10 @@ If `${CUTMATE_HOME:-$HOME/.cutmate}/config.json` exists and the CLI runs:
   - Marker missing (an earlier run stopped, e.g. paused for an API key): `$CM config show`, then run the pending part
     without asking which section — the API-key check (API backends) and step 6 (selftest), then steps 7–10.
   - Marker present: `$CM config show`, summarise it in ≤ 5 lines, then ask "Którą sekcję zmienić?" (multiSelect:
-    Transkrypcja / GPU / język · Muzyka · Napisy · Kroki) and run only those sections (Transkrypcja / GPU / język =
-    steps 3, 5, 6 — and step 4 when the package set changes, e.g. an API backend → local; Muzyka = 7; Napisy = 8;
-    Kroki = 9). After a transcription change run `$CM selftest` again (step 6); after a music or captions change run
-    `$CM smoke` again (step 10).
+    Transkrypcja / GPU / język · Muzyka · Napisy i kroki · Theme) and run only those sections (Transkrypcja / GPU /
+    język = steps 3, 5, 6 — and step 4 when the package set changes, e.g. an API backend → local; Muzyka = 7; Napisy i
+    kroki = 8–9; Theme = 9b). After a transcription change run `$CM selftest` again (step 6); after a music, captions or
+    theme change run `$CM smoke` again (step 10).
 
 Otherwise (no config.json) run the whole wizard below.
 
@@ -135,7 +135,33 @@ Map Wypalone → burn, Plik .srt → srt, Oba → both, Brak → none:
 
 multiSelect: Fact-check / QA po renderze / Miniaturka (all recommended) →
 `$CM config set steps.factcheck=<true|false> steps.qa=<true|false> steps.thumbnail=<true|false>`.
-The theme stays `clean` (the theme wizard comes later).
+
+## 9b. Theme
+
+How the videos look (graphics, captions, fonts, colours). ASK — never pick a theme silently, and `clean` is not the
+default answer.
+1. Ask in words (plain text, one short question): how should the videos look — the vibe, colours, fonts, creators or
+   videos they like.
+2. Show what each option means before the picker:
+   - Clean — the neutral starter look. `$CM theme check clean` (long-running: Bash timeout 600000 or
+     run_in_background: true; `--clip <step-6 clip>` when the user gave one), then READ
+     `${CUTMATE_HOME:-$HOME/.cutmate}/checks/clean/contact.png`, send its path and say in one line what it shows.
+   - 🎲 Zaskocz mnie — a random bold look (colours, fonts, shapes, motion) built and shown as the same contact sheet; it
+     can be re-rolled.
+   - Własne kolory i fonty — the user picks the accent, cards, fonts, shapes and motion.
+   - Sklonuj styl — the look of a video or screenshots the user likes.
+3. AskUserQuestion "Jak mają wyglądać filmy?": 🎲 Zaskocz mnie / Własne kolory i fonty / Sklonuj styl / Clean
+   (neutralny). Put first and mark "(polecane)" the option that fits what the user described in 1 (a source they named
+   → Sklonuj styl; colours or fonts they named → Własne kolory i fonty; "coś mocnego" / no idea → 🎲 Zaskocz mnie).
+   Never mark Clean "(polecane)" unless the user asked for something plain or neutral.
+4. Run the choice:
+   - Clean → `$CM config set theme=clean`.
+   - 🎲 Zaskocz mnie / Własne kolory i fonty → run the `cutmate:theme` skill with that choice (skip its menu, go
+     straight to its §2 / §3), passing the step-6 clip for `--clip` of every `$CM theme check`.
+   - Sklonuj styl → run the `cutmate:clone-style` skill, passing the step-6 clip for `--clip` of every `$CM theme check`.
+   Both end with `$CM theme use <name>` (answer "Ustawić jako domyślny?" with Tak unless the user says otherwise). The
+   user cancels (Anuluj) → ask again from 3.
+Then step 10: the smoke render uses the config theme.
 
 ## 10. Smoke render (5 s)
 

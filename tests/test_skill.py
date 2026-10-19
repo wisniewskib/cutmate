@@ -263,3 +263,22 @@ def test_clone_skill_fix_round_1():
     assert "at most 2 source videos" in look and "4 sheets" in look
     build = _section(md, "## 4.", "## 5.")
     assert "hstack" in build and "side-by-side.png" in build and "entrance row" in build
+
+
+def test_setup_skill_theme_step():
+    md = _skill("setup")
+    theme = _section(md, "## 9b. Theme", "## 10.")
+    for s in ("Zaskocz mnie", "cutmate:theme", "cutmate:clone-style", "$CM theme use", "--clip"):
+        assert s in theme, s
+    assert "Clean (polecane)" not in theme and "neutralny) (polecane)" not in theme
+    step0 = _section(md, "## 0. Re-run", "## 1. Detect")
+    assert "Napisy i kroki" in step0 and "Theme" in step0
+    assert "The theme stays" not in md
+    assert "$CM config set theme=clean" in theme
+
+
+def test_edit_skill_theme_from_config():
+    md = _skill("edit")
+    for s in ("$CM theme list", "$CM theme check", "unchecked", "--theme"):
+        assert s in md, s
+    assert "theme-check --theme" not in md

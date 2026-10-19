@@ -9,9 +9,15 @@ Talk to the user in their language (config `language`). Never modify source clip
 
 Set the CLI once per session: `CM="$(ls "${CUTMATE_HOME:-$HOME/.cutmate}/venv/bin/cutmate" "${CUTMATE_HOME:-$HOME/.cutmate}/venv/Scripts/cutmate.exe" 2>/dev/null | head -1)"; [ -n "$CM" ] || CM="$(command -v cutmate)"`; if it doesn't run, tell
 the user to run `/cutmate:setup` and stop. Read the config with `$CM config show` (transcription, language, theme,
-steps.factcheck / qa / thumbnail, music, captions). Read the theme rules: `${CLAUDE_PLUGIN_ROOT}/themes/<theme>/frame.md` (or
-`${CUTMATE_HOME:-$HOME/.cutmate}/themes/<theme>/frame.md`) BEFORE writing plan.json. If the user uses a custom theme and it was never
-checked, run `$CM theme-check --theme <theme> --language <lang>` once (renders every component and reports problems).
+steps.factcheck / qa / thumbnail, music, captions).
+
+**Theme:** the config `theme`. A theme the user names in the chat ("w stylu neon-brutal") wins for this video: pass
+`--theme <name>` to every `$CM build`, `$CM preview` and `$CM thumb`. Find it with `$CM theme list` (lines
+`* name kind checked|unchecked|- path`; the first 2 characters are the marker column — cut them, then name = 1st
+field, path = the rest after the check field; paths may contain spaces on Windows). READ `<path>/frame.md` BEFORE
+writing plan.json. Marked `unchecked` → run `$CM theme check <theme> --language <lang>` once (renders every
+component in both formats and reports problems; minutes — Bash timeout 600000 or run_in_background: true); lint
+errors → tell the user in one line each and offer `/cutmate:theme` or the config theme.
 
 **Resume:** if `out/` already has files, continue from the first missing one:
 `work/*/transcript.json` → `sheets/*.png` → `outline.md` (16:9) → `takes.md` → `edl.json` → `aroll.mp4` →
@@ -51,7 +57,7 @@ Everything else in this skill applies; these are the differences.
   mode for 16:9 is `srt`/`both` (upload in YouTube Studio), thumbnail.
 - **Thumbnail:** 1280×720; pick a frame where the face is on one side and put the text on the other:
   `$CM thumb <folder>/out --at <t> --title "…" --hook "…" --side left|right`.
-- Custom theme: `$CM theme-check --theme <theme> --language <lang> --format 16:9`.
+- Theme check: `$CM theme check <theme>` already renders 16:9 too (see Theme above).
 
 ## 1c. Effects on request
 
