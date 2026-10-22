@@ -540,3 +540,33 @@ def test_theme_check_clip_without_video_stops_before_building(tmp_path):
     with pytest.raises(CutmateError, match="clip has no video stream"):
         theme_check("clean", tmp_path / "w", clip=wav)
     assert not (tmp_path / "w").exists()
+
+
+def _set_layout(d, layout):
+    tj = json.loads((d / "theme.json").read_text(encoding="utf-8"))
+    tj["layout"] = layout
+    (d / "theme.json").write_text(json.dumps(tj), encoding="utf-8")
+
+
+def test_lint_split_panel_needs_panel_bg():
+    themes.new_theme("sp")
+    d = themes.draft_dir("sp")
+    _set_layout(d, {"mode": "split-panel"})
+    _edit(d, "tokens.css", lambda t: t.replace("--panel-bg", "--panel-x"))
+    assert "tokens.css lacks --panel-bg (split-panel layout)" in themes.lint_theme(d, "sp")
+    _edit(d, "tokens.css", lambda t: t + "\n:root { --panel-bg: #0b0b0f; }\n")
+    assert themes.lint_theme(d, "sp") == []
+
+
+def test_lint_reports_bad_layout():
+    themes.new_theme("bl")
+    d = themes.draft_dir("bl")
+    _set_layout(d, {"mode": "split-panel", "ratio": 0.9})
+    assert any("layout.ratio" in p for p in themes.lint_theme(d, "bl"))
+
+
+def test_clean_lints_clean_and_is_classic():
+    from cutmate.layout import theme_layout
+    clean = plugin_root() / "themes" / "clean"
+    assert themes.lint_theme(clean, "clean") == []
+    assert theme_layout(clean).mode == "classic"

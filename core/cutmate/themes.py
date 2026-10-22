@@ -18,6 +18,7 @@ from .effects import FORBIDDEN, THEME_RE
 from .errors import CutmateError
 from .fonts import migrate_theme
 from .hf import HF_VERSION
+from .layout import layout_problems, parse_layout
 from .paths import assets_dir, plugin_root, theme_dir
 from .plan import TYPES
 from .theme_check import LOOK
@@ -411,6 +412,10 @@ def lint_theme(path: Path, name: str) -> list[str]:
         used = [e[0] for lst in meta["sfx"].values() if isinstance(lst, list) for e in lst
                 if isinstance(e, list) and e] + [meta["hit_sfx"][0]]
         problems += [f"unknown sound effect {n!r}" for n in dict.fromkeys(used) if known and n not in known]
+        lp = layout_problems(meta.get("layout"))
+        problems += lp
+        if not lp and parse_layout(meta.get("layout")).mode == "split-panel" and _token(tokens or "", "--panel-bg") is None:
+            problems.append("tokens.css lacks --panel-bg (split-panel layout)")
     ink, acc = (_token(tokens or "", k) for k in ("--ink", "--accent"))
     bg = _token(tokens or "", "--bg")
     ink, card = _solid(ink, bg), _solid(_token(tokens or "", "--card"), bg)
