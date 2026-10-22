@@ -426,7 +426,7 @@ def test_contact_sheet_missing_look_tile_names_the_type(tmp_path, monkeypatch):
 def _fake_check(monkeypatch, tmp_path, drop=None):
     from PIL import Image
 
-    def fake(theme, workdir=None, language="pl", fmt="9:16", clip=None):
+    def fake(theme, workdir=None, language="pl", fmt="9:16", clip=None, layout=None):
         d = tmp_path / ("fake-" + fmt.replace(":", "x"))
         d.mkdir(exist_ok=True)
         snaps, labels = [], []
@@ -570,3 +570,36 @@ def test_clean_lints_clean_and_is_classic():
     clean = plugin_root() / "themes" / "clean"
     assert themes.lint_theme(clean, "clean") == []
     assert theme_layout(clean).mode == "classic"
+
+
+def test_check_theme_passes_layout(tmp_path, monkeypatch):
+    import json
+    seen = {}
+
+    def fake(theme, workdir=None, language="pl", fmt="9:16", clip=None, layout=None):
+        seen[fmt] = layout
+        return _fake_check_result(tmp_path, fmt)
+    _fake_check(monkeypatch, tmp_path)
+    monkeypatch.setattr("cutmate.theme_check.theme_check", fake)
+    themes.new_theme("d")
+    d = themes.draft_dir("d")
+    meta = json.loads((d / "theme.json").read_text(encoding="utf-8"))
+    meta["layout"] = {"mode": "split-panel"}
+    (d / "theme.json").write_text(json.dumps(meta), encoding="utf-8")
+    themes.check_theme("d")
+    assert seen["9:16"].mode == "split-panel" and seen["16:9"] is None
+
+
+def _fake_check_result(tmp_path, fmt):
+    from PIL import Image
+    d = tmp_path / ("fake-" + fmt.replace(":", "x"))
+    d.mkdir(exist_ok=True)
+    snaps, labels = [], []
+    for i, (ty, k) in enumerate([(t, k) for t in themes.LOOK for k in ("entrance", "settled")]):
+        p = d / f"s{i}.png"
+        Image.new("RGB", (270, 480) if fmt == "9:16" else (480, 270), "#336699").save(p)
+        snaps.append(p)
+        labels.append((float(i), ty, k))
+    sheet = d / "sheet.png"
+    Image.new("RGB", (100, 100), "red").save(sheet)
+    return {"sheet": sheet, "snapshots": snaps, "labels": labels, "times": [l[0] for l in labels]}

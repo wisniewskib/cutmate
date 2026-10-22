@@ -279,9 +279,13 @@ def _dispatch(args) -> int:
         except ImportError:
             raise CutmateError("alignment models not installed. Run /cutmate:setup.")
     elif args.cmd == "theme-check":
+        from .layout import theme_layout
+        from .paths import theme_dir
         from .theme_check import theme_check
+        theme = args.theme or cfg.theme
         for fmt in ["9:16", "16:9"] if args.format == "all" else [args.format]:
-            r = theme_check(args.theme or cfg.theme, language=language, fmt=fmt)
+            r = theme_check(theme, language=language, fmt=fmt,
+                            layout=theme_layout(theme_dir(theme)) if fmt == "9:16" else None)
             print(f"check passed ({fmt}) — contact sheet: {r['sheet']}")
     elif args.cmd == "build":
         from .build import build

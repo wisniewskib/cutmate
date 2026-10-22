@@ -270,3 +270,52 @@ def test_explainers_take_theme_look(tmp_path, monkeypatch):
         px = img.getpixel((round(60 * w / 1080), round(60 * h / 1920)))
         print(f"snapshot {at}: {shot} corner={px}")
         assert all(abs(c - e) <= 6 for c, e in zip(px, (0xef, 0xec, 0xe7))), (at, shot, px)
+
+
+def test_synthetic_split_panel_plan(tmp_path):
+    import json
+    from cutmate.layout import SPLIT_DEFAULTS
+    from cutmate.plan import load_plan
+    from cutmate.theme_check import _synthetic_rec
+    out = _synthetic_rec(tmp_path, "9:16", None, SPLIT_DEFAULTS)
+    raw = json.loads((out / "plan.json").read_text(encoding="utf-8"))
+    assert not [g for g in raw["graphics"] if g["type"] == "split"]
+    assert len(raw["panel"]) == 9 and len(raw["scenes"]) == 1
+    assert (out.parent / "broll" / "page.png").exists() and (out.parent / "broll" / "clip.mp4").exists()
+    plan = load_plan(out, layout=SPLIT_DEFAULTS)
+    assert not [w for w in plan.warnings if "WARN panel gap" in w]
+    # classic 9:16 and 16:9 keep the old plan
+    out2 = _synthetic_rec(tmp_path / "c", "9:16", None, None)
+    assert "panel" not in json.loads((out2 / "plan.json").read_text(encoding="utf-8"))
+
+
+def test_snapshot_times_include_panel_mids():
+    from cutmate.theme_check import snapshot_times
+    gs = [_g("panel-media", 2.0, 4.0, media="a.png", _panel=True), _g("panel-media", 4.0, 6.5, media="b.png", _panel=True),
+          _g("scene", 10.0, 12.0, media="a.png", _scene=True)]
+    cps, labels = snapshot_times(gs, [])
+    assert (3.0, "panel-media", "mid") in labels and (5.25, "panel-media", "mid") in labels
+    assert (11.0, "scene", "mid") in labels
+
+
+@pytest.mark.hf
+def test_theme_check_split_panel(tmp_path, monkeypatch):
+    import json
+    import shutil
+    from PIL import Image
+    from cutmate.layout import SPLIT_DEFAULTS
+    from cutmate.plan import load_plan
+    from cutmate.theme_check import theme_check
+    theme = tmp_path / "split"
+    shutil.copytree(paths.theme_dir("clean"), theme)
+    meta = json.loads((theme / "theme.json").read_text(encoding="utf-8"))
+    meta["layout"] = {"mode": "split-panel"}
+    (theme / "theme.json").write_text(json.dumps(meta), encoding="utf-8")
+    r = theme_check(str(theme), tmp_path / "w", fmt="9:16", layout=SPLIT_DEFAULTS)
+    out = r["sheet"].parent
+    plan = load_plan(out, layout=SPLIT_DEFAULTS)
+    mids = [g for g in plan.graphics if g.params.get("_panel") or g.params.get("_scene")]
+    sample = [g for g in plan.graphics if not g.params.get("_panel") and not g.params.get("_scene") and g.type != "panel"]
+    assert len(r["snapshots"]) >= len(sample) and len(mids) == 10
+    assert sum(1 for _, ty, k in r["labels"] if k == "mid") >= len(mids)
+    assert r["sheet"].exists() and len(r["snapshots"]) == len(r["labels"])

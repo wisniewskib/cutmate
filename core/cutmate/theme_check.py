@@ -16,6 +16,7 @@ from PIL import Image, ImageDraw
 from .build import build, checkpoint
 from .errors import CutmateError
 from .hf import DEADLINE_WARN, check, hf
+from .layout import Layout
 from .media import run
 from .plan import load_plan
 
@@ -49,6 +50,37 @@ GRAPHICS_916 = [
          {"label": "Wejście", "shape": "funnel"}, {"label": "Cięcie", "shape": "cylinder"},
          {"label": "Podgląd", "shape": "screen"}, {"label": "Napęd", "shape": "gear"}]}},
 ]
+# split-panel 9:16: the panel lives in S3-S4 (the band graphics of S1-S2 would overlap its text), 2-2.5 s items; a
+# full-screen scene in S3 covers most of the ~3 s hole between item 3 and 4 (so no "panel gap" warning); the panel
+# slides in with item 1 and out after the last
+PANEL_916 = [
+    {"at": 24.2, "until": 26.6, "effect": "stat-card",
+     "params": {"value": 75, "suffix": "%", "label": "mniej tokenów w każdej odpowiedzi", "note": "dane przykładowe",
+                "layout": "hero"}},
+    {"at": 26.6, "until": 29.0, "effect": "checklist",
+     "params": {"title": "Sprawdzenie linków", "rows": [
+         {"text": "strona główna", "status": "ok"}, {"text": "cennik", "status": "ok"},
+         {"text": "stary wpis", "status": "bad", "label": "404"}, {"text": "regulamin", "status": "warn"}],
+                "summary": {"value": 25, "suffix": "%", "label": "błędnych"}}},
+    {"at": 29.0, "until": 31.2, "effect": "ui-mock",
+     "params": {"kind": "browser", "url": "example.com/narzędzia", "title": "Narzędzia", "search": "wideo",
+                "rows": [{"text": "Edytor wideo", "sub": "montaż"}, {"text": "Generator napisów", "sub": "AI"},
+                         {"text": "Kompresor", "sub": "pliki"}], "highlight": 1}},
+    {"at": 34.1, "until": 36.3, "effect": "ui-mock",
+     "params": {"kind": "app", "title": "Połączenia", "rows": [
+         {"text": "Dysk", "toggle": False, "click": True}, {"text": "Kalendarz", "toggle": True},
+         {"text": "Poczta", "toggle": False, "click": True}]}},
+    {"at": 36.3, "until": 38.3, "effect": "flow",
+     "params": {"title": "Jak to działa", "nodes": ["Nagranie", "Transkrypcja", "Plan", "Gotowy film"]}},
+    {"at": 38.3, "until": 39.9, "effect": "headline", "params": {"text": "Zero zbędnych pauz", "kicker": "Efekt"}},
+    {"at": 39.9, "until": 42.4, "effect": "iso-machine",
+     "params": {"title": "Od nagrania do filmu", "theme": "panel", "token": "cube", "counter": {"to": 12, "label": "klipów"},
+                "parts": [{"label": "Wejście", "shape": "funnel"}, {"label": "Cięcie", "shape": "cylinder"},
+                          {"label": "Podgląd", "shape": "screen"}]}},
+    {"at": 42.4, "until": 44.4, "media": "broll/page.png"},
+    {"at": 44.4, "until": 46.4, "media": "broll/clip.mp4", "fit": "contain"},
+]
+SCENES_916 = [{"from": 31.5, "to": 33.5, "media": "broll/page.png"}]
 GRAPHICS_169 = [
     {"type": "title", "at": "S1:słowo1", "until": "S1:słowo3", "kicker": "Kicker", "text": "Tytuł ąę"},
     {"type": "counter", "at": "S1:słowo6", "until": "S1:słowo8", "to": 75, "prefix": "-", "suffix": "%", "label": "TOKENÓW", "hit": True},
@@ -88,6 +120,10 @@ SEG = 12.0
 LOOK = ("title", "counter", "list", "chip", "stamp", "bars")  # snapshotted at their entrance as well
 
 
+def _split_panel(fmt: str, layout: Layout | None) -> bool:
+    return fmt == "9:16" and layout is not None and layout.mode == "split-panel"
+
+
 def _hand_track(a: float, b: float) -> list[list[float]]:
     """A hand sweeping left→right across [a, b] with a small bob, sampled every 1/15 s ([t, x, y, conf])."""
     n = round((b - a) * 15)
@@ -95,7 +131,8 @@ def _hand_track(a: float, b: float) -> list[list[float]]:
             for i in range(n + 1)]
 
 
-def _synthetic_rec(root: Path, fmt: str = "9:16", clip: Path | None = None) -> Path:
+def _synthetic_rec(root: Path, fmt: str = "9:16", clip: Path | None = None, layout: Layout | None = None) -> Path:
+    """The synthetic recording; `layout` split-panel (9:16 only) swaps the video splits for the persistent panel."""
     rec = root / f"theme-check-{fmt.replace(':', 'x')}"
     out = rec / "out"
     (out / "work").mkdir(parents=True, exist_ok=True)
@@ -130,6 +167,9 @@ def _synthetic_rec(root: Path, fmt: str = "9:16", clip: Path | None = None) -> P
     (out / "work" / "aligned_words.json").write_text(json.dumps(words, ensure_ascii=False), encoding="utf-8")
     (out / "work" / "edl_timed.json").write_text(json.dumps(timed), encoding="utf-8")
     plan = {"captions": {"key": ["SŁOWO3"]}, "graphics": GRAPHICS_169 if fmt == "16:9" else GRAPHICS_916}
+    if _split_panel(fmt, layout):
+        plan["graphics"] = [g for g in GRAPHICS_916 if g["type"] != "split"]
+        plan["panel"], plan["scenes"] = PANEL_916, SCENES_916
     if fmt == "16:9":
         plan["chapters"] = CHAPTERS_169
         plan["face"] = {"S1": [0.5, 0.35], "S2": [0.45, 0.35], "S3": [0.5, 0.35], "S4": [0.5, 0.35]}
@@ -156,7 +196,7 @@ def snapshot_times(graphics: list, checkpoints: list[float]) -> tuple[list[float
         if g.type in LOOK:
             claim(round(g.start + 0.1, 2), (g.type, "entrance"))
     for g in graphics:
-        if g.type == "custom":
+        if g.type in ("custom", "panel-media", "scene"):
             claim(round((g.start + g.end) / 2, 2), (g.type, "mid"))
     for g in graphics:
         claim(checkpoint(g), (g.type, "settled"))
@@ -174,16 +214,17 @@ def require_video(clip: Path) -> None:
 
 
 def theme_check(theme: str = "clean", workdir: Path | None = None, language: str = "pl", fmt: str = "9:16",
-                clip: Path | None = None) -> dict:
+                clip: Path | None = None, layout: Layout | None = None) -> dict:
     """Build the synthetic video, run `hyperframes check`, snapshot it and tile the sheet.
 
-    Snapshots: every graphic settled (build.checkpoint), the middle of each custom effect, and the entrance
+    Snapshots: every graphic settled (build.checkpoint), the middle of each custom effect, panel-media and scene, and the entrance
     (start + 0.1 s) of every LOOK component. `labels` = [(t, type, "entrance" | "settled" | "mid")], aligned with
     `snapshots`."""
     if clip is not None:
         require_video(clip)
     root = Path(workdir) if workdir else Path(tempfile.mkdtemp(prefix="cutmate-theme-"))
-    out = _synthetic_rec(root, fmt, clip)
+    layout = layout if _split_panel(fmt, layout) else None
+    out = _synthetic_rec(root, fmt, clip, layout)
     r = build(out, theme=theme, language=language, captions={"16:9": "both"})
     proj = r["project"]
     chk = check(proj, run, hf)
@@ -194,7 +235,7 @@ def theme_check(theme: str = "clean", workdir: Path | None = None, language: str
     snaps = proj / "snapshots"
     for old in snaps.glob("frame-*.png"):
         old.unlink()
-    cps, labels = snapshot_times(load_plan(out).graphics, r["checkpoints"])
+    cps, labels = snapshot_times(load_plan(out, layout=layout).graphics, r["checkpoints"])
     at = ",".join(f"{t:.2f}" for t in cps)
     snap = run(hf("snapshot", "--at", at, "--no-end", "--describe", "false", "-o", "snapshots"), cwd=proj)
     shots = sorted(snaps.glob("frame-*.png"))

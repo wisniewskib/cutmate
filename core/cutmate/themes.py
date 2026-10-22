@@ -18,7 +18,7 @@ from .effects import FORBIDDEN, THEME_RE
 from .errors import CutmateError
 from .fonts import migrate_theme
 from .hf import HF_VERSION
-from .layout import layout_problems, parse_layout
+from .layout import layout_problems, parse_layout, theme_layout
 from .paths import assets_dir, plugin_root, theme_dir
 from .plan import TYPES
 from .theme_check import LOOK
@@ -463,8 +463,10 @@ def check_theme(name: str, clip: Path | None = None, language: str = "pl", saved
     out.mkdir(parents=True, exist_ok=True)
     results, sheets = {}, {}
     with tempfile.TemporaryDirectory(prefix="cutmate-check-", ignore_cleanup_errors=True) as tmp:
+        lay = theme_layout(path)
         for fmt in STAMP_FORMATS:
-            r = tc.theme_check(str(path), Path(tmp) / fmt.replace(":", "x"), language, fmt, clip)
+            r = tc.theme_check(str(path), Path(tmp) / fmt.replace(":", "x"), language, fmt, clip,
+                               lay if fmt == "9:16" else None)
             dst = out / f"sheet-{fmt.replace(':', 'x')}.png"
             shutil.copyfile(r["sheet"], dst)
             sheets[fmt] = dst
