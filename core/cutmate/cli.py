@@ -143,10 +143,12 @@ def _parser() -> argparse.ArgumentParser:
     tck.add_argument("--clip", type=Path, help="use this video as the A-roll instead of the test pattern")
     tck.add_argument("--language", choices=["pl", "en"], default="pl")
     tck.add_argument("--saved", action="store_true", help="check the saved theme even if a draft has the same name")
-    tfo = ts.add_parser("font", help="download an OFL Google Font into a draft (text or display role)")
+    tfo = ts.add_parser("font", help="download an OFL Google Font into a draft (text, display or num = digit font)")
     tfo.add_argument("name")
     tfo.add_argument("family")
-    tfo.add_argument("--role", choices=["text", "display"], required=True)
+    tfo.add_argument("--role", choices=["text", "display", "num"], required=True)
+    tdg = ts.add_parser("digits", help="render the theme's numbers in its display / digit font (check 5 vs S, 0 vs O)")
+    tdg.add_argument("name")
     tcl = ts.add_parser("colors", help="dominant colours of images")
     tcl.add_argument("images", nargs="+", type=Path)
     tcl.add_argument("--n", type=_min_one_int, default=8)
@@ -216,6 +218,8 @@ def _theme_cmd(args) -> int:
             raise CutmateError(f"no draft theme {args.name!r} — fonts go into a draft (cutmate theme new)")
         r = fonts.set_font(d, args.family, args.role)
         print(f"{r['family']} ({r['role']}): " + ", ".join(r["files"]))
+    elif args.theme_cmd == "digits":
+        print(themes.digit_sheet(args.name))
     elif args.theme_cmd == "colors":
         for hex_, share in themes.palette_of(args.images, args.n):
             print(f"{hex_}  {round(share * 100)}%")

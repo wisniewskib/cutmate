@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from cutmate import effects, paths
+from cutmate import effects, paths, themes
 from cutmate.build import _sections
 from cutmate.plan import TYPES
 
@@ -356,3 +356,27 @@ def test_free_window():
     assert free_window(item, [item, _g("title", 0.0, 6.5)]) is None                      # a band covering it all
     assert free_window(item, [item, _g("scene", 1.0, 5.0, _scene=True)]) == (0.0, 6.0)   # scenes / panel layers are no bands
     assert free_window(item, [item, _g("panel", 0.0, 6.0)]) == (0.0, 6.0)
+
+
+def test_numbers_use_the_digit_font_with_the_display_fallback():
+    """--font-num (optional) sets the numbers; without it they stay in the display font (clean is unchanged)."""
+    num = "var(--font-num, var(--font-display))"
+    stat = _sections(_custom_dir() / "stat-card.html")
+    assert num in stat["style"].split("ROOT .sc-num {")[1].split("}")[0]
+    ck = _sections(_custom_dir() / "checklist.html")
+    assert num in ck["style"].split("ROOT .ck-sum-v {")[1].split("}")[0]
+    counter = _sections(paths.theme_dir("clean") / "components" / "counter.html")
+    assert num in counter["style"].split("ROOT .card .big {")[1].split("}")[0]
+    for s in (stat["script"], ck["script"]):
+        assert "U.numFamily()" in s                          # measured once the digit font is loaded
+    fx = (paths.plugin_root() / "core" / "cutmate" / "web" / "effects.js").read_text(encoding="utf-8")
+    assert 'getPropertyValue("--font-num")' in fx
+
+
+def test_digit_sheet_renders_display_and_num_fonts(tmp_path):
+    from PIL import Image
+    p = themes.digit_sheet("clean", tmp_path / "digits.png")
+    im = Image.open(p)
+    assert im.width >= 1000 and im.height >= 300
+    lo, hi = im.convert("L").getextrema()
+    assert hi - lo > 100                                     # glyphs drawn, not a blank card

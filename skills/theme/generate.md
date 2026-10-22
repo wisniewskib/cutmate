@@ -22,6 +22,13 @@ grotesk → condensed grotesk, serif → serif), tell the user in one line, and 
 Never edit the `cutmate:font` blocks in `tokens.css` by hand — only `$CM theme font` writes them. Inter as the display
 font fails lint for random / clone themes.
 
+**Digits.** Numbers (stat-card, checklist summary, counter) use `var(--font-num, var(--font-display))`. Run
+`$CM theme digits <name>` and READ the PNG it prints: "-75% 0123456789" next to look-alike letters (5 S, 0 O, 1 l I,
+2 Z, 8 B). When a digit in the display font reads as a letter (pixel and decorative fonts: Pixelify Sans's 5 is an S)
+pick a digit font of the same character with clear digits — pixel → Press Start 2P / VT323, condensed → Oswald,
+rounded → Nunito — `$CM theme font <name> "<family>" --role num` (digits only: no Polish letters needed), add it to
+`direction.fonts.num`, run `$CM theme digits <name>` again and READ it. Clear digits in the display font → no num font.
+
 ## 2. tokens.css
 
 Put the palette into the colour tokens below the `cutmate:font` blocks: `--accent`, `--text`, `--ink`, `--card`,
@@ -71,7 +78,8 @@ stay as they are; the token colours restyle them.
 
 **Style:** `<style>` rules are scoped `ROOT …`. 16:9 overrides only as `html.f169 ROOT …` (the build rewrites exactly
 that form; any other f169 form is dead inside a component). Every component needs 16:9 sizes (graphics are small
-there). Use `var(--font-display)` for the title, the stamp and the counter number; `var(--font)` for the rest.
+there). Use `var(--font-display)` for the title and the stamp, `var(--font-num, var(--font-display))` for the counter number;
+`var(--font)` for the rest.
 
 **Shapes** (`direction.shapes`, see `hints`): sharp = radius 0, flat fills, no shadows · pill = 999px radii, soft
 shadow · outline = transparent cards, 4–6px accent borders · brutal = thick ink border + hard offset shadow
@@ -182,7 +190,8 @@ READ `contact.png` and both sheets. Fix and re-check until all of this holds:
   below y 1536. 16:9: graphics x 1340–1860 y 60–420, captions y 880–1000, lower-third bottom-left.
 - "Tytuł ąę" and "Drugi rozdział ąę" render in the theme font (no fallback glyphs for ą ę).
 - Readable over the busy test pattern — cards, shadow, outline or box behind every text.
-- "-75%" and all 4 list items visible; bars proportional.
+- "-75%" reads as a number (no 5 that looks like an S — see **Digits** in §1) and all 4 list items visible; bars
+  proportional.
 - The entrance row shows the motion (random: clearly not clean's pop).
 - Random / clone: title, stamp and chip differ from clean in font, shape and motion — not just colour.
 - split-panel: READ `check/sheet-9x16.png` (and the panel-item snapshots) — every panel item in the theme's colours

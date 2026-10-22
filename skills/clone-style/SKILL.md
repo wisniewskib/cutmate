@@ -86,6 +86,8 @@ Tell the user what you see — ≤ 9 lines, concrete:
 - **Paleta:** accent, card, text, ink, muted as hex (+ which is on accent fills).
 - **Fonty:** category (condensed grotesk, rounded sans, serif, mono, handwritten …), weight, case → the closest OFL
   Google family with Polish letters (ą ę ł ń ó ś ź ż) for display and for text. The original font only if it is OFL.
+  Numbers: if the source sets them in another face, or the display font's digits read as letters, name a digit font
+  too (generate.md §1 Digits).
 - **Kształty:** corners (sharp / rounded / pill), borders, shadows, strips, tilts.
 - **Napisy:** position, case, words per page, box / outline / shadow, key-word colour.
 - **Ruch:** entrances, speed, ease.

@@ -76,6 +76,12 @@
       return Promise.all((weights || [500, 800, 900]).map((wt) => document.fonts.load(wt + " 10px " + fam)))
         .catch(() => null);
     };
+    // the numbers' font family: the theme's optional digit font (--font-num), else its display font
+    U.numFamily = function () {
+      if (typeof document === "undefined" || typeof getComputedStyle === "undefined") return "";
+      const cs = getComputedStyle(document.documentElement);
+      return String(cs.getPropertyValue("--font-num") || "").trim() || String(cs.getPropertyValue("--font-display") || "").trim();
+    };
     U.clock = function (fn) {
       const c = { t: 0 };
       tl.to(c, { t: D, duration: D, ease: "none", onUpdate: () => fn(c.t) }, 0);

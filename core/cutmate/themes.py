@@ -34,6 +34,8 @@ _NS = re.compile(r"https?://www\.w3\.org/[^\s\"'<>)]*")       # XML namespace st
 _FETCH = re.compile(r"@import[^;{}]*?https?://|url\(\s*[\"']?https?://|\b(?:src|href)\s*=\s*[\"']?https?://"
                     r"|\b(?:fetch|import)\s*\(\s*[\"'`]?https?://")
 _COMMENTS = re.compile(r"/\*.*?\*/|<!--.*?-->|(?<![:\w\"'])//[^\n]*", re.S)
+_GENERIC = {"sans-serif", "serif", "monospace", "system-ui", "cursive", "fantasy", "ui-monospace"}
+DIGIT_SAMPLE = ("-75% 0123456789", "5S 0O 1lI 2Z 8B 6b 9g")
 LOOKS_CLEAN = "looks like clean with new colours — restyle the look components (shapes, motion) and set a display font"
 
 
@@ -335,8 +337,8 @@ def _solid(value: str | None, bg: str | None) -> str | None:
     return "#{:02x}{:02x}{:02x}".format(*mix)
 
 
-def _display_family(tokens: str) -> str | None:
-    val = _token(tokens, "--font-display") or ""
+def _display_family(tokens: str, var: str = "--font-display") -> str | None:
+    val = _token(tokens, var) or ""
     m = re.match(r"\s*var\(\s*(--[\w-]+)", val)
     if m:
         val = _token(tokens, m.group(1)) or ""
@@ -367,6 +369,10 @@ def lint_theme(path: Path, name: str) -> list[str]:
     else:
         problems += [f"tokens.css lacks {t}" for t in REQUIRED_TOKENS if _token(tokens, t) is None
                      and not (legacy and t == "--font-display")]
+        num = _display_family(tokens, "--font-num") if _token(tokens, "--font-num") is not None else None
+        faces = set(re.findall(r"@font-face\s*\{[^}]*?font-family:\s*[\"']([^\"']+)", tokens))
+        if num and num.lower() not in _GENERIC and num not in faces:
+            problems.append(f"tokens.css --font-num family {num!r} has no @font-face (cutmate theme font NAME FAMILY --role num)")
         for rel in dict.fromkeys(re.findall(r"url\(\s*[\"']?(fonts/[^\"')]+)", tokens)):
             if not (path / rel).is_file():
                 problems.append(f"tokens.css points to missing {rel}")
@@ -508,3 +514,58 @@ def _contact_sheet(results: dict, dest: Path) -> None:
             draw.text((i * 270 + 4, y + 2), label, fill="white")
         y += h
     sheet.save(dest)
+
+
+def _face_file(tokens: str, family: str, path: Path) -> Path | None:
+    """The boldest @font-face file of `family` in tokens.css (None when it has none)."""
+    best = None
+    for m in re.finditer(r"@font-face\s*\{([^}]*)\}", tokens):
+        body = m.group(1)
+        fam = re.search(r"font-family:\s*[\"']([^\"']+)", body)
+        url = re.search(r"url\(\s*[\"']?(fonts/[^\"')]+)", body)
+        wt = re.search(r"font-weight:\s*(\d+)", body)
+        if fam and url and fam.group(1) == family and (path / url.group(1)).is_file():
+            w = int(wt.group(1)) if wt else 400
+            if best is None or w > best[0]:
+                best = (w, path / url.group(1))
+    return best[1] if best else None
+
+
+def digit_sheet(name: str, dest: Path | None = None) -> Path:
+    """A PNG of the theme's numbers next to look-alike letters, in the display font and (when set) the --font-num digit
+    font, on the theme's panel colour in its accent — read it to judge whether "-75%" reads as a number (5 vs S, 0 vs O)."""
+    from PIL import Image, ImageDraw, ImageFont
+    path, kind = resolve(name)
+    tokens = _read(path / "tokens.css") or ""
+    rows = []
+    for var, label in (("--font-display", "display"), ("--font-num", "num (--font-num)")):
+        fam = _display_family(tokens, var) if _token(tokens, var) is not None else None
+        if not fam:
+            continue
+        f = _face_file(tokens, fam, path)
+        if f is None:
+            raise CutmateError(f"{label} font {fam!r} has no font file in {path / 'fonts'}")
+        rows.append((f"{label}: {fam}", f))
+    if not rows:
+        raise CutmateError(f"theme '{name}' sets no display font")
+    bg = _solid(_token(tokens, "--panel-bg"), None) or "#0b0b0f"
+    acc = _solid(_token(tokens, "--accent"), None) or "#7dd3fc"
+    light = sum(int(bg[i:i + 2], 16) * k for i, k in ((1, 0.2126), (3, 0.7152), (5, 0.0722))) > 150
+    sheet = Image.new("RGB", (1400, 40 + 330 * len(rows)), bg)
+    draw = ImageDraw.Draw(sheet)
+    for i, (label, f) in enumerate(rows):
+        y = 20 + i * 330
+        draw.text((30, y), label, fill="#1d1d1f" if light else "#ffffff")
+        for j, text in enumerate(DIGIT_SAMPLE):
+            size = 130 if j == 0 else 90
+            font = ImageFont.truetype(str(f), size)
+            while size > 30 and draw.textlength(text, font=font) > 1340:
+                size -= 6
+                font = ImageFont.truetype(str(f), size)
+            draw.text((30, y + 30 + j * 160), text, font=font, fill=acc if j == 0 else ("#1d1d1f" if light else "#ffffff"))
+    if dest is None:
+        out = path / "check" if kind != "bundled" else config.home() / "checks" / name
+        out.mkdir(parents=True, exist_ok=True)
+        dest = out / "digits.png"
+    sheet.save(dest)
+    return Path(dest)

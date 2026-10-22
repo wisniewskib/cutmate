@@ -30,7 +30,7 @@ ROOT .ck-row .ck-pill.wait { background: color-mix(in srgb, var(--ink) 8%, trans
 ROOT .ck-sum { flex: none; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 0.3em; padding: 0 calc(var(--s) * 24px); border-left: 1px solid color-mix(in srgb, var(--ink) 10%, transparent);
   background: color-mix(in srgb, var(--ac) 6%, var(--card)); text-align: center; }
-ROOT .ck-sum-v { font-family: var(--font-display); font-synthesis: none; font-weight: 900; line-height: 0.95; letter-spacing: -0.03em;
+ROOT .ck-sum-v { font-family: var(--font-num, var(--font-display)); font-synthesis: none; font-weight: 900; line-height: 0.95; letter-spacing: -0.03em;
   color: var(--ac); white-space: nowrap; font-feature-settings: "tnum" 1; }
 ROOT .ck-sum-v .aff { font-size: 0.6em; }
 ROOT .ck-sum-l { font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; line-height: 1.15;
@@ -118,7 +118,7 @@ const fit = () => {
 };
 fit();
 const dispFam = getComputedStyle(document.documentElement).getPropertyValue("--font-display").trim();
-U.ready(Promise.all([U.fonts([500, 800, 900]), U.fonts([400, 700, 900], dispFam)]).then(fit));
+U.ready(Promise.all([U.fonts([500, 800, 900]), U.fonts([400, 700, 900], dispFam), U.fonts([400, 700, 900], U.numFamily())]).then(fit));
 
 U.clock((t) => {
   const vis = clamp((t - P.at) / 0.25) * clamp((P.end - t) / 0.25);

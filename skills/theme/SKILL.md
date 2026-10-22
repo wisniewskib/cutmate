@@ -54,7 +54,8 @@ Keep the list of every draft made in this session (for `--avoid`).
 2. Fonts — AskUserQuestion "Fonty?": Dobierz do stylu (polecane) / Gruby, krzykliwy (Anton, Archivo Black) /
    Elegancki szeryf (DM Serif Display, Fraunces) / Techniczny (Space Grotesk, Space Mono). Any other answer: a Google
    font name or a description → pick the closest OFL Google family that has Polish letters (ą ę ł ń ó ś ź ż). Pick a
-   display family (titles, stamps, numbers) and a text family (captions, labels). Not Inter for display.
+   display family (titles, stamps, numbers) and a text family (captions, labels). Not Inter for display. When the
+   display font's digits read as letters (pixel / decorative: a 5 like an S), also a digit font — generate.md §1 Digits.
 3. Shapes, motion and layout — ONE AskUserQuestion with three questions (the names are the direction values; AskUserQuestion
    takes 4 options, the fifth name is reachable through the free-text answer; put first and mark "(polecane)" the
    option that fits what the user described, else brutal and slam):

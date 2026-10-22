@@ -262,3 +262,60 @@ def test_set_font_locked_old_file_is_a_one_line_error(monkeypatch):
     with pytest.raises(CutmateError) as e:
         fonts.set_font(d, "Manrope", "text")
     assert "\n" not in str(e.value) and "close programs using it" in str(e.value)
+
+
+@responses.activate
+def test_set_font_num_adds_an_optional_digit_font_block():
+    """`--role num`: a digit font for the numbers (stat-card, checklist summary, counter) in its own block after the
+    display block; the text / display fonts and the render fonts in theme.json stay as they were."""
+    themes.new_theme("mine")
+    d = themes.draft_dir("mine")
+    _mock_family("Anton", (400, 900))
+    fonts.set_font(d, "Anton", "display")
+    before = json.loads((d / "theme.json").read_text(encoding="utf-8"))["fonts"]
+    _mock_family("Press Start 2P", (400,))
+    r = fonts.set_font(d, "Press Start 2P", "num")
+    css = _tokens(d)
+    assert css.count("/* cutmate:font num */") == 1 and css.index("/* /cutmate:font display */") < css.index("/* cutmate:font num */")
+    assert '--font-num: "Press Start 2P"' in css and '--font-display: "Anton"' in css and '--font: "Inter"' in css
+    assert (d / "fonts" / "PressStart2P-400.ttf").exists() and (d / "fonts" / "Anton-900.ttf").exists()
+    tj = json.loads((d / "theme.json").read_text(encoding="utf-8"))
+    assert tj["fonts"] == before
+    assert tj["direction"]["fonts"]["num"] == "Press Start 2P" and tj["direction"]["fonts"]["display"] == "Anton"
+    assert r["role"] == "num"
+    assert themes.lint_theme(d, "mine") == []
+    fonts.set_font(d, "Press Start 2P", "num")               # again: the block is replaced, not duplicated
+    assert _tokens(d).count("/* cutmate:font num */") == 1
+
+
+@responses.activate
+def test_set_font_num_needs_digits_not_polish(tmp_path):
+    from fontTools import subset
+    from fontTools.ttLib import TTFont
+    f = TTFont(plugin_root() / "themes" / "clean" / "fonts" / "Inter-Black.ttf")
+    sub = subset.Subsetter(subset.Options())
+    sub.populate(unicodes=range(0x20, 0x7F))
+    sub.subset(f)
+    out = tmp_path / "ascii.ttf"
+    f.save(out)
+    themes.new_theme("mine")
+    d = themes.draft_dir("mine")
+    _mock_family("Silkscreen", (400,))
+    responses.replace(responses.GET, GSTATIC, body=out.read_bytes(), status=200)
+    fonts.set_font(d, "Silkscreen", "num")                   # digits only: no Polish letters needed
+    assert '--font-num: "Silkscreen"' in _tokens(d)
+
+
+@responses.activate
+def test_theme_font_cli_takes_the_num_role(capsys):
+    themes.new_theme("mine")
+    _mock_family("Press Start 2P", (400,))
+    assert main(["theme", "font", "mine", "Press Start 2P", "--role", "num"]) == 0
+    assert "Press Start 2P (num)" in capsys.readouterr().out
+
+
+def test_lint_flags_a_digit_font_without_faces():
+    themes.new_theme("mine")
+    d = themes.draft_dir("mine")
+    (d / "tokens.css").write_text(_tokens(d) + '\n:root { --font-num: "Nope Mono", monospace; }\n', encoding="utf-8")
+    assert any("--font-num" in p and "Nope Mono" in p for p in themes.lint_theme(d, "mine"))

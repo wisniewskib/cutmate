@@ -16,7 +16,11 @@ CSS2 = "https://fonts.googleapis.com/css2"
 OFL_URL = "https://raw.githubusercontent.com/google/fonts/main/ofl/{slug}/OFL.txt"
 # Google answers format('truetype') (static TTF) for this old Android UA; Chrome UAs get woff/woff2.
 TTF_UA = "Mozilla/5.0 (Linux; U; Android 4.0.3; en-us) AppleWebKit/534.30 Version/4.0 Mobile Safari/534.30"
-ROLES = ("text", "display")
+ROLES = ("text", "display", "num")
+DIGITS = "0123456789%+-.,"
+# the variable each role sets; "num" (numbers in stat-card / checklist summary / counter) is optional and falls back
+# to the display font in the components: var(--font-num, var(--font-display))
+VARS = {"text": "--font", "display": "--font-display", "num": "--font-num"}
 _TIMEOUT = 30
 _FAMILY = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 ]*$")
 _SRC = re.compile(r"url\(\s*[\"']?(https://[^)\"'\s]+)[\"']?\s*\)\s*format\(\s*[\"']truetype[\"']\s*\)")
@@ -156,7 +160,7 @@ def migrate_theme(theme_path: Path) -> None:
 
 def set_font(theme_path: Path, family: str, role: str) -> dict:
     if role not in ROLES:
-        raise CutmateError(f"unknown font role {role!r} (text or display)")
+        raise CutmateError(f"unknown font role {role!r} (text, display or num)")
     theme_path = Path(theme_path)
     tokens = theme_path / "tokens.css"
     css = tokens.read_text(encoding="utf-8")
@@ -165,6 +169,10 @@ def set_font(theme_path: Path, family: str, role: str) -> dict:
         if n > 1:
             raise CutmateError(f"tokens.css has {n} 'cutmate:font {r}' blocks — keep one")
     css = migrate_tokens(css)                                # a pre-3b theme: wrap its fonts into the blocks first
+    if role == "num" and not _block_re("num").search(css):  # optional block: added after the display block
+        m = _block_re("display").search(css)
+        at = m.end() if m else 0
+        css = css[:at] + ("\n" if at else "") + _block("num", ":root { }") + ("" if at else "\n") + css[at:]
     if not _block_re(role).search(css):
         raise CutmateError(f"tokens.css has no cutmate:font {role} block — cannot set the font")
     fonts_dir = theme_path / "fonts"
@@ -175,7 +183,9 @@ def set_font(theme_path: Path, family: str, role: str) -> dict:
         with tempfile.TemporaryDirectory(prefix="cutmate-font-", ignore_cleanup_errors=True) as tmp:
             got = download_family(family, Path(tmp))
             for p in got["files"].values():
-                if not has_glyphs(p):
+                if role == "num" and not has_glyphs(p, DIGITS):
+                    raise CutmateError(f"font '{family}' lacks digits or % — pick another")
+                if role != "num" and not has_glyphs(p):
                     raise CutmateError(f"font '{family}' lacks Polish letters (ą ę ł …) — pick another")
             moved = True
             for w, p in got["files"].items():
@@ -183,13 +193,13 @@ def set_font(theme_path: Path, family: str, role: str) -> dict:
                 files[w] = fonts_dir / p.name
             shutil.move(str(got["license"]), str(fonts_dir / got["license"].name))
 
-        var = "--font" if role == "text" else "--font-display"
+        var = VARS[role]
         body = _faces(family, files) + f'\n:root {{ {var}: "{family}", sans-serif; font-synthesis: none; }}'
         css = _block_re(role).sub(lambda _: _block(role, body), css, count=1)
 
-        other = "display" if role == "text" else "text"
-        ovar = "--font-display" if other == "display" else "--font"
-        omatch = _block_re(other).search(css)
+        other = {"text": "display", "display": "text"}.get(role)
+        ovar = VARS.get(other or "", "")
+        omatch = _block_re(other).search(css) if other else None
         ofam = re.search(rf'{ovar}:\s*"([^"]+)"', omatch.group(0)) if omatch else None
         if omatch and ofam and ofam.group(1) not in set(_FACE_FAMILY.findall(css)):
             # the other role borrowed faces from the block we just replaced (bundled Inter) — follow the new family
@@ -202,7 +212,9 @@ def set_font(theme_path: Path, family: str, role: str) -> dict:
         tj_path = theme_path / "theme.json"
         tj = json.loads(tj_path.read_text(encoding="utf-8"))
         tf = tj.setdefault("fonts", {})
-        if role == "text":
+        if role == "num":
+            pass                                             # numbers only: the render fonts stay as they are
+        elif role == "text":
             tf["text"] = files[_nearest(files, 500)].name
             tf["bold"] = files[_nearest(files, 800)].name
             if tf.get("black") not in _FACE_FILE.findall(css):
@@ -213,7 +225,7 @@ def set_font(theme_path: Path, family: str, role: str) -> dict:
         if isinstance(direction, dict):
             df = direction.setdefault("fonts", {})
             df[role] = family
-            if other_family:
+            if other and other_family:
                 df[other] = other_family
         tj_path.write_text(json.dumps(tj, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         done = True
