@@ -622,7 +622,17 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
                 if a.end >= b.start - 1e-3}
     scenes = [(g.start, g.end) for g in items if g.params.get("_scene")]
     hide = []
-    bands = [(x.start, x.end) for x in items if x.type != "panel" and not x.params.get("_panel") and not x.params.get("_scene")]
+    panel_h = round(pn["ratio"] * H) if pn else 0
+
+    def over_panel(x: Graphic) -> bool:
+        """A band graphic that can cover the panel: not a hand-placed / following effect (it sits on the face half), not
+        one whose region starts below the panel box."""
+        if x.params.get("place_xy") or x.params.get("place_track") or x.params.get("follow"):
+            return False
+        r = x.params.get("region")
+        return not (x.type == "custom" and r and r[1] >= panel_h)
+    bands = [(x.start, x.end) for x in items if x.type != "panel" and not x.params.get("_panel")
+             and not x.params.get("_scene") and over_panel(x)]
     sides = [[g.start, round(max(g.start + 0.45, g.end - 0.4), 3),
               round((1440 if g.params["speaker"] == "right" else 480) - plan.face.get(_seg_at(timed, g.start), FACE_DEFAULT)[0] * W)]
              for g in plan.graphics if g.type == "side"]

@@ -1414,3 +1414,22 @@ def test_scene_fade_is_one_constant(out, theme):
     proj = B.build(out, theme=theme)["project"]
     sub = next((proj / "compositions").glob("gx-*-scene.html")).read_text(encoding="utf-8")
     assert _P(sub)["fade"] == PL.SCENE_FADE
+
+
+def test_hand_placed_and_low_region_effects_leave_the_panel_item(out, theme):
+    """Only band graphics that can cover the panel hide its item: a `follow` (hand) effect or one whose region sits
+    below the panel box (the face half) does not; a region over the panel does."""
+    _png(out)
+    _fx(out, "orb")
+    _with_layout_components(theme)
+    (out / "work" / "tracks.json").write_text(json.dumps({"fps": 15, "w": 1080, "h": 1920, "tracks": {
+        "face": [], "hand_left": [], "hand_right": [[0.9, 0.5, 0.8, 0.9], [1.6, 0.6, 0.8, 0.9]]}}), encoding="utf-8")
+    base = {"panel": [{"at": "S1:mniej", "media": "broll/p.png", "until": 3.0}]}
+    def band_hides(graphic):
+        write_plan(out, {**base, "graphics": [graphic]})
+        html = (B.build(out, theme=theme)["project"] / "index.html").read_text(encoding="utf-8")
+        return [h for h in cfg_of(html).get("hide", []) if h[2] == 0.15]
+    assert band_hides({"type": "custom", "name": "orb", "at": 1.0, "until": 1.5, "follow": "hand"}) == []
+    assert band_hides({"type": "custom", "name": "orb", "at": 1.0, "until": 1.5, "region": [0, 1100, 1080, 600]}) == []
+    hid = band_hides({"type": "custom", "name": "orb", "at": 1.0, "until": 1.5, "region": [40, 100, 600, 400]})
+    assert len(hid) == 1 and hid[0][1:] == [1.0, 0.15, 1.5, 0.15]
