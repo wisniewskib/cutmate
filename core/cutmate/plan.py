@@ -743,6 +743,9 @@ def load_plan(out_dir: Path, factcheck: bool = False, layout: Layout | None = No
                 fm = face_median(tr["tracks"], float(s["start"]), float(s["end"]))
                 if fm:
                     face[sid] = fm
+    if panel and not face:
+        panel_warns.append("WARN panel: no face position (no out/work/tracks.json, no plan \"face\") — the face is "
+                           "placed by a guess and may sit too low in the bottom part; run `cutmate track <out>` and rebuild")
     plates = [(c["start"], min(c["start"] + PLATE, end)) for c in plate_chapters(chapters, end)]
     warnings = gesture_warns + panel_warns + scene_warns + _glb_warnings(gs) + _budget(gs, end, fmt, float(timed[-1]["start"]), plates) + _chapter_warnings(chapters, gs, end, min((w['start'] for w in words), default=0.0)) + (_factcheck(out, gs) if factcheck else [])
     cap = raw.get("captions") or {}

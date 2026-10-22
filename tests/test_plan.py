@@ -938,3 +938,14 @@ def test_panel_summary_hints():
     lines = panel_summary(pl)
     assert lines[:3] == ["1.00–2.00 checklist Status", "1.00–2.00 headline To nie działa", "1.00–2.00 flow prompt"]
     assert len(lines[3]) <= 60
+
+
+def test_panel_warns_without_face_position(tmp_path):
+    # the persistent panel moves the face into the bottom part from its position; without tracks.json or plan "face"
+    # the build guesses (FACE_Y) and a face lower in the frame ends up cut off at the bottom — say so
+    out = make_out(tmp_path, {"panel": [{"at": 0.2, "effect": "stat-card"}]})
+    assert any(w.startswith("WARN panel: no face position") and "cutmate track" in w for w in load_plan(out).warnings)
+    out = make_out(tmp_path / "b", {"panel": [{"at": 0.2, "effect": "stat-card"}], "face": {"S1": [0.5, 0.45]}})
+    assert not any("no face position" in w for w in load_plan(out).warnings)
+    out = make_out(tmp_path / "c", {"graphics": [{"type": "chip", "at": 1.0, "text": "x"}]})
+    assert not any("no face position" in w for w in load_plan(out).warnings)

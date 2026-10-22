@@ -270,6 +270,10 @@ Follow `frame.md`. Write `out/plan.json`:
 Only when the theme's `layout.mode` is `split-panel` and the video is 9:16 (Layout above). `cadence` = the layout's
 `[min, max]` seconds (default [1.0, 3.0]), `max_per_min` = its `fullscreen.max_per_min` (default 3).
 
+- **Face first:** run `$CM track <folder>/out` before the first build — the panel moves the face into the bottom part
+  from its tracked position; without `work/tracks.json` (or a plan `"face"`) the build guesses and prints
+  `WARN panel: no face position` (the face may end up too low, chin cut off).
+
 - **`"panel"`** (top-level in plan.json, not in `graphics`): a contiguous timeline from the first word (or after a
   ≤ 1.5 s face-only hook) to the CTA. One item per sentence or idea, each 1–`cadence[1]` s (a long sentence → 2–3
   items: the claim, then the proof); items in increasing `at`, each ends at the next item's `at` (or its own `until`),
