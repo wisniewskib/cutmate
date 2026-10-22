@@ -55,7 +55,7 @@ Everything else in this skill applies; these are the differences.
   ≥ 0.25 s. Keep the intro in place (no hook reshuffle unless one line is clearly the strongest opener).
 - **plan.json:** follow the `## 16:9` section of `frame.md`. Add `"chapters": [{"at": "S1:word", "title": "…"}]` (plates
   for chapters 2+) and `"face": {"S1": [x, y], …}` for EVERY segment (face position from the sheets, fractions 0–1).
-  `point` always sits top-right in 16:9 (its corner is ignored); for pip page screenshots use `$CM shot <url> -o … --width 1600 --height 900`.
+  `point` always sits top-right in 16:9 (its corner is ignored); for pip page screenshots use `$CM shot "<url>" -o … --width 1600 --height 900`.
   Components: `pip` (instead of `split`; `from`, `to`, `media`, `corner?` br|bl, `fit?` cover|contain), `lower-third`
   (`at`, `name`, `role?`) once at the self-introduction, corner graphics as usual. `split` is an error in 16:9.
 - **Checkpoint before the full render (always):** `$CM preview <folder>/out` → send the user `out/preview.mp4` and the
@@ -257,7 +257,7 @@ Follow `frame.md`. Write `out/plan.json`:
   tak" list is shown only with zero density warnings, or with each remaining one explained in one line.
   Split-panel layout: the panel itself meets the density rule (panel items and scenes count as cover) — a `WARN
   density` there means a hole in the panel (`WARN panel gap`): fill it with a panel item, not a band graphic (§5b).
-- B-roll: files in `<folder>/broll/`; for a web page the speaker talks about: `$CM shot <url> -o <folder>/broll/<name>.png`
+- B-roll: files in `<folder>/broll/`; for a web page the speaker talks about: `$CM shot "<url>" -o "<folder>/broll/<name>.png"`
   and READ the PNG (cookie banners, login walls → pick another page or crop).
 - Music: config `music.source` = `folder` → automatic (first audio file in config `music.folder`); `heygen` → check
   sign-in with `npx --yes hyperframes@0.8.157 media-use resolve --doctor`; if not signed in, use no music and note it
@@ -275,12 +275,13 @@ Only when the theme's `layout.mode` is `split-panel` and the video is 9:16 (Layo
   items: the claim, then the proof); items in increasing `at`, each ends at the next item's `at` (or its own `until`),
   so the panel is never empty between them. Item = `{"at": <anchor>, "until"?: <anchor>, "effect": "<name>",
   "params": {…}}` or `{"at", "until"?, "media": "broll/<file>", "fit"?: "contain"|"cover"}` — exactly one of
-  `effect` / `media`, no other keys (no `shot` key: screenshots are files). Never `split`, `pip`, `side` or `bg`
+  `effect` / `media`; `"sfx"` optional on either; no other keys (no `shot` key: screenshots are files). Never `split`, `pip`, `side` or `bg`
   graphics next to a panel (build error "the panel replaces split" — make it a panel item).
 - **What goes in the panel — illustrate what is SAID, sentence by sentence** (templates and params in §1c):
   - a number → `stat-card` (`"layout": "hero"` for THE number of the video, `card` for the others) or a `checklist`
     `summary` when the number is a result of a check (e.g. 50 % links broken);
-  - a product / site / tool named → its real page: `$CM shot <url> -o "<folder>/broll/<name>.png" --width 1000 --height 880 --light`,
+  - a product / site / tool named → its real page: `$CM shot "<url>" -o "<folder>/broll/<name>.png" --width 1000 --height 880 --light`
+    (the panel box is 1000 × (round(1920 × ratio) − 80) px — `--height 880` at ratio 0.5, 688 at 0.40, 1072 at 0.60),
     READ the PNG (cookie banner, login wall, empty page → another URL, or crop) and use it as `"media": "broll/<name>.png"`;
     or a `ui-mock` `browser` (its URL, a typed search, result rows, one circled) / `app` (its screen, a typed filter,
     rows with toggles the cursor clicks) mockup of what is DONE in it;
@@ -314,12 +315,13 @@ Only when the theme's `layout.mode` is `split-panel` and the video is 9:16 (Layo
  "graphics": [{"type": "stamp", "at": "S4:koniec", "text": "STOP.", "hit": true}]}
 ```
 - **After `$CM build`:** it prints `layout: split-panel` and one `panel: <a>–<b> <what>` line per item. READ them
-  against the transcript (each sentence covered, nothing stale) and fix every WARN: `panel gap` (add an item or
-  `until`), `panel item #n … is X s` (shorter than 0.6 s → merge; longer than `cadence[1]` + 1.5 s → split it), `scenes:`
+  against the transcript (each sentence covered, nothing stale) and fix every WARN: `panel gap` (an item's `until`
+  ends before the next item's `at` → extend or drop that `until`, add an item in the gap, or cover it with a scene), `panel item #n … is X s` (shorter than 0.6 s → merge; longer than `cadence[1]` + 1.5 s → split it), `scenes:`
   / `longer than 6 s` (drop or shorten scenes), an unconfirmed number. `layout: classic` with a split-panel theme → wrong
   `--theme` or a 16:9 video.
 - **Snapshots:** add the middle of EVERY panel item (`(a + b) / 2` from its `panel:` line) and of every scene to the
-  §6 snapshot checkpoints and READ them: the item in the theme's colours / fonts, whole inside the panel, the page
+  §6 snapshot checkpoints (the middle is enough for stock panel items; a new `out/custom/` effect used as a panel item
+  keeps start + middle as §6 says) and READ them: the item in the theme's colours / fonts, whole inside the panel, the page
   screenshot readable, the face in the bottom half, captions on the seam not covering the item's text or the mouth.
 
 ## 6. Build and look
@@ -327,7 +329,7 @@ Only when the theme's `layout.mode` is `split-panel` and the video is 9:16 (Layo
 `$CM build <folder>/out` — fix every `cutmate:` error (it names the bad anchor and lists the segment's words) and think
 about every `WARN`. The last line prints `checkpoints: t1,t2,...`. Then, from the project dir (no path argument):
 `( cd <folder>/out/composition && rm -rf ../snapshots && npx --yes hyperframes@0.8.157 snapshot --at <checkpoints> --no-end --describe false -o ../snapshots )`
-(skip the snapshot when build printed no checkpoints; for every custom effect add at least two checkpoints, start and middle, and READ those frames — effects are new code) and READ every frame: overlaps, text wrapping, safe zones, captions readable, split panel shows the media. Fix
+(skip the snapshot when build printed no checkpoints; for every custom effect add at least two checkpoints, start and middle (stock explainers as panel items: the middle, §5b), and READ those frames — effects are new code) and READ every frame: overlaps, text wrapping, safe zones, captions readable, split panel shows the media. Fix
 `plan.json` and rebuild until clean.
 
 ## 7. Render and QA

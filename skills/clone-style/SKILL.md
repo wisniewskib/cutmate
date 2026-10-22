@@ -90,8 +90,8 @@ Tell the user what you see — ≤ 9 lines, concrete:
 - **Napisy:** position, case, words per page, box / outline / shadow, key-word colour.
 - **Ruch:** entrances, speed, ease.
 - **Gęstość grafik:** how often graphics appear and how big they are.
-- **Układ:** `klasyczny` | `panel u góry <ratio>, zmiana co ~<a>–<b> s, napisy na szwie|na dole, <n> scen pełnoekranowych`
-  (e.g. `panel u góry 0.5, zmiana co ~0.5–2 s, napisy na szwie, 2 scen pełnoekranowych`) + the panel colour hex.
+- **Układ:** `klasyczny` | `panel u góry <ratio>, zmiana co ~<a>–<b> s, napisy na szwie|na dole, scen pełnoekranowych: <n>`
+  (e.g. `panel u góry 0.5, zmiana co ~0.5–2 s, napisy na szwie, scen pełnoekranowych: 2`) + the panel colour hex.
 
 AskUserQuestion "Zgadza się?": **Zgadza się (polecane)** / **Popraw** (the user says what → change it, show the
 lines again only if much changed).

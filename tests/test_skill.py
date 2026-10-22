@@ -1,7 +1,9 @@
+import json
 import re
 
 from cutmate import config, paths
 from cutmate.cli import _parser
+from cutmate.plan import PANEL_ITEM_KEYS, SCENE_KEYS
 
 
 def _skill(name):
@@ -343,3 +345,16 @@ def test_skills_never_sign_in_for_images():
     scenes = _section(md, "- **Scenes**", "\n- ")
     assert '"scenes"' in scenes and "never sign in" in scenes and "resolve --doctor" in scenes, scenes
     assert "never suggest creating an account" in scenes
+
+
+def test_edit_skill_layout_json_parses():
+    sec = _section(_skill("edit"), "## 5b.", "## 6.")
+    blocks = re.findall(r"```json\n(.*?)```", sec, re.S)
+    assert blocks
+    for b in blocks:
+        plan = json.loads(b)
+        for it in plan.get("panel", []):
+            assert set(it) <= set(PANEL_ITEM_KEYS), it
+            assert ("effect" in it) != ("media" in it), it
+        for sc in plan.get("scenes", []):
+            assert set(sc) <= set(SCENE_KEYS), sc
