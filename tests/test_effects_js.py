@@ -1,5 +1,8 @@
 import json
+import re
 import subprocess
+
+import pytest
 
 from cutmate.paths import plugin_root, web_dir
 
@@ -138,10 +141,21 @@ const seek = (t) => updates.forEach(([c, v]) => { c.t = t; v.onUpdate(); });
 const shown = (e) => { for (let x = e; x; x = x.parentNode) { const s = x.style;
   if (s.display === "none" || s.visibility === "hidden" || (s.opacity !== undefined && s.opacity !== "" && Number(s.opacity) <= 0)) return false; }
   return true; };
+// settled: fully opaque and at rest (no entrance offset / scale left) along the whole parent chain
+const settled = (e) => { let op = 1; for (let x = e; x; x = x.parentNode) { const s = x.style;
+  if (s.display === "none" || s.visibility === "hidden") return false;
+  if (s.opacity !== undefined && s.opacity !== "") op *= Number(s.opacity);
+  for (const [, fn, args] of String(s.transform || "").matchAll(/(\w+)\(([^)]*)\)/g)) {
+    const v = args.split(",").map(parseFloat);
+    if (/^translate/.test(fn) && v.some((a) => Math.abs(a) > 1.5)) return false;
+    if (/^scale/.test(fn) && v.some((a) => Math.abs(a - 1) > 0.03)) return false;
+  } }
+  return op >= 0.99; };
 const out = {};
 for (const [k, t, sel, what] of %(probes)s) {
   seek(t);
-  out[k] = root.querySelectorAll(sel).map((e) => (what === "on" ? e.classList.contains("on") : what === "text" ? e.textContent : shown(e)));
+  out[k] = root.querySelectorAll(sel).map((e) => (what === "on" ? e.classList.contains("on") : what === "text" ? e.textContent
+    : what === "settled" ? settled(e) : what === "kids" ? e.children.map(settled) : shown(e)));
 }
 console.log(JSON.stringify(out));
 """
@@ -173,8 +187,9 @@ def test_checklist_rows_tick_in_order():
     rows = [{"text": f"site{i}.com/x", "status": s} for i, s in enumerate(["ok", "bad", "warn", "ok"])]
     P = {"title": "Link check", "rows": rows, "strike": True, "summary": {"value": 50, "suffix": "%"},
          "lang": "en", "at": 1.0, "end": 5.0, "w": 1000, "h": 880, "dur": 5.0}
-    d = _run_effect("checklist", P, [["mid", 3.0, ".ck-row", "shown"], ["sum", 4.8, ".ck-sum-v", "text"],
-                                     ["start", 1.1, ".ck-row", "shown"]])
+    # 4 s item: the rows tick in over [1.05, 1.6] (U.fullAt = at + 0.6), one every 0.1375 s
+    d = _run_effect("checklist", P, [["mid", 1.2, ".ck-row", "shown"], ["sum", 4.8, ".ck-sum-v", "text"],
+                                     ["start", 1.04, ".ck-row", "shown"]])
     assert d["mid"] == [True, True, False, False]
     assert d["start"] == [False, False, False, False]
     assert d["sum"] == ["50%"]
@@ -207,3 +222,102 @@ def test_panel_light_reads_the_panel_colour():
     assert d["light"] is True and d["dark"] is False and d["none"] is False and d["mid"] is True
     assert d["lightVar"] == "var(--panel-bg, #0b0b0f)"        # the theme token, clean's colour as the fallback
     assert d["left"] == 0                                       # the probe element is removed again
+
+
+# Fill speed: on a 1-2 s panel item the card / structure and its content are readable at once — every explainer's
+# build-in is done by min(0.6 s, 40 % of the item span); later beats (count-up, toggles, strike, tokens) may continue.
+SPANS = [1.0, 1.5, 2.0, 5.0]
+
+
+def _at40(span):
+    return round(1.0 + 0.4 * span, 4)
+
+
+def _p(span, **kw):
+    return dict(kw, lang="pl", at=1.0, end=1.0 + span, w=1000, h=820, dur=1.0 + span + 0.5)
+
+
+def test_full_at_is_min_of_0_6_s_and_40_percent():
+    js = "global.window = {}; require(%s); const U = window.CutmateFX.make({ to() {} }, {}, 'c1', { dur: 1 });" \
+         "console.log(JSON.stringify([U.fullAt(1, 2), U.fullAt(1, 2.5), U.fullAt(1, 6), U.fullAt(1, 1)]));"
+    r = subprocess.run(["node", "-e", js % json.dumps(str(web_dir() / "effects.js"))], capture_output=True, text=True,
+                       check=True)
+    assert json.loads(r.stdout) == [1.4, 1.6, 1.6, 1]
+
+
+@pytest.mark.parametrize("span", SPANS)
+@pytest.mark.parametrize("mode, kicker", [("type", None), ("pop", None), ("type", "AUTOR")])
+def test_headline_is_whole_at_40_percent(span, mode, kicker):
+    P = _p(span, text="Pół roku później", mode=mode, **({"kicker": kicker} if kicker else {}))
+    t = _at40(span)
+    d = _run_effect("headline", P, [["box", t, ".hl", "settled"], ["text", t, ".hl-text", "text"],
+                                    ["words", t, ".w", "settled"], ["kick", t, ".hl-kick", "settled"]])
+    assert d["box"] == [True] and d["text"] == ["Pół roku później"] and all(d["words"]) and all(d["kick"])
+
+
+@pytest.mark.parametrize("span", SPANS)
+@pytest.mark.parametrize("layout", ["card", "hero"])
+def test_stat_card_is_whole_at_40_percent(span, layout):
+    P = _p(span, value=75, prefix="-", suffix="%", label="tokenów zużytych mniej", note="źródło: README", layout=layout)
+    t = _at40(span)
+    d = _run_effect("stat-card", P, [["card", t, ".sc-card", "settled"], ["label", t, ".sc-label", "kids"],
+                                     ["note", t, ".sc-note", "settled"]])
+    assert d["card"] == [True] and d["label"] == [[True] * 3] and d["note"] == [True]
+
+
+@pytest.mark.parametrize("span", SPANS)
+def test_checklist_is_whole_at_40_percent(span):
+    rows = [{"text": t, "status": st} for t, st in [("Płacisz", "bad"), ("Gorsze odpowiedzi", "bad"),
+                                                    ("Mniej tokenów", "ok"), ("Kontekst", "warn")]]
+    P = _p(span, title="Caveman", rows=rows, strike=True, summary={"value": 75, "suffix": "%", "label": "drożej"})
+    t = _at40(span)
+    d = _run_effect("checklist", P, [["card", t, ".ck-card", "settled"], ["rows", t, ".ck-row", "settled"],
+                                     ["pills", t, ".ck-pill", "text"]])
+    assert d["card"] == [True] and d["rows"] == [True] * 4
+    assert "···" not in d["pills"], d["pills"]                     # every status has landed
+
+
+@pytest.mark.parametrize("span", SPANS)
+def test_flow_is_whole_at_40_percent(span):
+    P = _p(span, title="Co Claude czyta", nodes=["Prompt", "Kontekst", "Pliki", "Odpowiedź"])
+    t = _at40(span)
+    d = _run_effect("flow", P, [["title", t, ".fl-title", "settled"], ["nodes", t, ".fl-node", "settled"]])
+    assert d["title"] == [True] and d["nodes"] == [True] * 4
+
+
+LINES = [{"who": "user", "text": "Zrób mi stronę"}, {"who": "ai", "text": "Jasne, oto strona."}]
+
+
+@pytest.mark.parametrize("span", SPANS)
+@pytest.mark.parametrize("kind", ["chat", "post", "terminal"])
+def test_ui_mock_feed_is_whole_at_40_percent(span, kind):
+    P = _p(span, kind=kind, lines=LINES, title="Autor")
+    t = _at40(span)
+    d = _run_effect("ui-mock", P, [["win", t, ".um-win", "settled"], ["msgs", t, ".msg", "settled"],
+                                   ["text", t, ".msg", "text"]])
+    assert d["win"] == [True]
+    assert d["msgs"][:2] == [True, True]
+    assert d["text"][0].endswith("Zrób mi stronę") and d["text"][1].endswith("Jasne, oto strona.")
+
+
+@pytest.mark.parametrize("span", SPANS)
+@pytest.mark.parametrize("kind", ["browser", "app"])
+def test_ui_mock_page_is_whole_at_40_percent(span, kind):
+    rows = [{"text": f"Row {i}", "toggle": i == 1, "click": i == 1} for i in range(4)]
+    P = _p(span, kind=kind, title="Connectors", url="github.com/x/y", search="fire", rows=rows, highlight=1)
+    t = _at40(span)
+    d = _run_effect("ui-mock", P, [["win", t, ".um-win", "settled"], ["rows", t, ".um-row", "settled"],
+                                   ["search", t, ".um-search", "text"]])
+    assert d["win"] == [True] and d["rows"] == [True] * 4 and "fire" in d["search"][0]
+
+
+def test_iso_machine_build_in_is_scaled_to_the_span():
+    """iso-machine (three.js, not runnable here): every build-in time goes through T() / kB, which squeeze the natural
+    1.35 s assembly into U.fullAt — no raw `P.at + <number>` start left except the conveyor's indexing start."""
+    from cutmate.build import _sections
+    script = _sections(plugin_root() / "themes" / "clean" / "components" / "custom" / "iso-machine.html")["script"]
+    assert "const kB = Math.min(1, (U.fullAt(P.at, P.end) - P.at) / BUILD);" in script
+    assert "const BUILD = 1.35;" in script and "const T = (x) => P.at + x * kB;" in script
+    raw = re.findall(r"P\.at \+ [^\n;]*", script)
+    assert raw == ["P.at + x * kB", "P.at + Math.min(1.0, span * 0.3)"], raw     # T() itself and the conveyor start
+    assert "dur: (dur || 0.36) * kB" in script and "(0.4 * kB)" in script and "(0.35 * kB)" in script

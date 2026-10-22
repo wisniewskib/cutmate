@@ -76,9 +76,11 @@ const cell = labels.map((_, i) => {
   return { r, c, x: pad + (c + 0.5) * cellW, y: top + (r + 0.5) * cellH };
 });
 
-const span = Math.max(0.8, P.end - P.at);
-const t0 = P.at + (title ? 0.4 : 0.12);
-const step = Math.min(0.75, Math.max(0.25, (span * 0.72 - 0.6) / Math.max(1, n - 1)));
+// every node and arrow is on screen by U.fullAt (min 0.6 s, 40 % of the span); the dots along the arrows run on after it
+const full = U.fullAt(P.at, P.end), F = full - P.at;
+const titleDur = Math.min(0.45, F * 0.6), popDur = Math.min(0.45, F * 0.4);
+const t0 = P.at + Math.min(title ? 0.15 : 0.05, F * 0.15);
+const step = Math.max(0.001, full - popDur - t0) / Math.max(1, n - 1);
 const appear = (i) => t0 + i * step;
 
 const NS = "http://www.w3.org/2000/svg";
@@ -169,16 +171,16 @@ U.clock((t) => {
   if (!vis) return;
   glow.style.transform = "scale(" + (0.92 + 0.08 * clamp((t - P.at) / 0.8)) + ")";
   if (title) {
-    const q = clamp((t - P.at) / 0.45);
+    const q = clamp((t - P.at) / titleDur);
     title.style.opacity = clamp(q * 2);
     title.style.transform = "translateY(" + ((1 - quartOut(q)) * -30 * s) + "px)";
-    bar.style.transform = "scaleX(" + quartOut(clamp((t - P.at - 0.15) / 0.5)) + ")";
+    bar.style.transform = "scaleX(" + quartOut(clamp((t - P.at - titleDur * 0.3) / (titleDur * 0.7))) + ")";
   }
   nodes.forEach((nd, i) => {
-    const q = clamp((t - appear(i)) / 0.45);
+    const q = clamp((t - appear(i)) / popDur);
     nd.el.style.opacity = clamp(q * 2.5);
     nd.el.style.transform = "translateY(" + ((1 - quartOut(q)) * 36 * s) + "px) scale(" + (0.72 + 0.28 * backOut(q)) + ")";
-    if (nd.strokes.length) drawTo(nd.strokes, inOut(clamp((t - appear(i)) / 0.6)));
+    if (nd.strokes.length) drawTo(nd.strokes, inOut(clamp((t - appear(i)) / popDur)));
   });
   arrows.forEach((ar) => {
     const q = inOut(clamp((t - ar.start) / ar.dur));

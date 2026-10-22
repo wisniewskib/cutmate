@@ -90,9 +90,13 @@ if (sm) {
   if (sm.label) U.el("div", "ck-sum-l", String(sm.label), sumBox);
 }
 
-// rows tick in one by one over [P.at + 0.3, P.end - 0.4] (each in the middle of its slot), the status lands just after
-const a0 = P.at + 0.3, a1 = Math.max(a0 + 0.3, P.end - 0.4), n = Math.max(2, rows.length), step = (a1 - a0) / n;
-rows.forEach((r, k) => { r.t = a0 + (k + 0.5) * step; r.res = r.t + Math.min(0.35, step * 0.5); });
+// the whole table is readable by U.fullAt (min 0.6 s, 40 % of the span): rows tick in one by one, each status lands
+// just after its row; the strike lines and the summary count-up may run on after it
+const full = U.fullAt(P.at, P.end), F = full - P.at;
+const cardDur = Math.min(0.5, F);
+const a0 = P.at + Math.min(0.05, F * 0.1), n = Math.max(1, rows.length), step = Math.max(0, full - a0) / n;
+const rowDur = Math.min(0.3, step * 0.5);
+rows.forEach((r, k) => { r.t = a0 + k * step; r.res = r.t + Math.min(0.35, step * 0.5); });
 const tS0 = rows.length ? rows[0].res : a0;
 const tS1 = Math.max(tS0 + 0.2, Math.min((rows.length ? rows[rows.length - 1].res : a0) + 0.5, P.end - 0.3));
 
@@ -125,18 +129,18 @@ U.clock((t) => {
   box.style.opacity = vis;
   box.style.visibility = vis > 0 ? "visible" : "hidden";
   if (!vis) return;
-  const u = clamp((t - P.at) / 0.5);
+  const u = clamp((t - P.at) / cardDur);
   card.style.opacity = clamp(u * 2.5);
   card.style.transform = "translateY(" + ((1 - backOut(u)) * 60 * s) + "px) scale(" + (0.94 + 0.06 * backOut(u)) + ")";
   rows.forEach((r) => {
-    const q = clamp((t - r.t) / Math.min(0.3, step));
+    const q = clamp((t - r.t) / Math.max(0.01, rowDur));
     r.el.style.visibility = t >= r.t ? "visible" : "hidden";
     r.el.style.opacity = t >= r.t ? Math.max(0.01, clamp(q * 1.6)) : 0;
     r.el.style.transform = "translateX(" + ((1 - quartOut(q)) * -30 * s) + "px)";
     const done = t >= r.res;
     r.pill.textContent = done ? r.label : "···";
     r.pill.classList.toggle("wait", !done);
-    const p = clamp((t - r.res) / 0.3);
+    const p = clamp((t - r.res) / Math.max(0.01, Math.min(0.3, full - r.res)));
     r.pill.style.transform = done ? "scale(" + (0.6 + 0.4 * backOut(p)) + ")" : "";
     if (r.line) r.line.style.transform = "scaleX(" + quartOut(clamp((t - r.res - 0.15) / 0.35)) + ")";
   });
