@@ -299,7 +299,7 @@ Only when the theme's `layout.mode` is `split-panel` and the video is 9:16 (Layo
   checklist `summary.value` and number labels, iso-machine `counter.to`) is verified against a ✅ line of
   `factcheck.md` (§3) before you write it; text comes only from what is said.
 - **Scenes** (`"scenes": [{"from", "to", "media": "broll/<file>"}]` or `{"from", "to", "effect", "params"?}`): 0–`max_per_min`
-  per minute, 1–6 s each, only on punch moments (the hook's payoff, the big reveal) — the whole frame, no speaker.
+  per minute, 1–6 s each, never overlapping, only on punch moments (the hook's payoff, the big reveal) — the whole frame, no speaker.
   Sources, in this order, never blocking and never sign in (never ask for a login, never suggest creating an account):
   (1) a file the user gave in `<folder>/broll/`; (2) only when `npx --yes hyperframes@0.8.157 media-use resolve --doctor`
   already says signed in: `npx --yes hyperframes@0.8.157 media-use resolve --type image --intent "<scene, in the theme's style, e.g. pixel-art globe at night, 9:16>" --project "<folder>/out/composition"`

@@ -427,6 +427,11 @@ def _scenes(raw: dict, words: list[dict], end: float, rec: Path, fmt: str,
         else:
             gs.append(Graphic("scene", round(start, 3), round(stop, 3), {"media": params["media"], "_scene": True},
                               False, None, i))
+    ordered = sorted(gs, key=lambda g: g.start)
+    for a, b in zip(ordered, ordered[1:]):
+        if b.start < a.end - 1e-6:                     # two full-frame covers at once: one hides the other's text
+            first, second = sorted((a.index, b.index))
+            raise PlanError(f"scene #{second + 1} overlaps scene #{first + 1}")
     allowed = math.ceil(lay.fullscreen_max_per_min * end / 60 - 1e-9)
     if len(gs) > allowed:
         warns.append(f"WARN scenes: {len(gs)} (layout allows {allowed} in {end:.0f} s at "

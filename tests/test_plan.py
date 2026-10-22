@@ -863,6 +863,18 @@ def test_scenes(tmp_path):
     assert any(w.startswith("WARN scene #1") and "longer than 6 s" in w for w in load_plan(out).warnings)
 
 
+def test_overlapping_scenes_are_an_error(tmp_path):
+    with pytest.raises(PlanError, match=r"^scene #2 overlaps scene #1$"):
+        load_plan(make_out(tmp_path, {"scenes": [{"from": 2.0, "to": 4.0, "effect": "burst"},
+                                                 {"from": 3.5, "to": 5.0, "effect": "burst"}]}))
+    with pytest.raises(PlanError, match=r"^scene #2 overlaps scene #1$"):        # list order does not matter
+        load_plan(make_out(tmp_path / "b", {"scenes": [{"from": 5.0, "to": 7.0, "effect": "burst"},
+                                                       {"from": 2.0, "to": 5.5, "effect": "burst"}]}))
+    pl = load_plan(make_out(tmp_path / "c", {"scenes": [{"from": 2.0, "to": 4.0, "effect": "burst"},
+                                                        {"from": 4.0, "to": 6.0, "effect": "burst"}]}))
+    assert len([g for g in pl.graphics if g.params.get("_scene")]) == 2           # back to back is fine
+
+
 def test_panel_counts_as_cover(tmp_path):
     plan = {"panel": [{"at": 1.5, "effect": "a"}, {"at": 4.0, "effect": "b"}, {"at": 6.0, "until": 9.0, "effect": "c"}]}
     assert _density(load_plan(make_out(tmp_path, plan)).warnings) == []
