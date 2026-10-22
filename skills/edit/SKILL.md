@@ -275,13 +275,15 @@ Only when the theme's `layout.mode` is `split-panel` and the video is 9:16 (Layo
   `WARN panel: no face position` (the face may end up too low, chin cut off).
 
 - **`"panel"`** (top-level in plan.json, not in `graphics`): a contiguous timeline from the first word (or after a
-  ≤ 1.5 s face-only hook) to the CTA. One item per sentence or idea, each 1–`cadence[1]` s (a long sentence → 2–3
-  items: the claim, then the proof); items in increasing `at`, each ends at the next item's `at` (or its own `until`),
-  so the panel is never empty between them. Item = `{"at": <anchor>, "until"?: <anchor>, "effect": "<name>",
+  ≤ 1.5 s face-only hook) to the CTA. **Dense, like a reel:** one item per clause / key phrase, NOT per sentence —
+  items 1–2 s by default (never under `cadence[0]`, never over `cadence[1]`), so a 20 s short gets ~12–18 items (a
+  sentence → 2–3 items: the claim, the proof, the consequence). Mix stock templates with real page screenshots (`$CM
+  shot`, below) — every named product / site / repo is its page, not a headline. Items in increasing `at`, each ends at
+  the next item's `at` (or its own `until`), so the panel is never empty between them. Item = `{"at": <anchor>, "until"?: <anchor>, "effect": "<name>",
   "params": {…}}` or `{"at", "until"?, "media": "broll/<file>", "fit"?: "contain"|"cover"}` — exactly one of
   `effect` / `media`; `"sfx"` optional on either; no other keys (no `shot` key: screenshots are files). Never `split`, `pip`, `side` or `bg`
   graphics next to a panel (build error "the panel replaces split" — make it a panel item).
-- **What goes in the panel — illustrate what is SAID, sentence by sentence** (templates and params in §1c):
+- **What goes in the panel — illustrate what is SAID, phrase by phrase** (templates and params in §1c):
   - a number → `stat-card` (`"layout": "hero"` for THE number of the video, `card` for the others) or a `checklist`
     `summary` when the number is a result of a check (e.g. 50 % links broken);
   - a product / site / tool named → its real page: `$CM shot "<url>" -o "<folder>/broll/<name>.png" --width 1000 --height 880 --light`
@@ -320,7 +322,7 @@ Only when the theme's `layout.mode` is `split-panel` and the video is 9:16 (Layo
 ```
 - **After `$CM build`:** it prints `layout: split-panel` and one `panel: <a>–<b> <what>` line per item. READ them
   against the transcript (each sentence covered, nothing stale) and fix every WARN: `panel gap` (an item's `until`
-  ends before the next item's `at` → extend or drop that `until`, add an item in the gap, or cover it with a scene), `panel item #n … is X s` (shorter than 0.6 s → merge; longer than `cadence[1]` + 1.5 s → split it), `scenes:`
+  ends before the next item's `at` → extend or drop that `until`, add an item in the gap, or cover it with a scene), `panel item #n … is X s` (shorter than min(0.6 s, `cadence[0]`) → merge; longer than `cadence[1]` + 1.5 s → split it), `panel pace: N items in X s` (one per sentence — split the items per clause / key phrase up to the range it names), `scenes:`
   / `longer than 6 s` (drop or shorten scenes), an unconfirmed number. `layout: classic` with a split-panel theme → wrong
   `--theme` or a 16:9 video.
 - **Snapshots:** add the middle of EVERY panel item (`(a + b) / 2` from its `panel:` line) and of every scene to the

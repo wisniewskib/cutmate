@@ -949,3 +949,28 @@ def test_panel_warns_without_face_position(tmp_path):
     assert not any("no face position" in w for w in load_plan(out).warnings)
     out = make_out(tmp_path / "c", {"graphics": [{"type": "chip", "at": 1.0, "text": "x"}]})
     assert not any("no face position" in w for w in load_plan(out).warnings)
+
+
+def test_panel_short_limit_follows_a_fast_cadence(tmp_path):
+    """A reel-paced theme (cadence [0.5, 2.0]) may cut every 0.5 s: only items under its cadence minimum warn."""
+    from dataclasses import replace
+    from cutmate.layout import SPLIT_DEFAULTS
+    fast = replace(SPLIT_DEFAULTS, cadence=(0.5, 2.0))
+    out = make_out(tmp_path, {"panel": [{"at": 2.0, "effect": "a"}, {"at": 2.5, "effect": "b"}, {"at": 3.5, "effect": "c"}]})
+    assert not any("shorter than" in w for w in load_plan(out, layout=fast).warnings)
+    assert any(re.match(r"WARN panel item #1 \(a\) is 0\.5 s — shorter than 0\.6 s", w) for w in load_plan(out).warnings)
+    out = make_out(tmp_path / "b", {"panel": [{"at": 2.0, "effect": "a"}, {"at": 2.4, "effect": "b"}]})
+    assert any(re.match(r"WARN panel item #1 \(a\) is 0\.4 s — shorter than 0\.5 s", w)
+               for w in load_plan(out, layout=fast).warnings)
+
+
+def test_panel_pace_warns_when_items_are_per_sentence(tmp_path):
+    """~one item per clause / key phrase (1-2 s): a 20 s panel with 10 items (one per 2 s) warns and names the range."""
+    def plan(n):
+        return {"panel": [{"at": round(20.0 * i / n, 2), "effect": "headline"} for i in range(n)]}
+    w = load_plan(_long_out(tmp_path, plan(10), end=20.0)).warnings
+    assert any(re.match(r"WARN panel pace: 10 items in 19\.9 s \(one per 2\.0 s\) — aim for 12–18", x) for x in w), w
+    assert not any("panel pace" in x for x in load_plan(_long_out(tmp_path / "b", plan(14), end=20.0)).warnings)
+    # time under a full-screen scene needs no panel items: 10 items in the 16 s left is one per 1.6 s — fine
+    sc = dict(plan(10), scenes=[{"from": 4.0, "to": 8.0, "effect": "burst"}])
+    assert not any("panel pace" in x for x in load_plan(_long_out(tmp_path / "c", sc, end=20.0)).warnings)

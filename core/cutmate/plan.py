@@ -43,6 +43,7 @@ PANEL_ITEM_KEYS = ("at", "until", "effect", "params", "media", "fit", "sfx")
 SCENE_KEYS = ("from", "to", "effect", "params", "media")
 PANEL_REPLACES = ("split", "pip", "side", "bg")  # graphics the persistent panel replaces
 ITEM_MIN, ITEM_SLACK = 0.6, 1.5   # panel item: shorter warns; longer than cadence max + slack warns (s)
+PANEL_PACE = (1.1, 1.7)           # panel: one item per clause / key phrase — seconds per item (fast, slow end)
 PANEL_GAP = 1.0                   # an empty panel longer than this (not covered by a scene) warns (s)
 SCENE_MIN, SCENE_MAX = 1.0, 6.0   # full-screen scene: shorter is an error, longer warns (s)
 SCENE_FADE = 0.25                 # entrance / exit of an effect scene (s)
@@ -344,10 +345,11 @@ def _panel(raw: dict, words: list[dict], end: float, rec: Path, fmt: str, layout
         span_end = rows[-1]["end"] = end - 0.05
     warns = []
     longest = lay.cadence[1] + ITEM_SLACK
+    shortest = min(ITEM_MIN, lay.cadence[0])          # a reel-paced theme (cadence min 0.5 s) may cut every 0.5 s
     for j, r in enumerate(rows):
         d = r["end"] - r["start"]
-        if d < ITEM_MIN - 1e-6:
-            warns.append(f"WARN panel item #{j + 1} ({r['name']}) is {d:.1f} s — shorter than {ITEM_MIN:g} s, "
+        if d < shortest - 1e-6:
+            warns.append(f"WARN panel item #{j + 1} ({r['name']}) is {d:.1f} s — shorter than {shortest:g} s, "
                          f"too fast to read")
         elif d > longest + 1e-6:
             warns.append(f"WARN panel item #{j + 1} ({r['name']}) is {d:.1f} s — longer than {longest:g} s "
@@ -357,6 +359,13 @@ def _panel(raw: dict, words: list[dict], end: float, rec: Path, fmt: str, layout
             if b - a > PANEL_GAP and _uncovered(a, b, covers) > PANEL_GAP + 1e-6:
                 warns.append(f"WARN panel gap {a:.1f}–{b:.1f} s ({b - a:.1f} s) — the panel is empty: "
                              f"extend an item or cover the gap with a scene")
+    # pace: about one item per clause / key phrase (1-2 s), not one per sentence; time under a scene needs none
+    shown = _uncovered(span_start, span_end, covers)
+    fast, slow = max(lay.cadence[0], PANEL_PACE[0]), max(lay.cadence[0], min(PANEL_PACE[1], lay.cadence[1]))
+    if shown >= MIN_CHECK and shown / len(rows) > slow + 0.05:
+        warns.append(f"WARN panel pace: {len(rows)} items in {shown:.1f} s (one per {shown / len(rows):.1f} s) — "
+                     f"aim for {round(shown / slow)}–{round(shown / fast)}: one item per clause / key phrase, "
+                     f"mix templates and page screenshots")
     gs = []
     last = len(rows) - 1
     for j, r in enumerate(rows):
