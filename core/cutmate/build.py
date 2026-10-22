@@ -614,7 +614,9 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
         splits.append([pn["start"], None if pn["stays"] else round(max(pn["start"] + 0.45, pn["end"] - 0.4), 3),
                        dy, cap_dy, 1 if pn["open_at_zero"] else 0])
     panel_items = [g for g in items if g.params.get("_panel")]
-    item_end = {id(a): round(min(b.start + HANDOFF, end), 3) for a, b in zip(panel_items, panel_items[1:])}
+    # the handoff only where an item runs up to the next one; an item with an earlier `until` ends there (a panel gap)
+    item_end = {id(a): round(min(b.start + HANDOFF, end), 3) for a, b in zip(panel_items, panel_items[1:])
+                if a.end >= b.start - 1e-3}
     scenes = [(g.start, g.end) for g in items if g.params.get("_scene")]
     hide = []
     bands = [(x.start, x.end) for x in items if x.type != "panel" and not x.params.get("_panel") and not x.params.get("_scene")]
@@ -635,7 +637,7 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
         hs = round(max(0.0, g.start - LEAD), 3)
         extra = None
         if g.params.get("_panel"):                     # an item swaps in place at its start (no lead-in); the host runs
-            hs = g.start                               # on until the next item covers it (next start + 0.2 s)
+            hs = g.start                               # on until the next item covers it (next start + 0.2 s), or to its `until`
             g = replace(g, end=item_end.get(id(g), g.end),
                         params={**g.params, "ratio": pn["ratio"]} if g.type == "panel-media" else g.params)
         if g.type == "pip":

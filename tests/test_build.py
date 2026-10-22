@@ -1365,3 +1365,22 @@ def test_title_before_panel_stays_above_the_frame(out, monkeypatch):
     band = img.crop((round(60 * k), round(230 * k), round(1020 * k), round(720 * k)))
     white = sum(1 for p in band.getdata() if min(p) > 225)
     assert white > 500, white
+
+
+def test_panel_item_until_leaves_gap(out, theme):
+    """A non-last item with an earlier `until` ends there (the gap shows the empty panel, as `WARN panel gap` and the
+    `panel:` line say): no handoff stretch, no handoff hide. A contiguous pair keeps the +0.2 s handoff."""
+    _png(out)
+    _with_layout_components(theme)
+    write_plan(out, {"panel": [{"at": "S1:mniej", "media": "broll/p.png", "until": 1.5},
+                               {"at": "S2:minus", "media": "broll/p.png"},
+                               {"at": "S2:Claude'a", "media": "broll/p.png", "until": 3.4}]})
+    r = B.build(out, theme=theme)
+    html = (r["project"] / "index.html").read_text(encoding="utf-8")
+    items = [h for h in _hosts(html) if not h[0].endswith("-panel")]
+    assert items[0][2] == 0.9 and items[0][2] + items[0][3] == pytest.approx(1.5)
+    assert items[1][2] + items[1][3] == pytest.approx(2.75 + 0.2)
+    sub = (r["project"] / "compositions" / f"{items[0][0]}.html").read_text(encoding="utf-8")
+    assert _P(sub)["end"] == pytest.approx(1.5 - 0.9)
+    assert cfg_of(html)["hide"] == [[f"#{items[1][0]}-slot", 2.73, 0.22, None, 0]]
+    assert r["panel"][0].startswith("0.90–1.50 ")
