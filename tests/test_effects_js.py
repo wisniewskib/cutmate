@@ -312,12 +312,13 @@ def test_ui_mock_page_is_whole_at_40_percent(span, kind):
 
 
 def test_iso_machine_build_in_is_scaled_to_the_span():
-    """iso-machine (three.js, not runnable here): every build-in time goes through T() / kB, which squeeze the natural
+    """iso-machine (three.js, not runnable here): every build-in time goes through tB() / kB, which squeeze the natural
     1.35 s assembly into U.fullAt — no raw `P.at + <number>` start left except the conveyor's indexing start."""
     from cutmate.build import _sections
     script = _sections(plugin_root() / "themes" / "clean" / "components" / "custom" / "iso-machine.html")["script"]
     assert "const kB = Math.min(1, (U.fullAt(P.at, P.end) - P.at) / BUILD);" in script
-    assert "const BUILD = 1.35;" in script and "const T = (x) => P.at + x * kB;" in script
+    assert "const BUILD = 1.35;" in script and "const tB = (x) => P.at + x * kB;" in script
     raw = re.findall(r"P\.at \+ [^\n;]*", script)
-    assert raw == ["P.at + x * kB", "P.at + Math.min(1.0, span * 0.3)"], raw     # T() itself and the conveyor start
+    assert raw == ["P.at + x * kB", "P.at + Math.min(1.0, span * 0.3)"], raw     # tB() itself and the conveyor start
+    assert len(re.findall(r"\b(?:const|let|var)\s+tB\b|\btB\s*=[^=>]", script)) == 1   # never shadowed (the crate has a T)
     assert "dur: (dur || 0.36) * kB" in script and "(0.4 * kB)" in script and "(0.35 * kB)" in script

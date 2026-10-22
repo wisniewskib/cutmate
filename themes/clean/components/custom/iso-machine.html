@@ -114,7 +114,7 @@ const span = Math.max(1, P.end - P.at);
 // squeezed by kB; the conveyor, tokens and counter are later beats
 const BUILD = 1.35;
 const kB = Math.min(1, (U.fullAt(P.at, P.end) - P.at) / BUILD);
-const T = (x) => P.at + x * kB;
+const tB = (x) => P.at + x * kB;
 const SP = 2.3;                                           // station spacing (world units)
 const tStart = P.at + Math.min(1.0, span * 0.3);          // the conveyor starts indexing once everything has landed
 const tStop = P.end - 0.35;
@@ -240,7 +240,7 @@ U.ready(Promise.all([U.three({ el: stage }), Promise.all([U.fonts([800, 900]), U
                         : [slab(legs[0], -0.55, crateEnd, 0)];
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(80, 80), new THREE.ShadowMaterial({ opacity: dark ? 0.35 : 0.13 }));
   floor.rotation.x = -Math.PI / 2; floor.position.y = -0.27; floor.receiveShadow = true; scene.add(floor);
-  slabs.forEach((q) => dropIn(q, T(0), 0.8, 0.34));
+  slabs.forEach((q) => dropIn(q, tB(0), 0.8, 0.34));
 
   // conveyor: legs, rails, belt with moving chevrons, rollers at the two ends
   const tc = document.createElement("canvas"); tc.width = 128; tc.height = 128;
@@ -279,7 +279,7 @@ U.ready(Promise.all([U.three({ el: stage }), Promise.all([U.fonts([800, 900]), U
   } else {
     segment(legs[0], 0, uE, [-0.12, uE + 0.12], [-0.12, uE + 0.12], [0, uE]);
   }
-  convs.forEach((q) => dropIn(q, T(0.08), 1.4, 0.34));
+  convs.forEach((q) => dropIn(q, tB(0.08), 1.4, 0.34));
 
   // input chute above the first slot
   const chute = new THREE.Group(); legs[0].add(chute);
@@ -292,7 +292,7 @@ U.ready(Promise.all([U.three({ el: stage }), Promise.all([U.fonts([800, 900]), U
   ring(0.27, 0.035, chute, xIn, 1.92, 0, FRAME); ring(0.27, 0.035, chute, xIn, 1.18, 0, FRAME);
   mesh(rbox(0.1, 1.7, 0.1, 0.03), FRAME, xIn, 1.05, -0.62, chute);
   mesh(rbox(0.1, 0.1, 0.42, 0.03), FRAME, xIn, 1.55, -0.38, chute);
-  dropIn(chute, T(0.12), 1.6, 0.34);
+  dropIn(chute, tB(0.12), 1.6, 0.34);
 
   // ---------- parts ----------
   const spread = n > 1 ? 0.22 / (n - 1) : 0;
@@ -302,7 +302,7 @@ U.ready(Promise.all([U.three({ el: stage }), Promise.all([U.fonts([800, 900]), U
     const g = new THREE.Group(); g.position.x = u - legStart(legOf(u)); leg.add(g);
     const t0 = 0.14 + i * spread;
     let k = 0;
-    const piece = () => { const q = new THREE.Group(); g.add(q); dropIn(q, T(t0 + 0.04 * k++), 2.2); return q; };
+    const piece = () => { const q = new THREE.Group(); g.add(q); dropIn(q, tB(t0 + 0.04 * k++), 2.2); return q; };
     const main = M(p.color, { roughness: 0.5 });
     const deep = M(shade(p.color, 0.72), { roughness: 0.55 });
     const light = M(tint(p.color, 0.55), { roughness: 0.5 });
@@ -413,7 +413,7 @@ U.ready(Promise.all([U.three({ el: stage }), Promise.all([U.fonts([800, 900]), U
     mesh(rbox(CR, CH2, T, 0.025), cd, crateX, CH2 / 2, -CR / 2 + T / 2, crate);
     mesh(rbox(T, CH2, CR, 0.025), cm, crateX + CR / 2 - T / 2, CH2 / 2, 0, crate);
     mesh(rbox(T, CH2, CR, 0.025), cd, crateX - CR / 2 + T / 2, CH2 / 2, 0, crate);
-    dropIn(crate, T(0.14 + 0.22 + 0.06), 2.2);
+    dropIn(crate, tB(0.14 + 0.22 + 0.06), 2.2);
   }
 
   // ---------- tokens ----------
@@ -426,7 +426,7 @@ U.ready(Promise.all([U.three({ el: stage }), Promise.all([U.fonts([800, 900]), U
   for (let j = 0; j < K; j++) {
     const m = mesh(tokGeo, tokMat, 0, tokY, 0, machine);
     const u0 = uSlot(lastSlot - j);                       // token j starts in slot lastSlot − j (slot 0 = input)
-    const tIn = j <= lastSlot ? T(0.6 + 0.05 * (lastSlot - j)) : timeAtD(uSlot(0) - u0);
+    const tIn = j <= lastSlot ? tB(0.6 + 0.05 * (lastSlot - j)) : timeAtD(uSlot(0) - u0);
     const tOff = timeAtD(uE - u0);
     tokens.push({ m, u0, tIn, tOff });
   }
@@ -578,7 +578,7 @@ U.ready(Promise.all([U.three({ el: stage }), Promise.all([U.fonts([800, 900]), U
     Lb.el.style.left = Lb.lx + "px"; Lb.el.style.top = Lb.ly + "px";
     Lb.line.setAttribute("x1", Lb.ax);
     Lb.dot.setAttribute("cx", Lb.ax); Lb.dot.setAttribute("cy", Lb.ay);
-    Lb.t0 = Lb.counter ? T(0.75) : T(0.14 + i * spread + 0.45);
+    Lb.t0 = Lb.counter ? tB(0.75) : tB(0.14 + i * spread + 0.45);
   });
 
   // ---------- per frame ----------
