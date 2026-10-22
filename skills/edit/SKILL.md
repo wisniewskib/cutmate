@@ -21,6 +21,12 @@ component in both formats and reports problems; minutes — prefer Bash run_in_b
 600000; `WARN hyperframes check ran out of time` = a busy machine, not an error (it goes on)); lint
 errors → tell the user in one line each and offer `/cutmate:theme` or the config theme.
 
+**Layout:** read `layout` from `<path>/theme.json` (the theme's path from `$CM theme list`; no `layout` key = classic).
+`split-panel` (9:16 only; a 16:9 video ignores it) → explainers are on without a request: the top part of the frame is
+ONE panel for the whole video and you plan its content for every sentence — §5b. Do not fall back to a few chips over
+the bare face: a split-panel theme without a full `"panel"` is a failed edit. Classic (or 16:9) → §1c explainer rules
+unchanged.
+
 **Resume:** if `out/` already has files, continue from the first missing one:
 `work/*/transcript.json` → `sheets/*.png` → `outline.md` (16:9) → `takes.md` → `edl.json` → `aroll.mp4` →
 `work/aligned_words.json` → `work/tracks.json` (if needed) → `plan.json` → checkpoint "zrozumiałem tak" (if `requests.md` exists) → `preview.mp4` (16:9) → `composition/index.html` → `final.mp4` → `thumbnail.png` (if `steps.thumbnail`) → `EDIT_NOTES.md`.
@@ -79,7 +85,7 @@ Film-wide request "chcę explainery" → `- [czat] explainery → explainers` (a
 **Map:** a built-in component when one fits; `bg` for "inne tło / przenieś mnie gdzie indziej"; `side` for "na połowie
 ekranu" (16:9 only); otherwise `custom`. Check saved effects first: `${CUTMATE_HOME:-$HOME/.cutmate}/themes/<theme>/components/custom/index.json`
 and the bundled ones in `${CLAUDE_PLUGIN_ROOT}/themes/<theme>/components/custom/index.json` — read BOTH `index.json` files; their formats differ (bundled: `params` = {name: description}, `follow`/`place` booleans, `kind`; user file from `save-effect`: `params` = list, `follow` = string|null).
-Bundled: `energy-ball` (params `radius`, `colors`; `"follow": "hand"`; hidden without hand samples), explainers `stat-card`, `flow`, `ui-mock`, `iso-machine`, VFX/3D `showcase-3d`, `burst`, `hand-sparks`.
+Bundled: `energy-ball` (params `radius`, `colors`; `"follow": "hand"`; hidden without hand samples), explainers `stat-card`, `flow`, `ui-mock`, `iso-machine`, `checklist`, `headline`, VFX/3D `showcase-3d`, `burst`, `hand-sparks`.
 
 **Plan types** (in `plan.json` graphics):
 - `{"type": "custom", "name": "<lowercase-dashes>", "from": …, "to": …}` or `"at"` (+ `until`); `"follow": "face"|"hand_left"|"hand_right"|"hand"`
@@ -90,16 +96,18 @@ Bundled: `energy-ball` (params `radius`, `colors`; `"follow": "hand"`; hidden wi
 - `{"type": "side", "from", "to", "media"|"effect", "speaker": "right"|"left"}` — speaker on one half, graphic on the other (16:9 only).
 - `face` per segment is filled automatically from tracks.json when missing.
 
-**Explainers** (animated explanations in the `split` panel): only after an explicit request — chat or spoken ("explainer(y)", "wyjaśnij to animacją"), never on your own. Pick moments:
+**Explainers** (animated explanations in the `split` panel; classic themes — a split-panel theme puts them in the panel without a request, §5b): only after an explicit request — chat or spoken ("explainer(y)", "wyjaśnij to animacją"), never on your own. Pick moments:
 2–4 per 60 s of video, each ≥ 2 s, ≥ 2 s of plain face between two explainers, never on a sentence that already has a requested effect or a `split` with `media`.
-Choose from `index.json` by sentence type: a number → `stat-card`, steps / a process → `flow`, a tool / a chat / a command → `ui-mock`, a mechanism / "how it works" → `iso-machine`. Nothing fits → write a new effect in `out/custom/` starting from the closest template.
-Text and numbers come ONLY from the sentence. The build does NOT check explainer numbers (stat-card `value`, iso-machine `counter.to`, ui-mock counts): verify each one against a ✅ line in `factcheck.md` yourself (§3) before you write it.
+Choose from `index.json` by sentence type: a number → `stat-card`, steps / a process → `flow`, a check / comparison → `checklist`, a tool / a chat / a command → `ui-mock`, a mechanism / "how it works" → `iso-machine`. Nothing fits → write a new effect in `out/custom/` starting from the closest template.
+Text and numbers come ONLY from the sentence. The build does NOT check explainer numbers beyond stat-card `value` and checklist `summary.value` (a WARN when `steps.factcheck` is on; iso-machine `counter.to`, ui-mock counts and checklist row labels are not checked): verify every number against a ✅ line in `factcheck.md` yourself (§3) before you write it.
 9:16: `{"type": "split", "from": …, "to": …, "effect": "<name>", "params": {…}}` (panel 1000×820, params go to the effect); 16:9: the same as `{"type": "side", …, "effect", "params", "speaker": "right"|"left"|"gesture"}`.
 Templates (params; `?` = optional):
-- `stat-card`: value, prefix?, suffix?, label, note?, media? (a file next to the recording, e.g. `broll/shot.png`; build copies it), accent?
+- `stat-card`: value, prefix?, suffix?, label, note?, media? (a file next to the recording, e.g. `broll/shot.png`; build copies it), accent?, layout? (`card` default | `hero` = the number fills the panel)
 - `flow`: nodes (2–6), edges?, style (`clean`|`rough`), title?, seed?, accent?
-- `ui-mock`: kind (`chat`|`terminal`|`post`), lines [{who: `user`|`ai`|`cmd`, text}], title?, accent?, replies? / reposts? / likes? (post only: real counts — a number counts up, text is shown as is; leave them out and the post has no counters, never invent them)
-- `iso-machine`: parts (2–5) [{label, shape: `box`|`cylinder`|`funnel`|`screen`|`gear`, color?}], token?, counter? {to, label}, title?, theme (`light`|`dark`), accent?
+- `ui-mock`: kind (`chat`|`terminal`|`post`|`browser`|`app`), lines [{who: `user`|`ai`|`cmd`, text}] (chat / terminal / post), title?, accent?, replies? / reposts? / likes? (post only: real counts — a number counts up, text is shown as is; leave them out and the post has no counters, never invent them); browser: url, title?, search?, rows (≤ 8) [{text, sub?, badge?}], highlight? (row index circled); app: title (e.g. `Connectors`), search?, rows [{text, sub?, toggle? true|false, click? true, badge?}] (a cursor clicks the `click` rows and their switch flips)
+- `iso-machine`: parts (2–5) [{label, shape: `box`|`cylinder`|`funnel`|`screen`|`gear`, color?}], token?, counter? {to, label}, title?, theme (`light`|`dark`|`panel` — `panel` in split-panel themes, it follows the panel colour), accent?
+- `checklist`: title?, rows (2–8) [{text, status `ok`|`bad`|`warn`|`info`, label? (e.g. `200 OK`, `404`, `OUTDATED`)}], strike? (bad rows struck through), summary? {value, suffix?, label?} (a big number beside the table), accent?
+- `headline`: text (1–6 words from the sentence), kicker?, mode (`type` default | `pop`), accent?
 VFX/3D (all support `"place": "gesture"`): `showcase-3d` (shape `torus-knot`|`icosahedron`|`text`|`glb`, text?, model?, color?, size?, x?, y?; GLB via graphic-level `"media": "broll/x.glb"`; default spot: right third; on an open palm it rests on the palm and follows it), `burst` (colors?, size? — 1.2–1.6 for a hero moment, ~1 for a hand close to the face; x?, y?; ~1–1.4 s flash + shockwaves + sparks; default spot: frame CENTRE, i.e. over the face — always pass place or x/y), `hand-sparks` (mode `stream` = energy flowing out of the hands | `sparks` = hot sparks falling; link? = energy arc between the two hands; colors?, size?; uses BOTH hands when placed by gesture).
 
 **Gesture placement:** when a spoken command says "tutaj / tu / tam / w tym miejscu" without naming a place, write `"place": "gesture"` (custom / chip) or `"speaker": "gesture"` (side: the panel goes to the screen side the speaker points to). A named place ("w prawym dolnym rogu", "po lewej") always wins — then do NOT write gesture. `place` is only for `custom` / `chip` and `"speaker": "gesture"` only for `side` (anything else → plan error). What the hand does decides the spot (from the hand-shape tracks): an **open / presenting palm** → the effect sits just above that palm and follows the hand for its whole span (held at the last seen spot when the hand drops out; the effect also gets both palms as `P.hands`); a **clear index-finger point** → the pointed spot, just past the fingertip (never thrown to the frame edge); neither → the higher visible hand. The effect starts at its anchor and takes its position from the nearest hand sample, so anchor it on the GESTURE, not on the word: when the hand comes up before "tutaj", use the time the hand is up (seconds, read from the sheet / tracks) — it still matches the request within ±1 s. A chip centres on the spot (kept inside the safe zone); positions follow punch-ins and the split / side moves. Run `$CM track <folder>/out` first (fresh tracks needed; stale → build error; no hand near the anchor → build WARN and the default position; WARN "no pointing data" or "no hand-shape data" → run `$CM track --force <folder>/out`).
@@ -161,7 +169,9 @@ U.three({ el: root.querySelector(".fx"), bloom: { strength: 1.2, radius: 0.6, th
 
 **Checkpoint "zrozumiałem tak":** map every request into `plan.json` in §5 first (a word anchor in requests.md matches a graphic starting within ±1 s of that word). Then, right before build (16:9: together with the preview), when `requests.md` has ≥ 1 line, run `$CM requests <folder>/out` — it needs aligned_words.json, edl_timed.json and plan.json (one line per request: OK / MISSING /
 NOTE / SURPRISE OK|MISSING / BAD, then `requests: N ok, M missing, K bad`), fix every `MISSING` and `BAD` and every `WARN density` (§5 Gęstość), then show the user the list as "zrozumiałem tak: …"
-and wait for OK. No requests → no pause.
+and wait for OK. No requests → no pause. Split-panel layout: the list also shows the panel compactly — the `panel:`
+lines from `$CM build`, one line each (`0.00–1.40 stat-card 44%`, `… SCENE globe.png`); without requests there is no
+pause and those lines go into EDIT_NOTES.md (§9).
 
 **After acceptance:** for each `custom` effect used, ask once "Zapisać efekt <name> w theme?" → `$CM save-effect <folder>/out <name> --description "…"`
 (`--theme T` to pick the theme, `--force` to overwrite).
@@ -245,6 +255,8 @@ Follow `frame.md`. Write `out/plan.json`:
   explainers were requested (§1c); an effect on a gesture. Many short visuals in a row, never two at once — the budgets
   below still hold. Rebuild until no `WARN density` is left; one that stays gets a one-line reason. The "zrozumiałem
   tak" list is shown only with zero density warnings, or with each remaining one explained in one line.
+  Split-panel layout: the panel itself meets the density rule (panel items and scenes count as cover) — a `WARN
+  density` there means a hole in the panel (`WARN panel gap`): fill it with a panel item, not a band graphic (§5b).
 - B-roll: files in `<folder>/broll/`; for a web page the speaker talks about: `$CM shot <url> -o <folder>/broll/<name>.png`
   and READ the PNG (cookie banners, login walls → pick another page or crop).
 - Music: config `music.source` = `folder` → automatic (first audio file in config `music.folder`); `heygen` → check
@@ -252,6 +264,63 @@ Follow `frame.md`. Write `out/plan.json`:
   in EDIT_NOTES (never sign in for them, no extra pause); if signed in:
   `npx --yes hyperframes@0.8.157 media-use resolve --type bgm --intent "<mood>" --project <folder>/out/composition --json`;
   take the local audio file path from the JSON; check it exists, and put its ABSOLUTE path in `plan.music.src`; `none` → no music.
+
+## 5b. Panel (split-panel layout, 9:16)
+
+Only when the theme's `layout.mode` is `split-panel` and the video is 9:16 (Layout above). `cadence` = the layout's
+`[min, max]` seconds (default [1.0, 3.0]), `max_per_min` = its `fullscreen.max_per_min` (default 3).
+
+- **`"panel"`** (top-level in plan.json, not in `graphics`): a contiguous timeline from the first word (or after a
+  ≤ 1.5 s face-only hook) to the CTA. One item per sentence or idea, each 1–`cadence[1]` s (a long sentence → 2–3
+  items: the claim, then the proof); items in increasing `at`, each ends at the next item's `at` (or its own `until`),
+  so the panel is never empty between them. Item = `{"at": <anchor>, "until"?: <anchor>, "effect": "<name>",
+  "params": {…}}` or `{"at", "until"?, "media": "broll/<file>", "fit"?: "contain"|"cover"}` — exactly one of
+  `effect` / `media`, no other keys (no `shot` key: screenshots are files). Never `split`, `pip`, `side` or `bg`
+  graphics next to a panel (build error "the panel replaces split" — make it a panel item).
+- **What goes in the panel — illustrate what is SAID, sentence by sentence** (templates and params in §1c):
+  - a number → `stat-card` (`"layout": "hero"` for THE number of the video, `card` for the others) or a `checklist`
+    `summary` when the number is a result of a check (e.g. 50 % links broken);
+  - a product / site / tool named → its real page: `$CM shot <url> -o "<folder>/broll/<name>.png" --width 1000 --height 880 --light`,
+    READ the PNG (cookie banner, login wall, empty page → another URL, or crop) and use it as `"media": "broll/<name>.png"`;
+    or a `ui-mock` `browser` (its URL, a typed search, result rows, one circled) / `app` (its screen, a typed filter,
+    rows with toggles the cursor clicks) mockup of what is DONE in it;
+  - steps / a process → `flow` or `checklist`; a check / comparison (works / broken, before / after) → `checklist`;
+  - a chat / an AI answer / a command → `ui-mock` `chat` / `terminal`;
+  - a mechanism / "how it works" → `iso-machine` with `"theme": "panel"`;
+  - anything else → `headline` with the sentence's key phrase (1–6 words, the speaker's words).
+  Vary the kinds — never the same template three items in a row. Every number in the panel (stat-card `value`,
+  checklist `summary.value` and number labels, iso-machine `counter.to`) is verified against a ✅ line of
+  `factcheck.md` (§3) before you write it; text comes only from what is said.
+- **Scenes** (`"scenes": [{"from", "to", "media": "broll/<file>"}]` or `{"from", "to", "effect", "params"?}`): 0–`max_per_min`
+  per minute, 1–6 s each, only on punch moments (the hook's payoff, the big reveal) — the whole frame, no speaker.
+  Sources, in this order, never blocking and never sign in (never ask for a login, never suggest creating an account):
+  (1) a file the user gave in `<folder>/broll/`; (2) only when `npx --yes hyperframes@0.8.157 media-use resolve --doctor`
+  already says signed in: `npx --yes hyperframes@0.8.157 media-use resolve --type image --intent "<scene, in the theme's style, e.g. pixel-art globe at night, 9:16>" --project "<folder>/out/composition"`
+  → copy the file to `<folder>/broll/`; (3) a full-frame stock explainer as the scene (`stat-card` `"layout": "hero"`
+  or `headline`), which takes the theme's tokens; (4) no scene. Log the source used per scene in EDIT_NOTES.md.
+- **Band graphics** (title / counter / stamp / chip …) ≤ 2, only on punch moments — each hides the panel item under it
+  for its span. The `captions` / `hit` / `sfx` rules stay as in §5.
+- **Example:**
+```json
+{"panel": [
+   {"at": "S1:Claude", "effect": "headline", "params": {"text": "Claude sprawdza linki", "mode": "type"}},
+   {"at": "S1:połowa", "effect": "checklist", "params": {"title": "Link check", "rows": [
+     {"text": "docs.example.com", "status": "ok", "label": "200 OK"}, {"text": "blog.example.com", "status": "bad", "label": "404"}],
+     "strike": true, "summary": {"value": 50, "suffix": "%", "label": "nie działa"}}},
+   {"at": "S2:Firecrawl", "media": "broll/firecrawl.png", "fit": "cover"},
+   {"at": "S2:włączasz", "effect": "ui-mock", "params": {"kind": "app", "title": "Connectors", "search": "fire",
+     "rows": [{"text": "Firecrawl", "toggle": true, "click": true}]}}],
+ "scenes": [{"from": "S3:cały", "to": "S3:internet.", "media": "broll/globe.png"}],
+ "graphics": [{"type": "stamp", "at": "S4:koniec", "text": "STOP.", "hit": true}]}
+```
+- **After `$CM build`:** it prints `layout: split-panel` and one `panel: <a>–<b> <what>` line per item. READ them
+  against the transcript (each sentence covered, nothing stale) and fix every WARN: `panel gap` (add an item or
+  `until`), `panel item #n … is X s` (shorter than 0.6 s → merge; longer than `cadence[1]` + 1.5 s → split it), `scenes:`
+  / `longer than 6 s` (drop or shorten scenes), an unconfirmed number. `layout: classic` with a split-panel theme → wrong
+  `--theme` or a 16:9 video.
+- **Snapshots:** add the middle of EVERY panel item (`(a + b) / 2` from its `panel:` line) and of every scene to the
+  §6 snapshot checkpoints and READ them: the item in the theme's colours / fonts, whole inside the panel, the page
+  screenshot readable, the face in the bottom half, captions on the seam not covering the item's text or the mouth.
 
 ## 6. Build and look
 
@@ -278,7 +347,8 @@ question. Keep the title short (it wraps to at most 3 lines) and the hook to 2 l
 ## 9. Notes and hand-off
 
 Write `out/EDIT_NOTES.md`: final structure (segments in order with times), which graphic is where and why, music,
-commands used. Send the user `final.mp4` (and the thumbnail).
+commands used. Split-panel layout: also the `panel:` lines from the last `$CM build` (one per item and scene) and the
+source of every scene (user file / media-use image / stock explainer / none). Send the user `final.mp4` (and the thumbnail).
 16:9: also hand over `chapters.txt` and, if it was written, `captions.srt`.
 When they reply with timestamps, log each as `[uwagi <mm:ss>]` in `requests.md` (§1c) and batch all changes into
 one rebuild + one render.

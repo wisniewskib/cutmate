@@ -34,6 +34,11 @@ AskUserQuestion "Co robimy z wyglądem?":
 2. Tell the user in 1–2 lines what was rolled (e.g. "noir + Anton, brutal shapes, slam motion — robię…").
 3. Follow `${CLAUDE_PLUGIN_ROOT}/skills/theme/generate.md` with this draft and its direction. Then §4.
 
+The roll never picks a layout (a layout is a format choice, not a look): the draft stays classic (no `layout` key).
+Only when the user asked for the panel ("panel u góry", "explainery cały czas", "jak w tej rolce z panelem") write
+`"layout": {"mode": "split-panel"}` into the draft's `theme.json` and `--panel-bg` into its `tokens.css` before
+`generate.md` (its step 2b).
+
 Keep the list of every draft made in this session (for `--avoid`).
 
 ## 3. Własne kolory i fonty
@@ -50,13 +55,16 @@ Keep the list of every draft made in this session (for `--avoid`).
    Elegancki szeryf (DM Serif Display, Fraunces) / Techniczny (Space Grotesk, Space Mono). Any other answer: a Google
    font name or a description → pick the closest OFL Google family that has Polish letters (ą ę ł ń ó ś ź ż). Pick a
    display family (titles, stamps, numbers) and a text family (captions, labels). Not Inter for display.
-3. Shapes and motion — ONE AskUserQuestion with two questions (the names are the direction values; AskUserQuestion
+3. Shapes, motion and layout — ONE AskUserQuestion with three questions (the names are the direction values; AskUserQuestion
    takes 4 options, the fifth name is reachable through the free-text answer; put first and mark "(polecane)" the
    option that fits what the user described, else brutal and slam):
    - "Kształty?" — brutal (gruba ramka + twardy cień) / pill (pastylki, miękki cień) / tape (krzywo naklejone paski) /
      outline (przezroczyste karty, gruba ramka) — fifth: sharp (ostre, płaskie).
    - "Ruch?" — slam (wbija się z dużej skali) / glitch (szarpnięcia) / snappy (szybkie wjazdy) / typewriter (litera po
      literze) — fifth: smooth (płynne).
+   - "Układ?" — **Klasyczny (polecane)** (grafiki pojawiają się na chwilę nad twarzą) / **Panel u góry (explainery
+     cały czas)** (górna połowa to stały panel z explainerami, mockupami i screenami, zmiana co 1–3 s; ty w dolnej
+     połowie, napisy na szwie). Mark "(polecane)" on Panel u góry instead when the user described that look.
    Pick `captions` yourself to fit (`boxed` for brutal/sharp, `highlight` for pill/tape, `outline` or `shadow`
    otherwise) and say it in the summary.
 4. Name — AskUserQuestion with a suggested name (`<colour>-<shapes>`, letters, digits, `_`, `-`) and free text.
@@ -65,6 +73,10 @@ Keep the list of every draft made in this session (for `--avoid`).
    now (§4 overwrite question); "Nowa nazwa" → run `$CM theme new` again with the new name.
 5. Write the direction into the draft's `theme.json` → `"direction": {"mode": "custom", "palette": {name, accent,
    on_accent, text, ink, card, muted}, "fonts": {"display": …, "text": …}, "shapes": …, "motion": …, "captions": …}`.
+   **Panel u góry** → also the top-level `"layout": {"mode": "split-panel"}` (defaults: panel top, ratio 0.5, cadence
+   [1.0, 3.0], captions on the seam, cut transition, ≤ 3 full-screen scenes per minute) and `--panel-bg: <hex>;` in the
+   draft's `tokens.css` colour block (the panel colour: the card colour from "Karty i tło grafik?" or a shade of it;
+   lint requires it). **Klasyczny** → no `layout` key.
 6. Follow `${CLAUDE_PLUGIN_ROOT}/skills/theme/generate.md`. Then §4.
 
 ## 4. Decision

@@ -62,6 +62,18 @@ Videos (each source video, max ~60 s per video — use `--end 60` for longer one
 3. Full-size stills for the font and the side-by-side check (sheets are small): 2–4 frames where graphics or
    captions are on screen, `ffmpeg -nostdin -v error -ss <t> -i "<video>" -frames:v 1 "$CL/frame-<t>.png"`; READ them.
 
+Layout — while reading the overview sheets also note the LAYOUT (how the frame is divided, not only how the graphics
+look):
+- Does a panel stay on screen (the same box in most tiles, over and around the speaker)? Where (top / bottom) and which
+  share of the frame height (e.g. top half → 0.5; the speaker then sits in the other part).
+- How often its content changes: count the changes in 10 s of 0.5 s tiles (20 tiles) → a cadence `~<a>–<b> s`
+  (e.g. 8 changes in 10 s → every ~0.5–2 s). What it shows: explainers, app / browser mockups, status tables, big
+  numbers, real page screenshots, chat answers.
+- Where the captions sit relative to it: on the seam between panel and face, or at the bottom.
+- Full-screen scenes (the whole frame replaced by an image / illustration, no speaker): how many, how long each.
+- The panel's colour (fill) — take its hex from the `$CM theme colors` list below.
+A panel on screen in most tiles of the video = `split-panel`; graphics that come and go over the face = `klasyczny`.
+
 Colours: `$CM theme colors "$CL"/frame-*.png "<screenshots…>" --n 12` → hex + share lines. Skin, walls and
 the room dominate; take the accent / card / text colours from what you SEE on the graphics and captions and use the
 list to get exact hex values.
@@ -70,7 +82,7 @@ Screenshots only: READ them, `$CM theme colors` on them, and say that motion is 
 
 ## 3. Co widzę
 
-Tell the user what you see — ≤ 8 lines, concrete:
+Tell the user what you see — ≤ 9 lines, concrete:
 - **Paleta:** accent, card, text, ink, muted as hex (+ which is on accent fills).
 - **Fonty:** category (condensed grotesk, rounded sans, serif, mono, handwritten …), weight, case → the closest OFL
   Google family with Polish letters (ą ę ł ń ó ś ź ż) for display and for text. The original font only if it is OFL.
@@ -78,6 +90,8 @@ Tell the user what you see — ≤ 8 lines, concrete:
 - **Napisy:** position, case, words per page, box / outline / shadow, key-word colour.
 - **Ruch:** entrances, speed, ease.
 - **Gęstość grafik:** how often graphics appear and how big they are.
+- **Układ:** `klasyczny` | `panel u góry <ratio>, zmiana co ~<a>–<b> s, napisy na szwie|na dole, <n> scen pełnoekranowych`
+  (e.g. `panel u góry 0.5, zmiana co ~0.5–2 s, napisy na szwie, 2 scen pełnoekranowych`) + the panel colour hex.
 
 AskUserQuestion "Zgadza się?": **Zgadza się (polecane)** / **Popraw** (the user says what → change it, show the
 lines again only if much changed).
@@ -95,6 +109,14 @@ lines again only if much changed).
      `captions` (boxed / highlight / outline / shadow) = the closest values; `hints` = what makes this source itself
      (e.g. `"title": "yellow slab, black kicker bar, tilted 2°"`, `"motion": "fast slide from left, small overshoot"`).
    - Contrast: `ink` on `card` ≥ 4.5, `on_accent` on `accent` ≥ 4.5 — nudge the source colours if needed.
+   - **Układ** `panel u góry …` → also write the top-level `"layout"` into the same `theme.json` (keys that equal the
+     defaults may be left out — defaults: `panel` `"top"`, `ratio` 0.5, `cadence` [1.0, 3.0], `captions` `"seam"`,
+     `transition` `"cut"`, `fullscreen.max_per_min` 3), e.g.
+     `"layout": {"mode": "split-panel", "ratio": 0.5, "cadence": [0.5, 2.0], "captions": "seam", "transition": "cut", "fullscreen": {"max_per_min": 3}}`
+     (`ratio` 0.40–0.60; `cadence` = the `~<a>–<b> s` you counted, 0.5 ≤ a < b ≤ 6; `captions` `"seam"` or
+     `"bottom"`; `fullscreen.max_per_min` = scenes per minute of the source, rounded up, 0–6), and put
+     `--panel-bg: <panel hex>;` (the panel colour from the colours list) into the draft's `tokens.css` colour block (the lint
+     requires `--panel-bg` for split-panel). `klasyczny` → no `layout` key (classic is the default).
 3. Follow `${CLAUDE_PLUGIN_ROOT}/skills/theme/generate.md` with this draft. Build the look from the hints, not just the
    recipe of the closest value. In its step 7 (quality bar) also compare with the source:
    build ONE composite image per comparison and READ that image (two separate images are hard to compare):
@@ -107,6 +129,8 @@ lines again only if much changed).
    - corners and shapes — radius, borders, shadows, tilts, strips;
    - captions — position, case, box / outline, key-word colour;
    - motion — the entrance row matches the source's entrances (direction, speed, overshoot).
+   - layout (split-panel only) — `<draft path>/check/sheet-9x16.png` vs. a source overview sheet: the same panel share
+     and colour, the face in the other part, captions in the same place, panel items that look like the source's.
    Fix what differs in the `generate.md` step it belongs to and re-check, until a viewer would say "same style". Max 3
    rounds; what still differs goes into the §5 summary.
 

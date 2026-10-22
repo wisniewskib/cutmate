@@ -308,3 +308,38 @@ def test_theme_list_parsing_is_tab_based_and_edit_checks_the_saved_theme():
         assert "first 2 characters" not in md, name
     edit = " ".join(_skill("edit").split())
     assert "kind is not `draft`" in edit and "$CM theme check <theme> --saved" in edit
+
+
+def test_clone_skill_detects_layout():
+    md = _skill("clone-style")
+    for s in ("**Układ:**", '"layout"', "--panel-bg", "co ~", "scen"):
+        assert s in md, s
+    check_cli_calls(md)
+
+
+def test_generate_layout_step():
+    md = _theme_file("generate.md")
+    for s in ("## Layout: split-panel", "panel.html", "--panel-bg", "Every rule section stays verbatim"):
+        assert s in md, s
+
+
+def test_theme_skill_asks_layout():
+    md = _skill("theme")
+    for s in ("Układ?", "Panel u góry"):
+        assert s in md, s
+
+
+def test_edit_skill_follows_layout():
+    md = _skill("edit")
+    for s in ('"panel"', '"scenes"', "split-panel", "checklist", "headline", "--light", "without a request",
+              "resolve --doctor"):
+        assert s in md, s
+    assert re.search(r"\$CM shot [^`\n]*--width \d+ --height \d+ --light", md)
+    check_cli_calls(md)
+
+
+def test_skills_never_sign_in_for_images():
+    md = _skill("edit")
+    scenes = _section(md, "- **Scenes**", "\n- ")
+    assert '"scenes"' in scenes and "never sign in" in scenes and "resolve --doctor" in scenes, scenes
+    assert "never suggest creating an account" in scenes

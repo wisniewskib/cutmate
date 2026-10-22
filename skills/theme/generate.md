@@ -31,6 +31,26 @@ for pill). Add `--on-accent: <on_accent>;` for text on accent fills. Keep every 
 Contrast (lint): `--ink` on `--card` ≥ 4.5; `on_accent` on `--accent` ≥ 4.5.
 `theme.json` `accent` = the `--accent` value, exactly.
 
+## 2b. Layout
+
+Read the top-level `layout` in the draft's `theme.json` (missing = classic).
+- **classic** (no `layout`, or `"mode": "classic"`) → nothing changes; skip to step 3.
+- **split-panel** → the persistent panel is built from `components/panel.html` (the frame), `panel-media.html` (a page
+  screenshot / video inside the panel) and `scene.html` (a full-frame scene). Keep their structure — the markup, the
+  `{{panel_h}}` / `{{media_tag}}` placeholders, class names, the `P.open_at_zero` / `P.stays` / `P.at` / `P.end` timing
+  and the `fit-contain` / `fit-cover` classes; restyle them ONLY through tokens and their `<style>`:
+  - `tokens.css`: `--panel-bg` (the panel colour; lint requires it for split-panel), `--radius` (corners of panel
+    items: 0 for sharp, 999px is too round for a panel — use 28–48px for pill), `--shadow`; `--accent` is the seam edge
+    (`.panel-edge`, 6–8 px; restyle it in `panel.html`'s `<style>`: a solid strip, a dashed / pixel strip, a double
+    line — whatever the direction's shapes say).
+  - The stock explainers (`stat-card`, `checklist`, `ui-mock`, `flow`, `iso-machine`, `headline`) read the same tokens
+    (`--panel-bg`, `--card`, `--ink`, `--muted`, `--accent`, `--on-accent`, `--font`, `--font-display`, `--radius`,
+    `--shadow`), so a light panel with a pixel font shows up in every panel item without touching them.
+  - Captions sit ON the seam (`captions: "seam"`, y = ratio × 1920): set the 9:16 caption size for a seam in step 3 —
+    small pills read better on a seam than big words (`.cw` 44–60px, a box / pill behind each word or page, 2–4 words
+    per page), so they never cover the panel item's content or the speaker's mouth.
+- §5 adds the `## Layout: split-panel` section to `frame.md` (text below).
+
 ## 3. theme.css — captions only
 
 Restyle only `.cw`, `.cw.key`, `.cw.num` (and their `html.f169 .cw…` size rules) per `direction.captions`:
@@ -126,6 +146,22 @@ Also keep:
   `swell`), only among `whoosh`, `pop`, `click`, `impact`, `swell`, `ping`. Keep the keys and the timing format.
 - `frame.md`: frontmatter `name` (the draft name) and `description` describe the new look in one line; the accent line
   in the rules gives the new `--accent` hex. Every rule section stays verbatim (zones, budget, components, 16:9).
+- split-panel layout only: append this section to `frame.md` verbatim (put the layout's `cadence[1]` and
+  `fullscreen.max_per_min` values — defaults 3.0 and 3 — in place of `<cadence max>` and `<max per min>`):
+
+```markdown
+## Layout: split-panel
+
+- **The panel is always open** (9:16): the top part of the frame is one panel for the whole video; the speaker sits
+  in the bottom part. 16:9 ignores the layout (classic rules above).
+- **Every sentence gets a panel item** of 1–<cadence max> s in plan.json `"panel"` (explainer effect or a `media`
+  page screenshot from `broll/`), contiguous from the first word (or after a ≤ 1.5 s face-only hook) to the CTA —
+  the panel is never empty. No `split`, `pip`, `side` or `bg` graphics: the panel replaces split.
+- **Band graphics ≤ 2** (title / counter / stamp / chip) — only on punch moments; they hide the panel item under them.
+- **Scenes ≤ <max per min> per minute** in `"scenes"` (full-frame image or explainer, 1–6 s) on punch moments.
+- **Captions on the seam** between panel and face — small pills, never over the mouth.
+- Every number in the panel is confirmed by a ✅ line of factcheck.md.
+```
 
 ## 6. Check
 
@@ -149,3 +185,6 @@ READ `contact.png` and both sheets. Fix and re-check until all of this holds:
 - "-75%" and all 4 list items visible; bars proportional.
 - The entrance row shows the motion (random: clearly not clean's pop).
 - Random / clone: title, stamp and chip differ from clean in font, shape and motion — not just colour.
+- split-panel: READ `check/sheet-9x16.png` (and the panel-item snapshots) — every panel item in the theme's colours
+  and fonts (the `--panel-bg` fill, not clean's dark panel), the face in the bottom half, the captions on the seam
+  not covering the mouth, the scene full-frame.
