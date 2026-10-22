@@ -47,7 +47,7 @@
   {
     "name": "ui-mock",
     "kind": "explainer",
-    "description": "Mock window in the theme's look: an AI chat, a terminal session or a social post whose text types in, a browser page (address bar, typed search, result rows, one row circled) or an app screen (typed filter, rows with toggles that a cursor clicks on). Readable at once: window, typed lines, search and rows are in by min(0.5 s, 35 % of the span); browser / app clicks and the circle follow, spaced over the rest.",
+    "description": "Mock window in the theme's look: an AI chat, a terminal session or a social post whose text types in, a browser page (address bar, typed search, result rows, one row circled) or an app screen (typed filter, rows with toggles that a cursor clicks on). As a panel item it is readable at once: window, typed lines, search and rows are in by min(0.5 s, 35 % of the span); browser / app clicks and the circle follow, spaced over the rest. In a classic split / side the text types over most of the span and the actions are spaced evenly over it.",
     "params": {
       "kind": "\"chat\" (default), \"terminal\", \"post\", \"browser\" or \"app\"",
       "lines": "chat / terminal / post: [{\"who\": \"user\"|\"ai\"|\"cmd\", \"text\": \"...\"}, ...] (terminal: user/cmd typed after $, ai printed as output)",

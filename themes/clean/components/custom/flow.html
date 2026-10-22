@@ -76,11 +76,16 @@ const cell = labels.map((_, i) => {
   return { r, c, x: pad + (c + 0.5) * cellW, y: top + (r + 0.5) * cellH };
 });
 
-// every node and arrow is on screen by U.fullAt (min 0.5 s, 35 % of the span); the dots along the arrows run on after it
+// a panel item (P.panel): every node and arrow is on screen by U.fullAt (min 0.5 s, 35 % of the span); the dots along
+// the arrows run on after it. Classic split / side: the natural pace (nodes over ~72 % of the span)
+const fast = !!P.panel;
 const full = U.fullAt(P.at, P.end), F = full - P.at;
-const titleDur = Math.min(0.45, F * 0.6), popDur = Math.min(0.45, F * 0.4);
-const t0 = P.at + Math.min(title ? 0.15 : 0.05, F * 0.15);
-const step = Math.max(0.001, full - popDur - t0) / Math.max(1, n - 1);
+const span = Math.max(0.8, P.end - P.at);
+const titleDur = fast ? Math.min(0.45, F * 0.6) : 0.45, popDur = fast ? Math.min(0.45, F * 0.4) : 0.45;
+const barAt = fast ? titleDur * 0.3 : 0.15, barDur = fast ? titleDur * 0.7 : 0.5, drawDur = fast ? popDur : 0.6;
+const t0 = P.at + (fast ? Math.min(title ? 0.15 : 0.05, F * 0.15) : (title ? 0.4 : 0.12));
+const step = fast ? Math.max(0.001, full - popDur - t0) / Math.max(1, n - 1)
+  : Math.min(0.75, Math.max(0.25, (span * 0.72 - 0.6) / Math.max(1, n - 1)));
 const appear = (i) => t0 + i * step;
 
 const NS = "http://www.w3.org/2000/svg";
@@ -174,13 +179,13 @@ U.clock((t) => {
     const q = clamp((t - P.at) / titleDur);
     title.style.opacity = clamp(q * 2);
     title.style.transform = "translateY(" + ((1 - quartOut(q)) * -30 * s) + "px)";
-    bar.style.transform = "scaleX(" + quartOut(clamp((t - P.at - titleDur * 0.3) / (titleDur * 0.7))) + ")";
+    bar.style.transform = "scaleX(" + quartOut(clamp((t - P.at - barAt) / barDur)) + ")";
   }
   nodes.forEach((nd, i) => {
     const q = clamp((t - appear(i)) / popDur);
     nd.el.style.opacity = clamp(q * 2.5);
     nd.el.style.transform = "translateY(" + ((1 - quartOut(q)) * 36 * s) + "px) scale(" + (0.72 + 0.28 * backOut(q)) + ")";
-    if (nd.strokes.length) drawTo(nd.strokes, inOut(clamp((t - appear(i)) / popDur)));
+    if (nd.strokes.length) drawTo(nd.strokes, inOut(clamp((t - appear(i)) / drawDur)));
   });
   arrows.forEach((ar) => {
     const q = inOut(clamp((t - ar.start) / ar.dur));

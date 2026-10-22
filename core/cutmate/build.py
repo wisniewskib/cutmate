@@ -445,6 +445,9 @@ def subcomp(cid: str, g: Graphic, host_start: float, theme: Path, assets: Path, 
             P["media"] = _copy_media(m, assets, media_map)   # params.media (resolved by the plan) -> asset URL
         P.update(name=g.params["name"], at=loc(g.start), end=loc(g.end), lang=lang, w=rw, h=rh,
                  dur=round(g.end - host_start, 3), track=track)
+        P.pop("panel", None)                             # build-owned: a panel item's explainer builds in at once
+        if g.params.get("_panel"):
+            P["panel"] = True
         if follow:
             P["follow"] = follow                         # meant to follow: no samples → the effect stays hidden
         if assets_url:

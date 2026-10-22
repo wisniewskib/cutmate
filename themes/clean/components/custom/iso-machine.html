@@ -110,10 +110,10 @@ labels.forEach((L) => {
 
 // ---------- timing ----------
 const span = Math.max(1, P.end - P.at);
-// the machine is assembled and labelled by U.fullAt (min 0.5 s, 35 % of the span): the natural 1.35 s build-in is
-// squeezed by kB; the conveyor, tokens and counter are later beats
+// a panel item (P.panel): the machine is assembled and labelled by U.fullAt (min 0.5 s, 35 % of the span): the natural
+// 1.35 s build-in is squeezed by kB; the conveyor, tokens and counter are later beats. Classic split / side: kB = 1
 const BUILD = 1.35;
-const kB = Math.min(1, (U.fullAt(P.at, P.end) - P.at) / BUILD);
+const kB = P.panel ? Math.min(1, (U.fullAt(P.at, P.end) - P.at) / BUILD) : 1;
 const tB = (x) => P.at + x * kB;
 const SP = 2.3;                                           // station spacing (world units)
 const tStart = P.at + Math.min(1.0, span * 0.3);          // the conveyor starts indexing once everything has landed

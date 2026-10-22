@@ -167,13 +167,16 @@ if (kind === "browser") {
   U.el("div", "um-sub", kind === "post" ? handle : "online", who);
 }
 const body = U.el("div", "um-body", null, win);
-// the window and its content are readable by U.fullAt (min 0.5 s, 35 % of the span); the clicks, the circle and the
-// post counters are later beats spread over the rest of the span
+// a panel item (P.panel): the window and its content are readable by U.fullAt (min 0.5 s, 35 % of the span); the
+// clicks, the circle and the post counters are later beats spread over the rest of the span.
+// Classic split / side: the natural pace (actions spaced over the span, lines typed over ~78 % of it)
+const fast = !!P.panel;
 const full = U.fullAt(P.at, P.end), F = full - P.at;
-const winDur = Math.min(0.5, F);
+const winDur = fast ? Math.min(0.5, F) : 0.5;
 if (page) {
-  // browser / app: the search is typed and the rows come in one by one by U.fullAt; then, spaced evenly over
-  // [fullAt, P.end - 0.4]: (app) the cursor clicks each `click` row, its toggle flips / (browser) circle a row
+  // browser / app (panel): the search is typed and the rows come in one by one by U.fullAt; then, spaced evenly over
+  // [fullAt, P.end - 0.4]: (app) the cursor clicks each `click` row, its toggle flips / (browser) circle a row.
+  // Classic: every action (type, rows, clicks, circle) spaced evenly over [P.at + 0.3, P.end - 0.4]
   const pg = U.el("div", "um-page", null, body);
   if (kind === "browser" && P.title) U.el("div", "um-h", String(P.title), pg);
   let field = null, ftx = null, fcaret = null, fph = null;
@@ -207,11 +210,16 @@ if (page) {
   if (kind === "app") rows.filter((r) => r.clk).forEach((r) => acts.push({ type: "click", r }));
   const hi = kind === "browser" && Number.isInteger(P.highlight) && rows[P.highlight] ? rows[P.highlight] : null;
   if (hi) acts.push({ type: "mark", r: hi });
-  const build = acts.filter((a) => a.type === "type" || a.type === "row"), later = acts.filter((a) => !build.includes(a));
-  const a0 = P.at + Math.min(0.05, F * 0.1), step = Math.max(0.001, full - a0) / Math.max(1, build.length);
-  build.forEach((a, k) => { a.t = a0 + k * step; a.d = step; });
-  const b1 = Math.max(full + 0.3, P.end - 0.4), lstep = Math.max(0, b1 - full) / Math.max(1, later.length);
-  later.forEach((a, k) => { a.t = full + k * lstep; a.d = lstep; });
+  if (fast) {
+    const build = acts.filter((a) => a.type === "type" || a.type === "row"), later = acts.filter((a) => !build.includes(a));
+    const a0 = P.at + Math.min(0.05, F * 0.1), step = Math.max(0.001, full - a0) / Math.max(1, build.length);
+    build.forEach((a, k) => { a.t = a0 + k * step; a.d = step; });
+    const b1 = Math.max(full + 0.3, P.end - 0.4), lstep = Math.max(0, b1 - full) / Math.max(1, later.length);
+    later.forEach((a, k) => { a.t = full + k * lstep; a.d = lstep; });
+  } else {
+    const a0 = P.at + 0.3, a1 = Math.max(a0 + 0.3, P.end - 0.4), step = (a1 - a0) / Math.max(1, acts.length);
+    acts.forEach((a, k) => { a.t = a0 + k * step; a.d = step; });
+  }
   acts.forEach((a) => { if (a.r) a.r[a.type] = a; });
   const typeAct = acts.find((a) => a.type === "type");
   const clicks = acts.filter((a) => a.type === "click");
@@ -287,7 +295,7 @@ if (page) {
       fcaret.style.opacity = t >= a.t && t < a.t + d ? 1 : blink;
     }
     rows.forEach((r) => {
-      const q = clamp((t - r.row.t) / Math.min(0.3, r.row.d * 0.6));
+      const q = clamp((t - r.row.t) / Math.min(0.3, fast ? r.row.d * 0.6 : r.row.d));
       r.el.style.visibility = t >= r.row.t ? "visible" : "hidden";
       r.el.style.opacity = t >= r.row.t ? Math.max(0.01, clamp(q * 1.6)) : 0;
       r.el.style.transform = "translateY(" + ((1 - quartOut(q)) * 24 * s) + "px)";
@@ -327,15 +335,18 @@ if (page) {
   const raw = (P.lines || []).map((l) => (typeof l === "string" ? { who: "ai", text: l } : l))
     .map((l) => ({ who: ["user", "ai", "cmd"].includes(l.who) ? l.who : "ai", text: String(l.text == null ? "" : l.text) }));
   const typed = (l) => !(kind === "terminal" && l.who === "ai");
-  // every line is shown and typed by U.fullAt: the thinking dots, gaps and typing speed are squeezed into that window
-  const think = kind === "chat" ? Math.min(0.5, F * 0.15) : 0;
-  const gap = Math.min(kind === "post" ? 0.18 : 0.3, F * 0.06);
+  // panel: every line is shown and typed by U.fullAt (thinking dots, gaps and typing speed squeezed into that window);
+  // classic: typed over ~78 % of the span, 16–90 letters / s
+  const span = Math.max(0.8, P.end - P.at);
+  const think = kind === "chat" ? (fast ? Math.min(0.5, F * 0.15) : 0.5) : 0;
+  const gap = fast ? Math.min(kind === "post" ? 0.18 : 0.3, F * 0.06) : (kind === "post" ? 0.18 : 0.3);
   const thinks = raw.filter((l) => kind === "chat" && l.who === "ai").length;
   const chars = raw.reduce((a, l) => a + (typed(l) ? Array.from(l.text).length : Array.from(l.text).length / 5), 0);
-  const t0 = P.at + Math.min(0.1, F * 0.1);
-  const avail = Math.max(0.01, full - t0 - Math.max(0, raw.length - 1) * gap - thinks * think);
-  const cps = Math.max(16, chars / avail);
-  const popDur = Math.min(0.3, F * 0.3);
+  const t0 = P.at + (fast ? Math.min(0.1, F * 0.1) : 0.45);
+  const avail = fast ? Math.max(0.01, full - t0 - Math.max(0, raw.length - 1) * gap - thinks * think)
+    : Math.max(0.4, span * 0.78 - 0.45 - raw.length * gap - thinks * think);
+  const cps = fast ? Math.max(16, chars / avail) : Math.min(90, Math.max(16, chars / avail));
+  const popDur = fast ? Math.min(0.3, F * 0.3) : 0.3;
   let cur = t0;
   const lines = raw.map((l) => {
     const el = U.el("div", "msg " + l.who, null, feed);
@@ -414,7 +425,7 @@ if (page) {
       if (t < l.show) { l.el.style.display = "none"; return; }
       l.el.style.display = "";
       if (t >= l.show) active = i;
-      const q = clamp((t - l.show) / Math.max(0.01, Math.min(popDur, full - l.show)));
+      const q = clamp((t - l.show) / (fast ? Math.max(0.01, Math.min(popDur, full - l.show)) : popDur));
       l.el.style.opacity = clamp(q * 2);
       l.el.style.transform = kind === "chat" ? "scale(" + (0.8 + 0.2 * backOut(q)) + ")" : "translateY(" + ((1 - quartOut(q)) * 14 * s) + "px)";
       const thinking = l.dots && t < l.start;

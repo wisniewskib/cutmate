@@ -1384,3 +1384,20 @@ def test_panel_item_until_leaves_gap(out, theme):
     assert _P(sub)["end"] == pytest.approx(1.5 - 0.9)
     assert cfg_of(html)["hide"] == [[f"#{items[1][0]}-slot", 2.73, 0.22, None, 0]]
     assert r["panel"][0].startswith("0.90–1.50 ")
+
+
+def test_only_panel_items_get_the_fast_build_in_flag(out, theme):
+    """P.panel (the explainers' fast build-in, U.fullAt) is build-owned: true on a panel item, absent on a classic split
+    effect — even when the plan's params try to set it."""
+    _fx(out, "diagram")
+    write_plan(out, {"graphics": [{"type": "split", "from": "S2:minus", "to": "S2:</script>", "effect": "diagram",
+                                   "params": {"panel": True}}]})
+    proj = B.build(out, theme=theme)["project"]
+    assert "panel" not in _P((proj / "compositions" / "gx-02-custom.html").read_text(encoding="utf-8"))
+    _png(out)
+    _fx(out, "orb")
+    _with_layout_components(theme)
+    write_plan(out, PANEL3)
+    proj = B.build(out, theme=theme)["project"]
+    assert _P((proj / "compositions" / "gx-02-custom.html").read_text(encoding="utf-8"))["panel"] is True
+    assert "panel" not in _P((proj / "compositions" / "gx-03-panel-media.html").read_text(encoding="utf-8"))

@@ -186,12 +186,25 @@ def test_ui_mock_app_flips_toggles():
 def test_checklist_rows_tick_in_order():
     rows = [{"text": f"site{i}.com/x", "status": s} for i, s in enumerate(["ok", "bad", "warn", "ok"])]
     P = {"title": "Link check", "rows": rows, "strike": True, "summary": {"value": 50, "suffix": "%"},
-         "lang": "en", "at": 1.0, "end": 5.0, "w": 1000, "h": 880, "dur": 5.0}
-    # 4 s item: the rows tick in over [1.05, 1.5] (U.fullAt = at + 0.5), one every 0.1125 s
+         "lang": "en", "at": 1.0, "end": 5.0, "w": 1000, "h": 880, "dur": 5.0, "panel": True}
+    # 4 s panel item: the rows tick in over [1.05, 1.5] (U.fullAt = at + 0.5), one every 0.1125 s
     d = _run_effect("checklist", P, [["mid", 1.2, ".ck-row", "shown"], ["sum", 4.8, ".ck-sum-v", "text"],
                                      ["start", 1.04, ".ck-row", "shown"]])
     assert d["mid"] == [True, True, False, False]
     assert d["start"] == [False, False, False, False]
+    assert d["sum"] == ["50%"]
+
+
+def test_checklist_classic_keeps_its_natural_pace():
+    """Not a panel item (classic split / side): the rows tick in over [P.at + 0.3, P.end - 0.4], as before the
+    panel build-in polish."""
+    rows = [{"text": f"site{i}.com/x", "status": s} for i, s in enumerate(["ok", "bad", "warn", "ok"])]
+    P = {"title": "Link check", "rows": rows, "strike": True, "summary": {"value": 50, "suffix": "%"},
+         "lang": "en", "at": 1.0, "end": 5.0, "w": 1000, "h": 880, "dur": 5.0}
+    d = _run_effect("checklist", P, [["mid", 3.0, ".ck-row", "shown"], ["sum", 4.8, ".ck-sum-v", "text"],
+                                     ["start", 1.1, ".ck-row", "shown"], ["full", 1.5, ".ck-row", "shown"]])
+    assert d["mid"] == [True, True, False, False]
+    assert d["start"] == [False, False, False, False] and d["full"] == [False, False, False, False]
     assert d["sum"] == ["50%"]
 
 
@@ -224,8 +237,9 @@ def test_panel_light_reads_the_panel_colour():
     assert d["left"] == 0                                       # the probe element is removed again
 
 
-# Fill speed: on a 1-2 s panel item the card / structure and its content are readable at once — every explainer's
-# build-in is done by min(0.6 s, 40 % of the item span); later beats (count-up, toggles, strike, tokens) may continue.
+# Fill speed: on a 1-2 s panel item (P.panel, set by build) the card / structure and its content are readable at once —
+# every explainer's build-in is done by min(0.6 s, 40 % of the item span); later beats (count-up, toggles, strike,
+# tokens) may continue. Classic split / side explainers (no P.panel) keep their natural pace.
 SPANS = [1.0, 1.5, 2.0, 5.0]
 
 
@@ -234,7 +248,13 @@ def _at40(span):
 
 
 def _p(span, **kw):
-    return dict(kw, lang="pl", at=1.0, end=1.0 + span, w=1000, h=820, dur=1.0 + span + 0.5)
+    return dict(kw, lang="pl", at=1.0, end=1.0 + span, w=1000, h=820, dur=1.0 + span + 0.5, panel=True)
+
+
+def _classic(span, **kw):
+    P = _p(span, **kw)
+    del P["panel"]
+    return P
 
 
 def test_full_at_is_inside_the_0_6_s_40_percent_budget():
@@ -316,9 +336,29 @@ def test_iso_machine_build_in_is_scaled_to_the_span():
     1.35 s assembly into U.fullAt — no raw `P.at + <number>` start left except the conveyor's indexing start."""
     from cutmate.build import _sections
     script = _sections(plugin_root() / "themes" / "clean" / "components" / "custom" / "iso-machine.html")["script"]
-    assert "const kB = Math.min(1, (U.fullAt(P.at, P.end) - P.at) / BUILD);" in script
+    assert "const kB = P.panel ? Math.min(1, (U.fullAt(P.at, P.end) - P.at) / BUILD) : 1;" in script
     assert "const BUILD = 1.35;" in script and "const tB = (x) => P.at + x * kB;" in script
     raw = re.findall(r"P\.at \+ [^\n;]*", script)
     assert raw == ["P.at + x * kB", "P.at + Math.min(1.0, span * 0.3)"], raw     # tB() itself and the conveyor start
     assert len(re.findall(r"\b(?:const|let|var)\s+tB\b|\btB\s*=[^=>]", script)) == 1   # never shadowed (the crate has a T)
     assert "dur: (dur || 0.36) * kB" in script and "(0.4 * kB)" in script and "(0.35 * kB)" in script
+
+
+def test_classic_explainers_keep_their_natural_pace():
+    """A 5 s classic split / side explainer (no P.panel) is still building at the panel's fullAt (1.5 s) and whole
+    before its end: ui-mock chat types over ~78 % of the span, headline at ~16 letters / s, flow nodes over the span."""
+    t_fast, t_late = 1.5, 1.0 + 5.0 - 0.3                   # U.fullAt(1, 6) = 1.5 / near the end
+    d = _run_effect("ui-mock", _classic(5.0, kind="chat", lines=LINES, title="Autor"),
+                    [["fast", t_fast, ".msg", "text"], ["late", t_late, ".msg", "text"]])
+    assert not d["fast"][1].endswith("Jasne, oto strona.") and d["late"][1].endswith("Jasne, oto strona.")
+    d = _run_effect("ui-mock", _p(5.0, kind="chat", lines=LINES, title="Autor"), [["fast", t_fast, ".msg", "text"]])
+    assert d["fast"][1].endswith("Jasne, oto strona.")                          # the panel item: whole by fullAt
+    P = _classic(5.0, text="Pół roku później", mode="pop")
+    d = _run_effect("headline", P, [["fast", t_fast, ".w", "settled"], ["late", t_late, ".w", "settled"]])
+    assert not all(d["fast"]) and all(d["late"])
+    P = _classic(5.0, title="Co Claude czyta", nodes=["Prompt", "Kontekst", "Pliki", "Odpowiedź"])
+    d = _run_effect("flow", P, [["fast", t_fast, ".fl-node", "settled"], ["late", t_late, ".fl-node", "settled"]])
+    assert not all(d["fast"]) and all(d["late"])
+    P = _classic(5.0, value=75, suffix="%", label="tokenów zużytych mniej", note="źródło: README")
+    d = _run_effect("stat-card", P, [["fast", 1.0 + 0.45 + 0.05, ".sc-label", "kids"], ["late", t_late, ".sc-note", "settled"]])
+    assert not all(d["fast"][0]) and d["late"] == [True]                        # label words start at at + 0.45
