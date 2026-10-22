@@ -140,3 +140,16 @@ def test_explainer_split_916(tmp_path):
     (out / "plan.json").write_text(json.dumps({"graphics": [
         {"type": "split", "from": "S2:75%", "to": "S2:75%", "effect": "flow", "params": {}}]}))
     assert all(ln.startswith("OK") for ln in check_requests(out))
+
+
+def test_explainer_request_matches_panel_item(tmp_path):
+    out = _setup(tmp_path, "- [czat] explainer → explainer @ S1\n- [czat] panel → panel @ S2\n"
+                           "- [czat] zrzut → panel @ S1\n")
+    (out / "edl.json").write_text('{"format": "9:16", "segments": []}')
+    (out / "plan.json").write_text(json.dumps({"panel": [
+        {"at": "S1:a", "effect": "stat-card", "params": {"value": 44}},
+        {"at": "S2:75%", "media": "b.png"}]}))
+    lines = check_requests(out)
+    assert lines[0].startswith("OK") and lines[1].startswith("OK") and lines[2].startswith("OK")
+    (out / "requests.md").write_text("- [czat] explainer → explainer @ S2\n", encoding="utf-8")
+    assert check_requests(out)[0].startswith("MISSING")      # a panel screenshot is not an explainer

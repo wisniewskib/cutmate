@@ -1,3 +1,4 @@
+import re
 import json
 from pathlib import Path
 
@@ -726,3 +727,214 @@ def test_density_coverage_clamps_spans_to_the_video():
     # unclamped the spans sum to 46 s of a 20 s video (no warning); on screen are only 0–5 s and 19–20 s (30 %)
     w = _density([(-20.0, 5.0), (19.0, 40.0)], 20.0, "9:16", 19.0)
     assert "WARN density: visuals on screen 30 % (frame.md: ≥ 50 %)" in w
+
+
+# --- panel timeline and full-screen scenes (layouts) ---------------------------------------------------------------
+
+def _panel_items(gs):
+    return [g for g in gs if g.params.get("_panel")]
+
+
+def test_panel_items_contiguous(tmp_path):
+    out = make_out(tmp_path, {"panel": [
+        {"at": "S1:Mówić", "effect": "stat-card", "params": {"value": 44, "suffix": "%"}},
+        {"at": "S1:mniej", "effect": "flow", "params": {"nodes": ["a", "b"]}},
+        {"at": "S2:minus", "effect": "ui-mock", "params": {"kind": "chat"}}]})
+    pl = load_plan(out)
+    items = _panel_items(pl.graphics)
+    assert [g.type for g in items] == ["custom"] * 3
+    assert [g.params["name"] for g in items] == ["stat-card", "flow", "ui-mock"]
+    assert [g.index for g in items] == [0, 1, 2]
+    a, b, c = items
+    assert a.end == b.start == 0.90 and b.end == c.start == 4.00
+    assert c.end == pytest.approx(7.00)
+    assert all(g.params["region"] == [40, 40, 1000, 880] for g in items)
+    assert a.params["params"] == {"value": 44, "suffix": "%"}
+    host = [g for g in pl.graphics if g.type == "panel"]
+    assert len(host) == 1 and (host[0].start, host[0].end) == (a.start, c.end)
+    assert host[0].params == {"ratio": 0.5, "open_at_zero": True, "stays": False}
+    assert pl.panel == {"start": a.start, "end": c.end, "ratio": 0.5, "open_at_zero": True, "stays": False, "items": 3}
+    out = make_out(tmp_path / "b", {"panel": [{"at": "S2:koniec", "effect": "stat-card"}]})
+    assert _panel_items(load_plan(out).graphics)[0].end == pytest.approx(9.95)  # at + 3.0 clamped to end − 0.05
+
+
+def test_panel_box():
+    from cutmate.plan import panel_box
+    assert panel_box(0.5) == [40, 40, 1000, 880]
+    assert panel_box(0.4) == [40, 40, 1000, 688]
+
+
+def test_panel_open_at_zero_and_stays(tmp_path):
+    out = make_out(tmp_path, {"panel": [{"at": 0.2, "effect": "stat-card"}, {"at": 3.0, "until": 10.0, "effect": "flow"}]})
+    pl = load_plan(out)
+    first, last = _panel_items(pl.graphics)
+    assert pl.panel["open_at_zero"] and pl.panel["stays"]
+    assert pl.panel["start"] == 0.0 and first.start == 0.0 and first.params["_enter"] == "cut"
+    assert pl.panel["end"] == pytest.approx(9.95) and last.end == pytest.approx(9.95)
+    assert last.params["_exit"] == "none" and first.params["_exit"] == "none" and last.params["_enter"] == "cut"
+    out = make_out(tmp_path / "b", {"panel": [{"at": 2.0, "effect": "stat-card"}, {"at": 4.0, "effect": "flow"}]})
+    pl = load_plan(out)
+    first, last = _panel_items(pl.graphics)
+    assert not pl.panel["open_at_zero"] and not pl.panel["stays"] and pl.panel["start"] == 2.0
+    assert first.params["_enter"] == "slide" and last.params["_exit"] == "slide"
+
+
+def test_panel_transition_from_layout(tmp_path):
+    from dataclasses import replace
+    from cutmate.layout import SPLIT_DEFAULTS
+    out = make_out(tmp_path, {"panel": [{"at": 2.0, "effect": "stat-card"}, {"at": 4.0, "effect": "flow"}]})
+    lay = replace(SPLIT_DEFAULTS, transition="fade", ratio=0.4)
+    pl = load_plan(out, layout=lay)
+    first, last = _panel_items(pl.graphics)
+    assert last.params["_enter"] == "fade" and first.params["region"] == [40, 40, 1000, 688]
+    assert pl.panel["ratio"] == 0.4 and pl.layout is lay
+
+
+def test_panel_media_item(tmp_path):
+    out = make_out(tmp_path, {"panel": [{"at": 2.0, "media": "broll/page.png"}]})
+    (out.parent / "broll").mkdir()
+    (out.parent / "broll" / "page.png").write_bytes(b"x")
+    g = _panel_items(load_plan(out).graphics)[0]
+    assert g.type == "panel-media"
+    assert g.params["media"] == str(out.parent / "broll" / "page.png") and g.params["fit"] == "cover"
+    assert g.params["_panel"] is True
+
+
+@pytest.mark.parametrize("panel,graphics,msg", [
+    ([{"at": 2.0, "effect": "stat-card", "media": "broll/page.png"}], [], "exactly one of"),
+    ([{"at": 2.0}], [], "exactly one of"),
+    ([{"at": 4.0, "effect": "a"}, {"at": 2.0, "effect": "b"}], [], "panel item #2: starts before"),
+    ([{"at": 2.0, "effect": "a"}, {"at": 2.0, "effect": "b"}], [], "panel item #2: starts before"),
+    ([{"at": 2.0, "effect": "a", "shot": "https://x"}], [], "panel item #1: unknown key 'shot'"),
+    ([{"at": 4.0, "until": 2.0, "effect": "a"}], [], "until"),
+    ([{"at": 2.0, "media": "broll/page.png", "fit": "stretch"}], [], "fit must be"),
+    ([], [], "non-empty list"),
+    ([{"at": 2.0, "effect": "a"}], [{"type": "split", "from": "S2:minus", "to": "S2:75%", "effect": "flow"}],
+     "the panel replaces split"),
+    ([{"at": 2.0, "effect": "a"}], [{"type": "bg", "from": "S2:minus", "to": "S2:75%", "effect": "space-bg"}],
+     "the panel replaces bg"),
+])
+def test_panel_validation(tmp_path, panel, graphics, msg):
+    out = make_out(tmp_path, {"panel": panel, "graphics": graphics})
+    (out.parent / "broll").mkdir()
+    (out.parent / "broll" / "page.png").write_bytes(b"x")
+    with pytest.raises(PlanError, match=msg):
+        load_plan(out)
+
+
+def test_panel_warnings(tmp_path):
+    out = make_out(tmp_path, {"panel": [{"at": 2.0, "effect": "a"}, {"at": 2.4, "effect": "b"}]})
+    assert any(re.match(r"WARN panel item #1 \(a\) is 0\.4 s", w) for w in load_plan(out).warnings)
+    out = make_out(tmp_path / "b", {"panel": [{"at": 2.0, "until": 8.0, "effect": "a"}]})
+    assert any(re.match(r"WARN panel item #1 \(a\) is 6\.0 s", w) for w in load_plan(out).warnings)
+    out = make_out(tmp_path / "c", {"panel": [{"at": 1.0, "until": 2.0, "effect": "a"}, {"at": 4.0, "effect": "b"}]})
+    assert any(w.startswith("WARN panel gap 2.0–4.0 s") for w in load_plan(out).warnings)
+    out = make_out(tmp_path / "d", {"panel": [{"at": 1.0, "until": 2.0, "effect": "a"}, {"at": 4.0, "effect": "b"}],
+                                    "scenes": [{"from": 2.0, "to": 4.0, "effect": "burst"}]})
+    assert not any("panel gap" in w for w in load_plan(out).warnings)
+
+
+def _long_out(tmp_path, plan, end=30.0):
+    out = make_out(tmp_path, plan)
+    (out / "work" / "edl_timed.json").write_text(json.dumps([{"id": "S1", "start": 0.0, "end": 3.5},
+                                                             {"id": "S2", "start": 3.5, "end": end}]), encoding="utf-8")
+    return out
+
+
+def test_scenes(tmp_path):
+    from cutmate.layout import SPLIT_DEFAULTS
+    out = make_out(tmp_path, {"scenes": [{"from": 2.0, "to": 4.0, "media": "broll/page.png"},
+                                         {"from": 5.0, "to": 7.0, "effect": "burst", "params": {"n": 3}}]})
+    (out.parent / "broll").mkdir()
+    (out.parent / "broll" / "page.png").write_bytes(b"x")
+    pl = load_plan(out)
+    media, eff = [g for g in pl.graphics if g.params.get("_scene")]
+    assert media.type == "scene" and media.params == {"media": str(out.parent / "broll" / "page.png"), "_scene": True}
+    assert (media.start, media.end) == (2.0, 4.0)
+    assert eff.type == "custom" and eff.params == {"name": "burst", "params": {"n": 3}, "_fade": 0.25, "_scene": True}
+    assert pl.panel is None
+    with pytest.raises(PlanError, match=r"scene #1 \(burst\): lasts 0.8 s .*at least 1.0 s"):
+        load_plan(make_out(tmp_path / "b", {"scenes": [{"from": 2.0, "to": 2.8, "effect": "burst"}]}))
+    with pytest.raises(PlanError, match="scene #1: unknown key 'at'"):
+        load_plan(make_out(tmp_path / "c", {"scenes": [{"from": 2.0, "to": 4.0, "at": 1, "effect": "burst"}]}))
+    out = _long_out(tmp_path / "d", {"scenes": [{"from": t, "to": t + 2.0, "effect": "burst"} for t in (2, 8, 14, 20)]})
+    assert any(w.startswith("WARN scenes: 4 (layout allows 2") for w in load_plan(out, layout=SPLIT_DEFAULTS).warnings)
+    out = make_out(tmp_path / "e", {"scenes": [{"from": 2.0, "to": 9.0, "effect": "burst"}]})
+    assert any(w.startswith("WARN scene #1") and "longer than 6 s" in w for w in load_plan(out).warnings)
+
+
+def test_panel_counts_as_cover(tmp_path):
+    plan = {"panel": [{"at": 1.5, "effect": "a"}, {"at": 4.0, "effect": "b"}, {"at": 6.0, "until": 9.0, "effect": "c"}]}
+    assert _density(load_plan(make_out(tmp_path, plan)).warnings) == []
+    assert _density(load_plan(make_out(tmp_path / "b", {})).warnings) != []
+
+
+def test_panel_items_do_not_trip_overlap_budget(tmp_path):
+    out = make_out(tmp_path, {"panel": [{"at": 1.0, "effect": "a"}, {"at": 3.0, "effect": "b"}, {"at": 5.0, "effect": "c"}],
+                              "graphics": [{"type": "stamp", "at": 4.0, "text": "NIE"}]})
+    pl = load_plan(out)
+    assert not any("overlaps" in w for w in pl.warnings)
+    stamp = [g for g in pl.graphics if g.type == "stamp"][0]
+    assert stamp.end == pytest.approx(6.5)                  # its default hold is not cut by the panel item at 5 s
+    out = make_out(tmp_path / "b", {"panel": [{"at": 1.0, "effect": "a"}, {"at": 4.2, "effect": "b"}],
+                                    "graphics": [{"type": "stamp", "at": 4.0, "text": "NIE", "until": 6.0},
+                                                 {"type": "chip", "at": 5.0, "text": "x"}]})
+    assert any("stamp (4.0–6.0s) overlaps chip at 5.0s" in w for w in load_plan(out).warnings)
+
+
+def test_panel_numbers_factchecked(tmp_path):
+    out = make_out(tmp_path, {"panel": [
+        {"at": 1.0, "effect": "stat-card", "params": {"value": 44, "suffix": "%"}},
+        {"at": 2.0, "effect": "checklist", "params": {"rows": [], "summary": {"value": 50, "suffix": "%"}}}]})
+    (out / "factcheck.md").write_text('- „44%" ✅ OK\n', encoding="utf-8")
+    w = [x for x in load_plan(out, factcheck=True).warnings if "factcheck" in x]
+    assert len(w) == 1 and w[0].startswith("WARN custom at 2.0s shows 50")
+
+
+def test_panel_rejected_in_169(tmp_path):
+    with pytest.raises(PlanError, match="panel exists only in 9:16"):
+        load_plan(make_out169(tmp_path, {"panel": [{"at": 1.0, "effect": "a"}]}))
+    with pytest.raises(PlanError, match="panel exists only in 9:16"):
+        load_plan(make_out169(tmp_path / "b", {"scenes": [{"from": 1.0, "to": 3.0, "effect": "a"}]}))
+
+
+def test_plan_without_panel_unchanged(tmp_path):
+    out = make_out(tmp_path, {
+        "captions": {"key": ["claude"]},
+        "graphics": [
+            {"type": "counter", "at": "S2:75%", "to": 75, "suffix": "%", "label": "TOKENÓW", "hit": True},
+            {"type": "stamp", "at": "S1:krótko", "text": "KRÓTKO", "until": "S1:mniej#2"},
+            {"type": "list", "items": [{"text": "a", "at": "S1:mniej"}, {"text": "b", "at": "S1:mniej#2"}]},
+        ]})
+    p = load_plan(out)
+    assert p.panel is None and p.layout is None
+    assert [(g.type, g.start, g.end, g.params, g.index) for g in p.graphics] == [
+        ("stamp", 0.45, 1.7, {"text": "KRÓTKO"}, 1),
+        ("list", 0.9, 4.0, {"items": [{"text": "a", "at": 0.9}, {"text": "b", "at": 1.5}]}, 2),
+        ("counter", 4.4, 6.9, {"to": 75, "suffix": "%", "label": "TOKENÓW"}, 0)]
+    assert p.warnings == ["WARN stamp (0.5–1.7s) overlaps list at 0.9s"]   # pre-panel values
+
+
+def test_panel_summary(tmp_path):
+    from cutmate.plan import panel_summary
+    out = make_out(tmp_path, {"panel": [
+        {"at": 0.0, "effect": "stat-card", "params": {"value": 44, "suffix": "%"}},
+        {"at": 1.4, "effect": "ui-mock", "params": {"kind": "terminal"}},
+        {"at": 4.0, "media": "broll/page.png"}],
+        "scenes": [{"from": 7.0, "to": 9.0, "effect": "burst"}]})
+    (out.parent / "broll").mkdir()
+    (out.parent / "broll" / "page.png").write_bytes(b"x")
+    assert panel_summary(load_plan(out)) == ["0.00–1.40 stat-card 44%", "1.40–4.00 ui-mock terminal",
+                                             "4.00–7.00 page.png", "7.00–9.00 SCENE burst"]
+    assert panel_summary(load_plan(make_out(tmp_path / "b", {}))) == []
+
+
+def test_panel_summary_hints():
+    from cutmate.plan import Graphic, Plan, panel_summary
+    def item(name, params):
+        return Graphic("custom", 1.0, 2.0, {"name": name, "params": params, "_panel": True}, False, None, 0)
+    pl = Plan([item("checklist", {"title": "Status"}), item("headline", {"text": "To nie działa"}),
+               item("flow", {"nodes": ["prompt", "model"]}), item("headline", {"text": "x" * 80})], {}, None, 10.0, [])
+    lines = panel_summary(pl)
+    assert lines[:3] == ["1.00–2.00 checklist Status", "1.00–2.00 headline To nie działa", "1.00–2.00 flow prompt"]
+    assert len(lines[3]) <= 60

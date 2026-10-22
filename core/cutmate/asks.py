@@ -45,8 +45,11 @@ def _range(anchor, timed: list[dict], words: list[dict], end: float) -> tuple[fl
 
 
 def _matches(g, target: str) -> bool:
-    if target == "explainer":                      # a split (9:16) or side (16:9) graphic carrying an effect
-        return g.type in ("split", "side") and bool(g.params.get("effect"))
+    if target == "explainer":                      # a split (9:16) / side (16:9) effect, or a panel effect item
+        return (g.type in ("split", "side") and bool(g.params.get("effect"))) or (
+            g.type == "custom" and bool(g.params.get("_panel")))
+    if target == "panel":                          # any panel item (an effect or a screenshot / clip)
+        return bool(g.params.get("_panel"))
     return g.type == target or target == f"custom:{g.params.get('name')}"
 
 

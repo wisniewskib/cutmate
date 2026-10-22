@@ -4,6 +4,7 @@ Anchors: "S2:word" (first occurrence in segment S2), "S2:word#2" (second), or a 
 Times resolve against out/work/aligned_words.json, so re-cutting moves every graphic with its word.
 """
 import json
+import math
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -11,6 +12,7 @@ from pathlib import Path
 from .cut import load_timed
 from .errors import PlanError
 from .formats import format_of
+from .layout import SPLIT_DEFAULTS, Layout
 from .tracks import face_median, gesture_at, load_tracks, place_at, tracks_fresh
 
 TYPES = ("title", "counter", "list", "chip", "stamp", "bars", "point", "split", "pip", "lower-third", "custom", "bg", "side")
@@ -37,6 +39,13 @@ COVER_MIN = {"9:16": 0.5}              # share of the video with a visual layer 
 HOOK = 1.5                             # the first seconds are exempt from the bare-face rule (the hook)
 CTA_TAIL = 6.0                         # at most this much of the end (within the last segment) is exempt (the CTA)
 MIN_CHECK = 8.0                        # shorter videos (the 5 s smoke render) are not density-checked
+PANEL_ITEM_KEYS = ("at", "until", "effect", "params", "media", "fit", "sfx")
+SCENE_KEYS = ("from", "to", "effect", "params", "media")
+PANEL_REPLACES = ("split", "pip", "side", "bg")  # graphics the persistent panel replaces
+ITEM_MIN, ITEM_SLACK = 0.6, 1.5   # panel item: shorter warns; longer than cadence max + slack warns (s)
+PANEL_GAP = 1.0                   # an empty panel longer than this (not covered by a scene) warns (s)
+SCENE_MIN, SCENE_MAX = 1.0, 6.0   # full-screen scene: shorter is an error, longer warns (s)
+SCENE_FADE = 0.25                 # entrance / exit of an effect scene (s)
 _PUNCT = ".,!?;:…\"'„\u201c\u201d()[]–—-"
 
 
@@ -62,6 +71,8 @@ class Plan:
     face: dict = field(default_factory=dict)
     format: str = "9:16"
     tracks: dict | None = None          # tracks.json when it is fresh (not older than aroll.mp4), else None
+    panel: dict | None = None           # {"start", "end", "ratio", "open_at_zero", "stays", "items"} when plan.json has a panel
+    layout: Layout | None = None        # the theme layout load_plan was given (None = split-panel defaults for validation)
 
 
 def norm(word: str) -> str:
@@ -252,6 +263,193 @@ def _graphic(i: int, g, words: list[dict], end: float, rec: Path, fmt: str = "9:
     return Graphic(t, round(start, 3), stop, params, bool(g.get("hit", False)), g.get("sfx"), i)
 
 
+def panel_box(ratio: float) -> list[int]:
+    """The panel's content box [x, y, w, h] in 1080x1920 px for a panel taking `ratio` of the frame height."""
+    return [40, 40, 1000, round(1920 * ratio) - 80]
+
+
+def _layer(g: Graphic) -> bool:
+    """A planner-made layer (the persistent panel, its items, a full-screen scene), not a band graphic."""
+    return g.type == "panel" or bool(g.params.get("_panel") or g.params.get("_scene"))
+
+
+def _until(u, words: list[dict], end: float) -> float:
+    if isinstance(u, (int, float)) and not isinstance(u, bool):
+        return float(u)
+    return resolve_anchor(u, words, end)[1]
+
+
+def _uncovered(a: float, b: float, covers) -> float:
+    """Seconds of a..b that no cover span (a scene) overlaps."""
+    cur, free = a, 0.0
+    for c0, c1 in sorted(covers):
+        if c1 <= cur or c0 >= b:
+            continue
+        free += max(0.0, c0 - cur)
+        cur = max(cur, c1)
+    return free + max(0.0, b - cur)
+
+
+def _panel(raw: dict, words: list[dict], end: float, rec: Path, fmt: str, layout: Layout | None,
+           covers=()) -> tuple[list[Graphic], dict | None, list[str]]:
+    """plan.json "panel" → the frame host Graphic("panel") + one custom / panel-media Graphic per item.
+    `covers` are the full-screen scene spans (a panel gap under a scene does not warn)."""
+    if "panel" not in raw:
+        return [], None, []
+    items = raw["panel"]
+    if not isinstance(items, list) or not items:
+        raise PlanError('"panel" must be a non-empty list of items {"at", "effect" | "media"}')
+    lay = layout if layout is not None and layout.mode == "split-panel" else SPLIT_DEFAULTS
+    box = panel_box(lay.ratio)
+    rows = []
+    for i, it in enumerate(items):
+        bare = f"panel item #{i + 1}"
+        if not isinstance(it, dict) or "at" not in it:
+            raise PlanError(f'{bare}: must be an object with "at"')
+        for k in it:
+            if k not in PANEL_ITEM_KEYS:
+                raise PlanError(f"{bare}: unknown key {k!r} (use {', '.join(PANEL_ITEM_KEYS)})")
+        name = str(it["effect"]) if "effect" in it else Path(str(it.get("media", "?"))).name
+        where = f"{bare} ({name})" if ("effect" in it) != ("media" in it) else bare
+        params: dict = {}
+        _media_or_effect(it, params, rec, where)
+        if "fit" in it:
+            if "media" not in it:
+                raise PlanError(f'{where}: "fit" works only with "media"')
+            if it["fit"] not in ("contain", "cover"):
+                raise PlanError(f"{where}: fit must be contain or cover")
+        start = resolve_anchor(it["at"], words, end)[0]
+        if rows and start <= rows[-1]["start"]:
+            raise PlanError(f"{bare}: starts before or with item #{i} ({rows[-1]['start']:.2f}s) — "
+                            f"items go in time order")
+        if start >= end - 0.05:
+            raise PlanError(f"{where}: starts at {start:.2f}s, too close to the end ({end:.2f}s)")
+        until = None
+        if "until" in it:
+            until = _until(it["until"], words, end)
+            if until <= start:
+                raise PlanError(f'{where}: "until" is before the start')
+        rows.append({"start": start, "until": until, "name": name, "where": where, "params": params, "raw": it})
+    for j, r in enumerate(rows):
+        nxt = rows[j + 1]["start"] if j + 1 < len(rows) else None
+        stop = r["until"] if r["until"] is not None else (nxt if nxt is not None else r["start"] + lay.cadence[1])
+        if nxt is not None:
+            stop = min(stop, nxt)
+        r["end"] = min(stop, end - 0.05)
+    span_start, span_end = rows[0]["start"], rows[-1]["end"]
+    open_at_zero, stays = span_start < 0.5, span_end >= end - 0.5
+    if open_at_zero:
+        span_start = rows[0]["start"] = 0.0
+    if stays:
+        span_end = rows[-1]["end"] = end - 0.05
+    warns = []
+    longest = lay.cadence[1] + ITEM_SLACK
+    for j, r in enumerate(rows):
+        d = r["end"] - r["start"]
+        if d < ITEM_MIN - 1e-6:
+            warns.append(f"WARN panel item #{j + 1} ({r['name']}) is {d:.1f} s — shorter than {ITEM_MIN:g} s, "
+                         f"too fast to read")
+        elif d > longest + 1e-6:
+            warns.append(f"WARN panel item #{j + 1} ({r['name']}) is {d:.1f} s — longer than {longest:g} s "
+                         f"(cadence max {lay.cadence[1]:g} s): split it or add an item")
+        if j + 1 < len(rows):
+            a, b = r["end"], rows[j + 1]["start"]
+            if b - a > PANEL_GAP and _uncovered(a, b, covers) > PANEL_GAP + 1e-6:
+                warns.append(f"WARN panel gap {a:.1f}–{b:.1f} s ({b - a:.1f} s) — the panel is empty: "
+                             f"extend an item or cover the gap with a scene")
+    gs = []
+    last = len(rows) - 1
+    for j, r in enumerate(rows):
+        enter = ("cut" if open_at_zero else "slide") if j == 0 else lay.transition
+        exit_ = ("none" if stays else "slide") if j == last else "none"
+        it, params = r["raw"], r["params"]
+        if "effect" in it:
+            p = {"name": str(it["effect"]), "region": list(box)}
+            if "params" in params:
+                p["params"] = params["params"]
+            gtype = "custom"
+        else:
+            p = {"media": params["media"], "fit": it.get("fit", "cover")}
+            gtype = "panel-media"
+        p.update({"_panel": True, "_enter": enter, "_exit": exit_})
+        gs.append(Graphic(gtype, round(r["start"], 3), round(r["end"], 3), p, False, it.get("sfx"), j))
+    span_start, span_end = round(span_start, 3), round(span_end, 3)
+    host = Graphic("panel", span_start, span_end, {"ratio": lay.ratio, "open_at_zero": open_at_zero, "stays": stays},
+                   False, None, 0)
+    info = {"start": span_start, "end": span_end, "ratio": lay.ratio, "open_at_zero": open_at_zero, "stays": stays,
+            "items": len(rows)}
+    return [host] + gs, info, warns
+
+
+def _scenes(raw: dict, words: list[dict], end: float, rec: Path, fmt: str,
+            layout: Layout | None) -> tuple[list[Graphic], list[str]]:
+    """plan.json "scenes" → full-frame covers: Graphic("scene") for media, a region-less custom for an effect."""
+    if "scenes" not in raw:
+        return [], []
+    sc = raw["scenes"]
+    if not isinstance(sc, list) or not sc:
+        raise PlanError('"scenes" must be a non-empty list of {"from", "to", "effect" | "media"}')
+    lay = layout if layout is not None and layout.mode == "split-panel" else SPLIT_DEFAULTS
+    gs, warns = [], []
+    for i, s in enumerate(sc):
+        bare = f"scene #{i + 1}"
+        if not isinstance(s, dict) or "from" not in s:
+            raise PlanError(f'{bare}: must be an object with "from" and "to"')
+        for k in s:
+            if k not in SCENE_KEYS:
+                raise PlanError(f"{bare}: unknown key {k!r} (use {', '.join(SCENE_KEYS)})")
+        name = str(s["effect"]) if "effect" in s else Path(str(s.get("media", "?"))).name
+        where = f"{bare} ({name})" if ("effect" in s) != ("media" in s) else bare
+        start, stop = _range(s, words, end, where)
+        stop = min(stop, end - 0.05)
+        d = stop - start
+        if d < SCENE_MIN - 1e-6:
+            raise PlanError(f"{where}: lasts {d:.1f} s — a full-screen scene needs at least {SCENE_MIN:.1f} s")
+        if d > SCENE_MAX + 1e-6:
+            warns.append(f"WARN {where} is {d:.1f} s — longer than {SCENE_MAX:g} s, the speaker is gone too long")
+        params: dict = {}
+        _media_or_effect(s, params, rec, where)
+        if "effect" in s:
+            p = {"name": str(s["effect"])}
+            if "params" in params:
+                p["params"] = params["params"]
+            p.update({"_fade": SCENE_FADE, "_scene": True})
+            gs.append(Graphic("custom", round(start, 3), round(stop, 3), p, False, None, i))
+        else:
+            gs.append(Graphic("scene", round(start, 3), round(stop, 3), {"media": params["media"], "_scene": True},
+                              False, None, i))
+    allowed = math.ceil(lay.fullscreen_max_per_min * end / 60 - 1e-9)
+    if len(gs) > allowed:
+        warns.append(f"WARN scenes: {len(gs)} (layout allows {allowed} in {end:.0f} s at "
+                     f"{lay.fullscreen_max_per_min} per minute) — keep the speaker on screen")
+    return gs, warns
+
+
+_HINTS = {"stat-card": lambda p: f"{_fmt(p['value']) if _number(p.get('value')) else p.get('value', '')}"
+                                 f"{p.get('suffix', '')}",
+          "ui-mock": lambda p: p.get("kind", ""), "checklist": lambda p: p.get("title", ""),
+          "headline": lambda p: p.get("text", ""),
+          "flow": lambda p: (p.get("nodes") or [""])[0] if isinstance(p.get("nodes"), list) else ""}
+
+
+def panel_summary(plan: Plan) -> list[str]:
+    """One line per panel item ("0.00–1.40 stat-card 44%"), then one per full-screen scene — the timeline at a glance."""
+    lines, scenes = [], []
+    for g in plan.graphics:
+        if g.params.get("_panel"):
+            if g.type == "panel-media":
+                line = f"{g.start:.2f}–{g.end:.2f} {Path(g.params['media']).name}"
+            else:
+                ep = g.params.get("params") or {}
+                hint = str(_HINTS[g.params["name"]](ep)) if g.params["name"] in _HINTS else ""
+                line = f"{g.start:.2f}–{g.end:.2f} {g.params['name']}" + (f" {hint}" if hint else "")
+            lines.append(line if len(line) <= 60 else line[:59] + "…")
+        elif g.params.get("_scene"):
+            what = Path(g.params["media"]).name if g.type == "scene" else g.params["name"]
+            scenes.append(f"{g.start:.2f}–{g.end:.2f} SCENE {what}")
+    return lines + scenes
+
+
 def _chapters(raw: dict, words: list[dict], end: float) -> list[dict]:
     ch = raw.get("chapters")
     if ch is None:
@@ -416,11 +614,12 @@ def _budget(gs: list[Graphic], end: float | None = None, fmt: str = "9:16", last
     titles = [g for g in gs if g.type == "title"]
     if len(titles) > 1:
         w.append(f"WARN {len(titles)} titles (budget 1)")
-    for a, b in zip(gs, gs[1:]):
+    band = [g for g in gs if not _layer(g)]    # the panel, its items and the scenes are layers of their own
+    for a, b in zip(band, band[1:]):
         if b.start < a.end and not _expanded_pair(a, b):
             w.append(f"WARN {a.type} ({a.start:.1f}–{a.end:.1f}s) overlaps {b.type} at {b.start:.1f}s")
     if end is not None and last_start is not None:
-        w += _density([(g.start, g.end) for g in gs] + list(plates), end, fmt, last_start)
+        w += _density([(g.start, g.end) for g in gs if g.type != "panel"] + list(plates), end, fmt, last_start)
     return w
 
 
@@ -437,7 +636,18 @@ def _glb_warnings(gs: list[Graphic]) -> list[str]:
 
 
 def _fmt(n) -> str:
-    return str(int(n)) if float(n).is_integer() else str(n)
+    return str(int(float(n))) if float(n).is_integer() else str(n)
+
+
+def _number(v) -> bool:
+    if isinstance(v, bool):
+        return False
+    if isinstance(v, (int, float)):
+        return True
+    try:
+        return isinstance(v, str) and math.isfinite(float(v))
+    except ValueError:
+        return False
 
 
 def _factcheck(out: Path, gs: list[Graphic]) -> list[str]:
@@ -449,6 +659,11 @@ def _factcheck(out: Path, gs: list[Graphic]) -> list[str]:
             nums = [g.params["to"]]
         elif g.type == "bars" and not g.params.get("illustrative"):
             nums = [r["value"] for r in g.params["rows"]]
+        elif g.type == "custom" and g.params.get("name") in ("stat-card", "checklist"):
+            ep = g.params.get("params") or {}
+            src = ep if g.params["name"] == "stat-card" else ep.get("summary")
+            v = src.get("value") if isinstance(src, dict) else None
+            nums = [v] if _number(v) else []
         else:
             nums = []
         for n in nums:
@@ -458,7 +673,7 @@ def _factcheck(out: Path, gs: list[Graphic]) -> list[str]:
     return w
 
 
-def load_plan(out_dir: Path, factcheck: bool = False) -> Plan:
+def load_plan(out_dir: Path, factcheck: bool = False, layout: Layout | None = None) -> Plan:
     out = Path(out_dir).resolve()
     p = out / "plan.json"
     if not p.exists():
@@ -489,8 +704,19 @@ def load_plan(out_dir: Path, factcheck: bool = False) -> Plan:
     graphics_list = raw.get("graphics")
     if graphics_list is not None and not isinstance(graphics_list, list):
         raise PlanError(f"{p}: \"graphics\" must be a list")
+    if fmt != "9:16":
+        for k in ("panel", "scenes"):
+            if k in raw:
+                raise PlanError(f'{p}: "{k}": panel exists only in 9:16 — use side / pip')
     gs = sorted((_graphic(i, g, words, end, out.parent, fmt) for i, g in enumerate(graphics_list or [])),
                 key=lambda g: g.start)
+    scene_gs, scene_warns = _scenes(raw, words, end, out.parent, fmt, layout)
+    panel_gs, panel, panel_warns = _panel(raw, words, end, out.parent, fmt, layout,
+                                          [(g.start, g.end) for g in scene_gs])
+    if panel is not None:
+        for g in gs:
+            if g.type in PANEL_REPLACES:
+                raise PlanError(f"graphic #{g.index + 1} ({g.type}): the panel replaces {g.type} — make it a panel item")
     tr = load_tracks(out)
     if tr is not None and not tracks_fresh(out):
         if any(g.params.get("follow") for g in gs):
@@ -499,10 +725,11 @@ def load_plan(out_dir: Path, factcheck: bool = False) -> Plan:
     if any(g.params.get("follow") for g in gs) and tr is None:
         raise PlanError("follow needs out/work/tracks.json — run `cutmate track`")
     gesture_warns = _resolve_gestures(gs, tr)
-    gs = _expand(gs)
-    for i, g in enumerate(gs):
+    gs = sorted(_expand(gs) + panel_gs + scene_gs, key=lambda g: g.start)
+    band = [g for g in gs if not _layer(g)]     # panel items / scenes have their ends; they do not cut band holds
+    for i, g in enumerate(band):
         if g.end is None:
-            nxt = gs[i + 1].start - 0.05 if i + 1 < len(gs) else end
+            nxt = band[i + 1].start - 0.05 if i + 1 < len(band) else end
             g.end = min(g.start + HOLDS.get(g.type, HOLD), nxt)
         g.end = round(max(min(g.end, end - 0.05), min(g.start + 0.3, end - 0.05)), 3)
         if g.end <= g.start:
@@ -517,7 +744,7 @@ def load_plan(out_dir: Path, factcheck: bool = False) -> Plan:
                 if fm:
                     face[sid] = fm
     plates = [(c["start"], min(c["start"] + PLATE, end)) for c in plate_chapters(chapters, end)]
-    warnings = gesture_warns + _glb_warnings(gs) + _budget(gs, end, fmt, float(timed[-1]["start"]), plates) + _chapter_warnings(chapters, gs, end, min((w['start'] for w in words), default=0.0)) + (_factcheck(out, gs) if factcheck else [])
+    warnings = gesture_warns + panel_warns + scene_warns + _glb_warnings(gs) + _budget(gs, end, fmt, float(timed[-1]["start"]), plates) + _chapter_warnings(chapters, gs, end, min((w['start'] for w in words), default=0.0)) + (_factcheck(out, gs) if factcheck else [])
     cap = raw.get("captions") or {}
     if not isinstance(cap, dict):
         raise PlanError(f"{p}: \"captions\" must be a dict")
@@ -535,4 +762,4 @@ def load_plan(out_dir: Path, factcheck: bool = False) -> Plan:
         if (not isinstance(music, dict) or not ({"volume", "src"} & music.keys()) or ("volume" in music and (isinstance(v, bool) or not isinstance(v, (int, float)) or not 0 <= v <= 2))
                 or ("src" in music and not isinstance(music["src"], str))):
             raise PlanError(f"{p}: \"music\" must be an object with an optional numeric \"volume\" (0–2) and an optional string \"src\"")
-    return Plan(gs, captions, music, end, warnings, chapters, face, fmt, tr)
+    return Plan(gs, captions, music, end, warnings, chapters, face, fmt, tr, panel, layout)
