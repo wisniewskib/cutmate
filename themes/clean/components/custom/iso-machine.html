@@ -37,13 +37,7 @@ const s = Math.min(P.w / 1000, P.h / 820);
 const W = P.w, H = P.h;
 const box = root.querySelector(".im");
 const onPanel = P.theme === "panel";
-const lightPanel = onPanel && (() => {           // "panel": light or dark follows the theme's --panel-bg
-  const pr = U.el("i", null, null, box);
-  pr.style.color = "var(--panel-bg, #0b0b0f)";
-  const m = String(getComputedStyle(pr).color || "").match(/[\d.]+/g);
-  pr.remove();
-  return !!(m && m.length >= 3 && 0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2] > 150);
-})();
+const lightPanel = onPanel && U.panelLight(box);   // "panel": light or dark follows the theme's --panel-bg
 const dark = P.theme === "dark" || (onPanel && !lightPanel);
 if (dark) box.classList.add("dark");
 if (onPanel) box.classList.add("panel");

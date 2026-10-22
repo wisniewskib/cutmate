@@ -58,6 +58,17 @@
       hf.buildReady[cid] = prev ? Promise.all([prev, p]) : Promise.resolve(p);
       return p;
     };
+    // true when the theme's --panel-bg is light (Rec.709 luma > 150): explainers then draw text on the panel in --ink,
+    // soften shadows and drop the glow; a dark (or unreadable) panel colour is false
+    U.panelLight = function (el) {
+      if (typeof document === "undefined" || typeof getComputedStyle === "undefined") return false;
+      const pr = document.createElement("i");
+      pr.style.color = "var(--panel-bg, #0b0b0f)";
+      (el || root).appendChild(pr);
+      const m = String(getComputedStyle(pr).color || "").match(/[\d.]+/g);
+      pr.remove();
+      return !!(m && m.length >= 3 && 0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2] > 150);
+    };
     // resolves once the theme font is loaded in these weights (text is measured after this)
     U.fonts = function (weights, family) {
       if (typeof document === "undefined" || !document.fonts) return Promise.resolve();

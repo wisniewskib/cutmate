@@ -178,3 +178,32 @@ def test_checklist_rows_tick_in_order():
     assert d["mid"] == [True, True, False, False]
     assert d["start"] == [False, False, False, False]
     assert d["sum"] == ["50%"]
+
+
+PANEL = """
+global.window = {};
+require(%s);
+const mkEl = () => ({ style: {}, children: [], appendChild(c) { this.children.push(c); c.parent = this; return c; },
+                      remove() { this.parent.children = this.parent.children.filter((x) => x !== this); } });
+global.document = { createElement: mkEl };
+const root = mkEl();
+const out = {};
+for (const [k, color] of [["light", "rgb(239, 236, 231)"], ["dark", "rgb(11, 11, 15)"], ["none", ""], ["mid", "rgb(160, 160, 160)"]]) {
+  let probe = null;
+  global.getComputedStyle = (e) => { probe = e; return { color }; };
+  const U = window.CutmateFX.make({ to() {} }, root, "c1", { dur: 1 });
+  out[k] = U.panelLight(root);
+  out[k + "Var"] = probe.style.color;
+}
+out.left = root.children.length;
+console.log(JSON.stringify(out));
+"""
+
+
+def test_panel_light_reads_the_panel_colour():
+    path = json.dumps(str(web_dir() / "effects.js"))
+    r = subprocess.run(["node", "-e", PANEL % path], capture_output=True, text=True, encoding="utf-8", check=True)
+    d = json.loads(r.stdout)
+    assert d["light"] is True and d["dark"] is False and d["none"] is False and d["mid"] is True
+    assert d["lightVar"] == "var(--panel-bg, #0b0b0f)"        # the theme token, clean's colour as the fallback
+    assert d["left"] == 0                                       # the probe element is removed again

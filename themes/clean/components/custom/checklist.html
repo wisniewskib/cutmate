@@ -91,7 +91,7 @@ if (sm) {
 }
 
 // rows tick in one by one over [P.at + 0.3, P.end - 0.4] (each in the middle of its slot), the status lands just after
-const a0 = P.at + 0.3, a1 = Math.max(a0 + 0.3, P.end - 0.4), n = Math.max(1, rows.length), step = (a1 - a0) / n;
+const a0 = P.at + 0.3, a1 = Math.max(a0 + 0.3, P.end - 0.4), n = Math.max(2, rows.length), step = (a1 - a0) / n;
 rows.forEach((r, k) => { r.t = a0 + (k + 0.5) * step; r.res = r.t + Math.min(0.35, step * 0.5); });
 const tS0 = rows.length ? rows[0].res : a0;
 const tS1 = Math.max(tS0 + 0.2, Math.min((rows.length ? rows[rows.length - 1].res : a0) + 0.5, P.end - 0.3));

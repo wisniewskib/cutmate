@@ -3,6 +3,8 @@ ROOT .um { position: absolute; inset: 0; overflow: hidden; background: var(--pan
 ROOT .um-glow { position: absolute; inset: -10%;
   background: radial-gradient(ellipse at 50% 20%, color-mix(in srgb, var(--ac) 24%, transparent), transparent 60%); }
 ROOT .um.lp .um-glow { display: none; }
+/* light panel: the theme's own (soft) shadow instead of the deep one made for a dark panel */
+ROOT .um.lp .um-win { box-shadow: var(--shadow, 0 10px 30px rgba(0, 0, 0, 0.18)); }
 ROOT .um-win { position: absolute; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden;
   border-radius: calc(var(--s) * var(--radius, 28px) * 10 / 7); box-shadow: 0 calc(var(--s) * 30px) calc(var(--s) * 80px) rgba(0, 0, 0, 0.6); }
 ROOT .um-head { flex: none; display: flex; align-items: center; gap: calc(var(--s) * 20px);
@@ -135,13 +137,7 @@ const quartOut = (u) => 1 - Math.pow(1 - u, 4);
 const pl = P.lang === "pl";
 const page = kind === "browser" || kind === "app";
 // a light --panel-bg drops the glow (its edge would show against the panel frame)
-if ((() => {
-  const pr = U.el("i", null, null, box);
-  pr.style.color = "var(--panel-bg, #0b0b0f)";
-  const m = String(getComputedStyle(pr).color || "").match(/[\d.]+/g);
-  pr.remove();
-  return m && m.length >= 3 && 0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2] > 150;
-})()) box.classList.add("lp");
+if (U.panelLight(box)) box.classList.add("lp");
 
 U.el("div", "um-glow", null, box);
 const pad = 40 * s;
