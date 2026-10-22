@@ -50,37 +50,49 @@ GRAPHICS_916 = [
          {"label": "Wejście", "shape": "funnel"}, {"label": "Cięcie", "shape": "cylinder"},
          {"label": "Podgląd", "shape": "screen"}, {"label": "Napęd", "shape": "gear"}]}},
 ]
-# split-panel 9:16: the panel opens at 0 (first item at 0.2 s) and runs on 3 s items; band graphics that overlap an item
-# hide it meanwhile (build); a full-screen scene in S3 covers most of the ~3 s hole between items 8 and 9 (so no "panel
-# gap" warning); the panel slides out after the last item
+# split-panel 9:16: the panel opens at 0 (first item at 0.2 s) and runs on ~3 s items. Title and counter stay in S1 over
+# items 1-2 (build hides the item under them); every item keeps a >= 1 s window free of band graphics (free_window), where
+# its mid snapshot is taken. The other band graphics move to S3 / S4, after the panel has closed. A full-screen scene
+# in S3 covers most of the ~3 s hole between items 8 and 9 (so no "panel gap" warning).
 PANEL_916 = [
-    {"at": 0.2, "until": 3.0, "effect": "stat-card",
+    {"at": 0.2, "until": 3.6, "effect": "stat-card",
      "params": {"value": 75, "suffix": "%", "label": "mniej tokenów w każdej odpowiedzi", "note": "dane przykładowe",
                 "layout": "hero"}},
-    {"at": 3.0, "until": 6.0, "effect": "checklist",
+    {"at": 3.6, "until": 7.0, "effect": "checklist",
      "params": {"title": "Sprawdzenie linków", "rows": [
          {"text": "strona główna", "status": "ok"}, {"text": "cennik", "status": "ok"},
          {"text": "stary wpis", "status": "bad", "label": "404"}, {"text": "regulamin", "status": "warn"}],
                 "summary": {"value": 25, "suffix": "%", "label": "błędnych"}}},
-    {"at": 6.0, "until": 9.0, "effect": "ui-mock",
+    {"at": 7.0, "until": 10.0, "effect": "ui-mock",
      "params": {"kind": "browser", "url": "example.com/narzędzia", "title": "Narzędzia", "search": "wideo",
                 "rows": [{"text": "Edytor wideo", "sub": "montaż"}, {"text": "Generator napisów", "sub": "AI"},
                          {"text": "Kompresor", "sub": "pliki"}], "highlight": 1}},
-    {"at": 9.0, "until": 12.0, "effect": "ui-mock",
+    {"at": 10.0, "until": 13.0, "effect": "ui-mock",
      "params": {"kind": "app", "title": "Połączenia", "rows": [
          {"text": "Dysk", "toggle": False, "click": True}, {"text": "Kalendarz", "toggle": True},
          {"text": "Poczta", "toggle": False, "click": True}]}},
-    {"at": 12.0, "until": 15.0, "effect": "flow",
+    {"at": 13.0, "until": 16.0, "effect": "flow",
      "params": {"title": "Jak to działa", "nodes": ["Nagranie", "Transkrypcja", "Plan", "Gotowy film"]}},
-    {"at": 15.0, "until": 18.0, "effect": "headline", "params": {"text": "Zero zbędnych pauz", "kicker": "Efekt"}},
-    {"at": 18.0, "until": 21.0, "effect": "iso-machine",
+    {"at": 16.0, "until": 19.0, "effect": "headline", "params": {"text": "Zero zbędnych pauz", "kicker": "Efekt"}},
+    {"at": 19.0, "until": 22.0, "effect": "iso-machine",
      "params": {"title": "Od nagrania do filmu", "theme": "panel", "token": "cube", "counter": {"to": 12, "label": "klipów"},
                 "parts": [{"label": "Wejście", "shape": "funnel"}, {"label": "Cięcie", "shape": "cylinder"},
                           {"label": "Podgląd", "shape": "screen"}]}},
-    {"at": 21.0, "until": 24.0, "media": "broll/page.png"},
+    {"at": 22.0, "until": 24.0, "media": "broll/page.png"},
     {"at": 26.8, "until": 29.8, "media": "broll/clip.mp4", "fit": "contain"},
 ]
 SCENES_916 = [{"from": 24.4, "to": 26.4, "media": "broll/page.png"}]
+# the band graphics of the split-panel sample that differ from GRAPHICS_916 (title, counter and the burst stay)
+_BAND_MOVES_916 = {
+    "list": {"items": [{"text": "Pierwszy", "at": "S3:słowo11"}, {"text": "Drugi punkt", "at": "S3:słowo12"},
+                       {"text": "Trzeci punkt", "at": "S3:słowo13"}, {"text": "Czwarty bardzo długi punkt", "at": "S3:słowo14"}],
+             "until": "S3:15%"},
+    "chip": {"at": "S4:słowo1", "until": "S4:słowo3"},
+    "stamp": {"at": "S4:5%", "until": "S4:słowo6"},
+    "bars": {"at": "S4:słowo8", "until": "S4:słowo11"},
+    "point": {"at": "S4:słowo13", "until": "S4:słowo14"},
+}
+GRAPHICS_916_PANEL = [{**g, **_BAND_MOVES_916.get(g["type"], {})} for g in GRAPHICS_916 if g["type"] != "split"]
 GRAPHICS_169 = [
     {"type": "title", "at": "S1:słowo1", "until": "S1:słowo3", "kicker": "Kicker", "text": "Tytuł ąę"},
     {"type": "counter", "at": "S1:słowo6", "until": "S1:słowo8", "to": 75, "prefix": "-", "suffix": "%", "label": "TOKENÓW", "hit": True},
@@ -187,7 +199,7 @@ def _synthetic_rec(root: Path, fmt: str = "9:16", clip: Path | None = None, layo
     (out / "work" / "edl_timed.json").write_text(json.dumps(timed), encoding="utf-8")
     plan = {"captions": {"key": ["SŁOWO3"]}, "graphics": GRAPHICS_169 if fmt == "16:9" else GRAPHICS_916}
     if _split_panel(fmt, layout):
-        plan["graphics"] = [g for g in GRAPHICS_916 if g["type"] != "split"]
+        plan["graphics"] = GRAPHICS_916_PANEL
         plan["panel"], plan["scenes"] = PANEL_916, SCENES_916
     if fmt == "16:9":
         plan["chapters"] = CHAPTERS_169
@@ -198,6 +210,24 @@ def _synthetic_rec(root: Path, fmt: str = "9:16", clip: Path | None = None, layo
         (out / "work" / "tracks.json").write_text(json.dumps(tracks), encoding="utf-8")
     (out / "plan.json").write_text(json.dumps(plan, ensure_ascii=False), encoding="utf-8")
     return out
+
+
+def free_window(item, graphics: list) -> tuple[float, float] | None:
+    """The longest stretch of a panel item's span that no band graphic (anything but the panel, its items and the
+    scenes) covers, as (start, end); None when the whole span is covered. Build hides an item under a band graphic, so
+    this is where the item can be seen (and snapshotted) un-faded."""
+    bands = sorted((g.start, g.end) for g in graphics
+                   if g.type != "panel" and not g.params.get("_panel") and not g.params.get("_scene"))
+    best, cur = None, item.start
+    for a, b in bands + [(item.end, item.end)]:
+        if b <= cur or a >= item.end:
+            continue
+        if a > cur and (best is None or a - cur > best[1] - best[0] + 1e-9):
+            best = (cur, a)
+        cur = max(cur, b)
+    if cur < item.end and (best is None or item.end - cur > best[1] - best[0] + 1e-9):
+        best = (cur, item.end)
+    return best
 
 
 def snapshot_times(graphics: list, checkpoints: list[float]) -> tuple[list[float], list[tuple[float, str, str]]]:
@@ -216,7 +246,8 @@ def snapshot_times(graphics: list, checkpoints: list[float]) -> tuple[list[float
             claim(round(g.start + 0.1, 2), (g.type, "entrance"))
     for g in graphics:
         if g.type in ("custom", "panel-media", "scene"):
-            claim(round((g.start + g.end) / 2, 2), (g.type, "mid"))
+            w = free_window(g, graphics) if g.params.get("_panel") else None
+            claim(round(sum(w) / 2 if w else (g.start + g.end) / 2, 2), (g.type, "mid"))
     for g in graphics:
         claim(checkpoint(g), (g.type, "settled"))
     cps = sorted(set(checkpoints) | set(named))

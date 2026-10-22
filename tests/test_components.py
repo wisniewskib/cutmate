@@ -3,6 +3,9 @@ from pathlib import Path
 
 import pytest
 
+SPLIT_PANEL_SNAPSHOTS = 35
+LOOK_TYPES = ("title", "counter", "list", "chip", "stamp", "bars")
+
 from cutmate import effects, paths
 from cutmate.build import _sections
 from cutmate.plan import TYPES
@@ -312,10 +315,16 @@ def test_theme_check_split_panel(tmp_path, monkeypatch):
     meta["layout"] = {"mode": "split-panel"}
     (theme / "theme.json").write_text(json.dumps(meta), encoding="utf-8")
     r = theme_check(str(theme), tmp_path / "w", fmt="9:16", layout=SPLIT_DEFAULTS)
+    from cutmate import themes
     out = r["sheet"].parent
     plan = load_plan(out, layout=SPLIT_DEFAULTS)
-    mids = [g for g in plan.graphics if g.params.get("_panel") or g.params.get("_scene")]
-    sample = [g for g in plan.graphics if not g.params.get("_panel") and not g.params.get("_scene") and g.type != "panel"]
-    assert len(r["snapshots"]) >= len(sample) and len(mids) == 10
-    assert sum(1 for _, ty, k in r["labels"] if k == "mid") >= len(mids)
-    assert r["sheet"].exists() and len(r["snapshots"]) == len(r["labels"])
+    layers = [g for g in plan.graphics if g.params.get("_panel") or g.params.get("_scene")]
+    assert len(layers) == 10                                  # 9 panel items + 1 scene
+    mids = [(t, ty) for t, ty, k in r["labels"] if k == "mid"]
+    for g in layers:                                          # every item / scene has its own mid tile
+        assert any(g.start <= t <= g.end and ty == g.type for t, ty in mids), (g.type, g.start)
+    assert len(r["snapshots"]) == len(r["labels"]) == len(r["times"]) == SPLIT_PANEL_SNAPSHOTS
+    assert r["sheet"].exists() and Image.open(r["sheet"]).width == 1350
+    contact = tmp_path / "contact.png"
+    themes._contact_sheet({"9:16": r, "16:9": r}, contact)    # every LOOK type has its entrance + settled tile
+    assert Image.open(contact).width == 1620
