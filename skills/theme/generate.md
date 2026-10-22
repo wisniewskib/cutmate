@@ -162,9 +162,10 @@ Also keep:
 
 - **The panel is always open** (9:16): the top part of the frame is one panel for the whole video; the speaker sits
   in the bottom part. 16:9 ignores the layout (classic rules above).
-- **Every sentence gets a panel item** of 1–<cadence max> s in plan.json `"panel"` (explainer effect or a `media`
-  page screenshot from `broll/`), contiguous from the first word (or after a ≤ 1.5 s face-only hook) to the CTA —
-  the panel is never empty. No `split`, `pip`, `side` or `bg` graphics: the panel replaces split.
+- **One panel item per clause / key phrase, NOT per sentence** — 1–2 s each (never over <cadence max> s), ~12–18
+  per 20 s, in plan.json `"panel"` (explainer effect or a `media` page screenshot from `broll/`), contiguous from
+  the first word (or after a ≤ 1.5 s face-only hook) to the CTA — the panel is never empty. No `split`, `pip`,
+  `side` or `bg` graphics: the panel replaces split.
 - **Band graphics ≤ 2** (title / counter / stamp / chip) — only on punch moments; they hide the panel item under them.
 - **Scenes ≤ <max per min> per minute** in `"scenes"` (full-frame image or explainer, 1–6 s) on punch moments.
 - **Captions on the seam** between panel and face — small pills, never over the mouth.
