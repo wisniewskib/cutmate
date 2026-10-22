@@ -44,7 +44,7 @@ Read the top-level `layout` in the draft's `theme.json` (missing = classic).
 - **classic** (no `layout`, or `"mode": "classic"`) → nothing changes; skip to step 3.
 - **split-panel** → the persistent panel is built from `components/panel.html` (the frame), `panel-media.html` (a page
   screenshot / video inside the panel) and `scene.html` (a full-frame scene). Keep their structure — the markup, the
-  `{{panel_h}}` / `{{media_tag}}` placeholders, class names, the `P.open_at_zero` / `P.stays` / `P.at` / `P.end` timing
+  `{{panel_h}}` / `{{media_tag}}` placeholders, class names, the `P.open_at_zero` / `P.stays` / `P.at` / `P.end` / `P.fade` timing
   and the `fit-contain` / `fit-cover` classes; restyle them ONLY through tokens and their `<style>`:
   - `tokens.css`: `--panel-bg` (the panel colour; lint requires it for split-panel), `--radius` (corners of panel
     items: 0 for sharp, 999px is too round for a panel — use 28–48px for pill), `--shadow`; `--accent` is the seam edge

@@ -27,7 +27,7 @@ from .layout import CLASSIC, SPLIT_DEFAULTS, theme_layout
 from .media import duration, run
 from .music import carve, pick_source, prepare_music
 from .paths import assets_dir, plugin_root, theme_dir, web_dir
-from .plan import PLATE, Graphic, load_plan, panel_box, panel_summary, plate_chapters
+from .plan import PLATE, SCENE_FADE, Graphic, load_plan, panel_box, panel_summary, plate_chapters
 from .tracks import pick_hand
 
 CHAPTER_LABEL = {"pl": "ROZDZIAŁ", "en": "CHAPTER"}
@@ -69,7 +69,6 @@ SLIDE = SLIDE_IN + SLIDE_OUT
 FADE_IN = "\n    tl.fromTo(root, { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.2 }, P.at);"
 HANDOFF = 0.2                 # a panel item's host runs on this long after the next item starts (the next one covers it)
 BAND_FADE = 0.15              # a panel item fades out / in under a band graphic (title, counter…) that overlaps it
-SCENE_FADE = 0.25             # scene.html / an effect scene: fade in / out
 
 
 def _panel_moves(params: dict, d: int) -> str:
@@ -502,6 +501,7 @@ def subcomp(cid: str, g: Graphic, host_start: float, theme: Path, assets: Path, 
         media_tag = _media_tag(cid, g, P)
         fade = _panel_moves(g.params, round(ratio * H))
     if g.type == "scene":
+        P["fade"] = SCENE_FADE                           # scene.html fades in / out by it (one constant: plan.SCENE_FADE)
         media_tag = _media_tag(cid, g, P)
     back_tag = _media_tag(cid, g, P) if g.type == "bg" and "media" in g.params else ""
     tags = {"media_tag": media_tag, "back_tag": back_tag, **(extra_tags or {})}

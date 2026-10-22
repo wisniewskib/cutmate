@@ -46,7 +46,7 @@ ITEM_MIN, ITEM_SLACK = 0.6, 1.5   # panel item: shorter warns; longer than caden
 PANEL_PACE = (1.1, 1.7)           # panel: one item per clause / key phrase — seconds per item (fast, slow end)
 PANEL_GAP = 1.0                   # an empty panel longer than this (not covered by a scene) warns (s)
 SCENE_MIN, SCENE_MAX = 1.0, 6.0   # full-screen scene: shorter is an error, longer warns (s)
-SCENE_FADE = 0.25                 # entrance / exit of an effect scene (s)
+SCENE_FADE = 0.25                 # entrance / exit of a full-frame scene (s): effect FADE, scene.html P.fade, hide spans
 _PUNCT = ".,!?;:…\"'„\u201c\u201d()[]–—-"
 
 

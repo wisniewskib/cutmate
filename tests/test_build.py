@@ -1401,3 +1401,18 @@ def test_only_panel_items_get_the_fast_build_in_flag(out, theme):
     proj = B.build(out, theme=theme)["project"]
     assert _P((proj / "compositions" / "gx-02-custom.html").read_text(encoding="utf-8"))["panel"] is True
     assert "panel" not in _P((proj / "compositions" / "gx-03-panel-media.html").read_text(encoding="utf-8"))
+
+
+def test_scene_fade_is_one_constant(out, theme):
+    """The scene fade lives in plan.SCENE_FADE only: build's hide spans, an effect scene's FADE and scene.html (P.fade)."""
+    from cutmate import plan as PL
+    assert B.SCENE_FADE is PL.SCENE_FADE
+    scene_html = (paths.plugin_root() / "themes" / "clean" / "components" / "scene.html").read_text(encoding="utf-8")
+    assert "0.25" not in scene_html.split("<script>")[1] and "P.fade" in scene_html
+    _png(out)
+    _with_layout_components(theme)
+    write_plan(out, {"panel": [{"at": "S1:mniej", "media": "broll/p.png"}],
+                     "scenes": [{"from": "S2:minus", "to": "S2:</script>", "media": "broll/p.png"}]})
+    proj = B.build(out, theme=theme)["project"]
+    sub = next((proj / "compositions").glob("gx-*-scene.html")).read_text(encoding="utf-8")
+    assert _P(sub)["fade"] == PL.SCENE_FADE
