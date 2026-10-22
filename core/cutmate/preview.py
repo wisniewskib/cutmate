@@ -8,6 +8,8 @@ from PIL import Image, ImageDraw
 from .build import CHAPTER_LABEL
 from .chapters import chapters_txt
 from .errors import CutmateError, MediaError
+from .formats import format_of
+from .layout import theme_layout
 from .media import run
 from .paths import theme_dir
 from .plan import PLATE, load_plan, plate_chapters
@@ -40,7 +42,8 @@ def preview(out_dir: Path, theme: str = "clean", language: str = "pl") -> dict:
     src = out / "aroll.mp4"
     if not src.exists():
         raise CutmateError(f"{src} not found — run `cutmate cut` first")
-    plan = load_plan(out)
+    tall = format_of(out) == "9:16"                    # validated as the build does (a panel / scenes: not drawn here)
+    plan = load_plan(out, layout=theme_layout(theme_dir(theme)) if tall else None)
     W, H = SIZES[plan.format]
     ch = out / "chapters.txt"
     if plan.chapters:

@@ -27,6 +27,7 @@ STAMP_FORMATS = ["9:16", "16:9"]
 REQUIRED_TOKENS = ("--accent", "--text", "--ink", "--muted", "--card", "--shadow", "--font", "--font-display")
 FRAME_SELECTORS = ("#captions", ".cw", ".band")
 COMPONENTS = tuple(t for t in TYPES if t != "custom") + ("chapter",)
+LAYOUT_COMPONENTS = ("panel", "panel-media", "scene")  # optional: a theme without them builds with clean's
 DIRECTION_KEYS = ("palette", "fonts", "shapes", "motion", "captions")
 _HEX = re.compile(r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
 _NS = re.compile(r"https?://www\.w3\.org/[^\s\"'<>)]*")       # XML namespace strings are not fetched
@@ -374,11 +375,12 @@ def lint_theme(path: Path, name: str) -> list[str]:
     else:
         problems += [f"theme.css lacks the {s} rule" for s in FRAME_SELECTORS if s not in css]
     texts = {"tokens.css": tokens or "", "theme.css": css or ""}
-    for t in COMPONENTS:
+    for t in COMPONENTS + LAYOUT_COMPONENTS:
         f = path / "components" / f"{t}.html"
         text = _read(f)
         if text is None:
-            problems.append(f"component {t} missing")
+            if t not in LAYOUT_COMPONENTS:
+                problems.append(f"component {t} missing")
             continue
         texts[f"components/{t}.html"] = text
         script = dict(_SECTION.findall(text)).get("script")

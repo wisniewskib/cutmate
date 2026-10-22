@@ -937,3 +937,375 @@ def test_f169_component_rules_built_per_format(fmt, request):
         assert f"#{cid} .chip {{" in sub and "html.f169" not in sub
     else:
         assert f"html.f169 #{cid} .chip {{" in sub
+
+
+# ---- 3b+ layouts: persistent panel, items inside it, scenes, face in the bottom half, seam captions ----
+
+NO_PANEL_PLAN = {"captions": {"key": ["claude'a"]}, "graphics": [
+    {"type": "chip", "at": "S1:Mówić", "text": "Caveman"},
+    {"type": "split", "from": "S2:minus", "to": "S2:</script>", "media": "broll/p.png"},
+    {"type": "stamp", "at": "S2:Claude'a", "text": "NIE", "hit": True}]}
+FIXTURE_NO_PANEL = Path(__file__).parent / "fixtures" / "build_no_panel"   # built by the pre-layout code (HEAD 702829f)
+NODE_STUB = r"""
+const calls = [];
+function el(name) { const e = { __name: name, style: {}, children: [], className: "", textContent: "" };
+  e.appendChild = (c) => { e.children.push(c); return c; }; e.querySelector = (s) => el(s); e.querySelectorAll = () => [];
+  return e; }
+const name = (t) => typeof t === "string" ? t : (t && t.__name) || "?";
+const tl = {};
+for (const m of ["set", "to", "from", "fromTo"]) tl[m] = (t, a, b, c) => {
+  calls.push(m === "fromTo" ? [m, name(t), a, b, c] : [m, name(t), null, a, b]); return tl; };
+global.gsap = { timeline: () => tl };
+global.window = { __timelines: {} };
+global.document = { getElementById: (id) => el("#" + id), querySelector: (s) => el(s), createElement: (t) => el(t) };
+function at(target, prop, T) {   // the value a recorded call list gives target.prop at time T (linear tweens)
+  let v;
+  calls.map((c, i) => [c, i]).sort((x, y) => (x[0][4] - y[0][4]) || (x[1] - y[1])).forEach(([[m, n, from, to, pos]]) => {
+    if (n !== target || pos > T + 1e-9 || !(prop in to)) return;
+    const a = from && prop in from ? from[prop] : v, d = to.duration || 0;
+    v = m === "set" || T >= pos + d ? to[prop] : a + (to[prop] - a) * (T - pos) / d;
+  });
+  return v;
+}
+"""
+
+
+def _node(js: str):
+    r = subprocess.run(["node", "-e", NODE_STUB + js], capture_output=True, text=True, encoding="utf-8")
+    assert r.returncode == 0, r.stderr[-2000:]
+    return json.loads(r.stdout)
+
+
+def _main_values(proj: Path, times: list[float]) -> dict:
+    """Run assets/cutmate.js with the build's CFG against a recording timeline: #split / #captions y at `times`."""
+    cfg = cfg_of((proj / "index.html").read_text(encoding="utf-8"))
+    return _node(f"require({json.dumps(str(proj / 'assets' / 'cutmate.js'))}); window.Cutmate.build(tl, {json.dumps(cfg)});"
+                 f"console.log(JSON.stringify({json.dumps(times)}.map((t) => [at('#split', 'y', t), at('#captions', 'y', t)])));")
+
+
+def _sub_calls(sub: str) -> list:
+    """Run a sub-composition's script against a recording timeline: every tl call [method, target, from, to, pos]."""
+    script = re.search(r"<script>(\(function \(\) \{.*?)</script>", sub, re.S).group(1)
+    return _node(script + "\nconsole.log(JSON.stringify(calls));")
+
+
+def _png(o: Path, name: str = "p.png", color: str = "blue") -> None:
+    from PIL import Image
+    (o.parent / "broll").mkdir(exist_ok=True)
+    Image.new("RGB", (64, 36), color).save(o.parent / "broll" / name)
+
+
+def _hosts(html: str) -> list[tuple[str, str, float, float]]:
+    return [(c, tr, float(s), float(d)) for c, s, d, tr in re.findall(
+        r'<div id="(gx-[\w-]+)-slot"[^>]*data-start="([\d.]+)" data-duration="([\d.]+)" data-track-index="(\d+)"', html)]
+
+
+def _layout_theme(theme: str, layout: dict | None) -> Path:
+    d = paths.theme_dir(theme)
+    meta = json.loads((d / "theme.json").read_text(encoding="utf-8"))
+    if layout is None:
+        meta.pop("layout", None)
+    else:
+        meta["layout"] = layout
+    (d / "theme.json").write_text(json.dumps(meta), encoding="utf-8")
+    return d
+
+
+def _with_layout_components(theme: str) -> None:
+    src = paths.plugin_root() / "themes" / "clean" / "components"
+    for t in ("panel", "panel-media", "scene"):
+        shutil.copy2(src / f"{t}.html", paths.theme_dir(theme) / "components" / f"{t}.html")
+
+
+PANEL3 = {"panel": [{"at": "S1:mniej", "effect": "stat-card", "params": {"value": 44, "suffix": "%"}},
+                    {"at": "S2:minus", "media": "broll/p.png"},
+                    {"at": "S2:Claude'a", "until": 3.4, "effect": "orb"}]}
+
+
+def test_build_without_panel_is_unchanged(out, theme):
+    """A plan with no panel / scenes builds byte-identical index.html and sub-compositions to the pre-layout build."""
+    _png(out)
+    write_plan(out, NO_PANEL_PLAN)
+    r = B.build(out, theme=theme)
+    proj = r["project"]
+    html = (proj / "index.html").read_text(encoding="utf-8")
+    cfg = cfg_of(html)
+    assert set(cfg) == {"end", "pages", "cam", "hits", "splits"}
+    assert cfg["splits"] and all(len(e) == 2 for e in cfg["splits"])
+    assert 'data-track-index="1"' not in html and 'data-track-index="4"' not in html
+    assert r["layout"] == "classic" and r["panel"] == []
+    expected = sorted(p.name for p in FIXTURE_NO_PANEL.iterdir())
+    built = sorted(["index.html"] + [p.name for p in (proj / "compositions").glob("gx-*.html")])
+    assert built == expected
+    assert html == (FIXTURE_NO_PANEL / "index.html").read_text(encoding="utf-8")
+    for f in FIXTURE_NO_PANEL.glob("gx-*.html"):
+        assert (proj / "compositions" / f.name).read_text(encoding="utf-8") == f.read_text(encoding="utf-8"), f.name
+
+
+def test_panel_offsets():
+    assert B.panel_offsets(0.5, 0.40) == (672, -415)
+    assert B.panel_offsets(0.5, 0.95)[0] == 0                                   # clamped: never moves up
+    assert B.panel_offsets(0.5, 0.0)[0] == 960                                  # clamped: at most the panel height
+    assert B.panel_offsets(0.4, 0.40)[1] == round(0.4 * 1920) - 1375
+
+
+def test_panel_build_one_frame_host_and_items(out, theme):
+    _png(out)
+    _fx(out, "orb")
+    _with_layout_components(theme)
+    write_plan(out, PANEL3)
+    r = B.build(out, theme=theme)
+    proj = r["project"]
+    html = (proj / "index.html").read_text(encoding="utf-8")
+    hosts = _hosts(html)
+    frames = [h for h in hosts if h[0].endswith("-panel")]
+    assert len(frames) == 1 and frames[0][1] == "1"
+    items = [h for h in hosts if not h[0].endswith("-panel")]
+    assert [h[0] for h in items] == ["gx-02-custom", "gx-03-panel-media", "gx-04-custom"]
+    assert all(h[1] in ("2", "3") for h in items)
+    # each non-last item's host runs until the next item's start + 0.2 s, so the next one covers it
+    assert items[0][2] == 0.9 and items[0][2] + items[0][3] == pytest.approx(2.1 + 0.2)
+    assert items[1][2] + items[1][3] == pytest.approx(2.75 + 0.2)
+    assert items[2][2] + items[2][3] == pytest.approx(3.4)
+    subs = {h[0]: (proj / "compositions" / f"{h[0]}.html").read_text(encoding="utf-8") for h in items}
+    slide = re.compile(r"yPercent|\{ y: -")                                    # (U.out's `y: -30` is not a slide)
+    assert slide.search(subs["gx-02-custom"]) and "tl.fromTo(root, { y: -960 }" in subs["gx-02-custom"]
+    assert "tl.to(root, { y: -960" not in subs["gx-02-custom"]
+    assert not slide.search(subs["gx-03-panel-media"])
+    assert slide.search(subs["gx-04-custom"]) and "tl.to(root, { y: -960" in subs["gx-04-custom"]
+    assert "tl.fromTo(root, { y: -960 }" not in subs["gx-04-custom"]
+    assert 'class="cm-region" style="position:absolute;left:40px;top:40px;width:1000px;height:880px' in subs["gx-02-custom"]
+    pm = _P(subs["gx-03-panel-media"])
+    assert pm["media"].startswith("assets/media/") and pm["fit"] == "cover"
+    assert _P(subs["gx-03-panel-media"])["end"] == pytest.approx(2.75 + 0.2 - 2.1)
+    # an item covered by the next one fades its host out underneath meanwhile (check: a mid-fade handoff, not occlusion)
+    assert cfg_of(html)["hide"] == [["#gx-02-custom-slot", 2.08, 0.22, None, 0],
+                                    ["#gx-03-panel-media-slot", 2.73, 0.22, None, 0]]
+    cfg = cfg_of(html)
+    assert cfg["splits"] == [[0.9, 3.0, 672, -415, 0]]
+    assert r["layout"] == "classic" and len(r["panel"]) == 3 and r["panel"][0].startswith("0.90–2.10 stat-card 44%")
+    frame = _P((proj / "compositions" / "gx-01-panel.html").read_text(encoding="utf-8"))
+    assert frame["ratio"] == 0.5 and frame["open_at_zero"] is False and frame["stays"] is False
+
+
+def test_panel_open_at_zero_has_no_slide(out, theme):
+    """Review Focus 1: the reel starts with the panel up — no half-slid panel, no A-roll jump at t = 0."""
+    _png(out)
+    _with_layout_components(theme)
+    write_plan(out, {"panel": [{"at": 0.2, "media": "broll/p.png"}, {"at": "S2:minus", "media": "broll/p.png",
+                                                                      "until": 3.0}]})
+    proj = B.build(out, theme=theme)["project"]
+    cfg = cfg_of((proj / "index.html").read_text(encoding="utf-8"))
+    assert cfg["splits"] == [[0, 2.6, 672, -415, 1]]
+    assert _main_values(proj, [0, 0.01, 1.0]) == [[672, -415], [672, -415], [672, -415]]
+    frame = (proj / "compositions" / "gx-01-panel.html").read_text(encoding="utf-8")
+    calls = _sub_calls(frame)
+    assert calls and not [c for c in calls if c[0] in ("fromTo", "from")]      # no entrance tween on the frame
+    assert all(c[4] > 2 for c in calls if c[0] == "to")                        # only the exit, at the end
+    first = (proj / "compositions" / "gx-02-panel-media.html").read_text(encoding="utf-8")
+    assert not re.search(r"yPercent|\{ y: -|autoAlpha", first)
+    assert not [c for c in _sub_calls(first) if c[0] in ("fromTo", "from") and c[4] < 0.5]
+
+
+def test_panel_stays_to_end(out, theme):
+    _png(out)
+    _with_layout_components(theme)
+    write_plan(out, {"panel": [{"at": "S1:mniej", "media": "broll/p.png"}, {"at": "S2:minus", "media": "broll/p.png"}]})
+    proj = B.build(out, theme=theme)["project"]
+    cfg = cfg_of((proj / "index.html").read_text(encoding="utf-8"))
+    assert cfg["splits"] == [[0.9, None, 672, -415, 0]]
+    vals = _main_values(proj, [0.0, 0.9, 1.5, 3.99])
+    assert vals[0] == [0, 0] and vals[2] == [672, -415] and vals[3] == [672, -415]
+    calls = _sub_calls((proj / "compositions" / "gx-01-panel.html").read_text(encoding="utf-8"))
+    assert [c[0] for c in calls] == ["fromTo"]                                  # slides in, never out
+    last = (proj / "compositions" / "gx-03-panel-media.html").read_text(encoding="utf-8")
+    assert "tl.to(root, { y: -960" not in last
+
+
+def test_captions_bottom_layout(out, theme):
+    _png(out)
+    _with_layout_components(theme)
+    _layout_theme(theme, {"mode": "split-panel", "captions": "bottom", "ratio": 0.45})
+    write_plan(out, {"panel": [{"at": "S1:mniej", "media": "broll/p.png", "until": 3.0}]})
+    r = B.build(out, theme=theme)
+    cfg = cfg_of((r["project"] / "index.html").read_text(encoding="utf-8"))
+    dy = B.panel_offsets(0.45, 0.40)[0]
+    assert cfg["splits"] == [[0.9, 2.6, dy, 0, 0]] and r["layout"] == "split-panel"
+    assert _main_values(r["project"], [2.0])[0] == [dy, 0]
+
+
+def test_face_y_from_plan_face(out, theme):
+    _png(out)
+    _with_layout_components(theme)
+    write_plan(out, {"face": {"S1": [0.5, 0.3], "S2": [0.5, 0.5]},
+                     "panel": [{"at": "S1:mniej", "media": "broll/p.png", "until": 3.0}]})
+    cfg = cfg_of((B.build(out, theme=theme)["project"] / "index.html").read_text(encoding="utf-8"))
+    assert cfg["splits"][0][2] == B.panel_offsets(0.5, 0.4)[0]                 # median of 0.3 and 0.5
+    write_plan(out, {"face": {"S1": [0.5, 0.3]}, "panel": [{"at": "S1:mniej", "media": "broll/p.png", "until": 3.0}]})
+    cfg = cfg_of((B.build(out, theme=theme)["project"] / "index.html").read_text(encoding="utf-8"))
+    assert cfg["splits"][0][2] == B.panel_offsets(0.5, 0.3)[0]
+
+
+def test_scene_host_above_items_below_captions(out, theme):
+    _png(out)
+    _png(out, "s.png", "red")
+    _fx(out, "orb")
+    _with_layout_components(theme)
+    write_plan(out, {"panel": [{"at": "S1:mniej", "media": "broll/p.png"}, {"at": "S2:Claude'a", "effect": "orb"}],
+                     "scenes": [{"from": "S2:minus", "to": "S2:</script>", "media": "broll/s.png"},
+                                {"from": 0.1, "to": 1.2, "effect": "orb"}]})
+    proj = B.build(out, theme=theme)["project"]
+    html = (proj / "index.html").read_text(encoding="utf-8")
+    hosts = {h[0]: h for h in _hosts(html)}
+    scenes = [c for c in hosts if c.endswith("-scene")]
+    assert len(scenes) == 1 and hosts[scenes[0]][1] == "4"
+    fx_scene = [c for c in hosts if c.endswith("-custom")                     # the effect scene: full frame, no region
+                and "cm-region" not in (proj / "compositions" / f"{c}.html").read_text(encoding="utf-8")]
+    assert len(fx_scene) == 1 and hosts[fx_scene[0]][1] == "4"
+    assert 'id="captions" class="clip" data-start="0" data-duration="4.0" data-track-index="5"' in html
+    # painted above every other host (DOM order) and below the captions
+    slots = re.findall(r'<div id="(gx-[\w-]+)-slot"', html)
+    assert set(slots[-2:]) == {scenes[0], fx_scene[0]}
+    assert html.index(f'{scenes[0]}-slot') < html.index('id="captions"')
+    sub = (proj / "compositions" / f"{scenes[0]}.html").read_text(encoding="utf-8")
+    assert 'class="img"' in sub and _P(sub)["media"].startswith("assets/media/")
+    # every other host overlapping a settled scene is hidden meanwhile (no text under an opaque cover)
+    cfg = cfg_of(html)
+    sc, fx = hosts[scenes[0]], hosts[fx_scene[0]]
+    assert fx[0] == "gx-01-custom" and sc[0] == "gx-04-scene"                  # (the effect scene starts first)
+    assert cfg["hide"] == [["#gx-02-panel-slot", 0.1, 0.25, 1.2, 0.25], ["#gx-02-panel-slot", 2.1, 0.25, 3.5, 0.25],
+                           ["#gx-03-panel-media-slot", 0.1, 0.25, 1.2, 0.25],   # + its handoff, inside the 2nd scene
+                           ["#gx-03-panel-media-slot", 2.1, 0.25, None, 0],
+                           ["#gx-05-custom-slot", 2.1, 0.25, 3.5, 0.25]]        # never a scene itself
+    js = (f"require({json.dumps(str(proj / 'assets' / 'cutmate.js'))}); window.Cutmate.build(tl, {json.dumps(cfg)});"
+          "console.log(JSON.stringify([2.0, 2.225, 2.5, 3.3, 3.6].map((t) => at('#gx-05-custom-slot', 'opacity', t))));")
+    assert _node(js) == [None, 0.5, 0, pytest.approx(0.2), 1]
+
+
+def test_hide_spans_merge():
+    assert B.hide_spans([]) == []
+    assert B.hide_spans([(2.0, 0.25, 3.0, 0.25), (0.5, 0.25, 1.5, 0.25)]) == [[0.5, 0.25, 1.5, 0.25], [2.0, 0.25, 3.0, 0.25]]
+    assert B.hide_spans([(0.5, 0.25, 1.5, 0.25), (1.2, 0.22, None, 0)]) == [[0.5, 0.25, None, 0]]
+    assert B.hide_spans([(1.2, 0.22, None, 0), (2.0, 0.25, 3.0, 0.25)]) == [[1.2, 0.22, None, 0]]
+    assert B.hide_spans([(0.5, 0.25, 2.0, 0.25), (1.0, 0.25, 1.5, 0.25)]) == [[0.5, 0.25, 2.0, 0.25]]
+
+
+def test_screen_point_uses_panel_offset():
+    """Review Focus 4: a gesture effect lands where the hand is — shifted by the panel's A-roll offset."""
+    cam = [[0.0, 1.0]]
+    for t in (0.0, 1.0, 3.5):
+        base = B.screen_point(0.5, 0.5, t, cam, [], [], 1080, 1920)
+        assert B.screen_point(0.5, 0.5, t, cam, [[0, None, 672, -415, 1]], [], 1080, 1920) == (base[0], base[1] + 672)
+    base = B.screen_point(0.5, 0.3, 1.5, cam, [], [], 1080, 1920)
+    assert B.screen_point(0.5, 0.3, 1.5, cam, [[1.0, 2.6]], [], 1080, 1920)[1] == base[1] + B.SPLIT_DY == base[1] + 300
+    assert B.screen_point(0.5, 0.3, 3.1, cam, [[1.0, 2.6, 500, 0, 0]], [], 1080, 1920)[1] == base[1]   # after the exit
+
+
+def test_old_theme_panel_falls_back_with_one_warn(out, theme, capsys):
+    """Review Focus 3: a theme without panel / panel-media / scene builds with clean's, one WARN each."""
+    _png(out)
+    _png(out, "s.png", "red")
+    write_plan(out, {"panel": [{"at": "S1:mniej", "media": "broll/p.png"}, {"at": "S2:minus", "media": "broll/p.png"}],
+                     "scenes": [{"from": "S2:75%", "to": "S2:</script>", "media": "broll/s.png"}]})
+    proj = B.build(out, theme=theme)["project"]
+    printed = capsys.readouterr().out
+    for t in ("panel", "panel-media", "scene"):
+        assert printed.count(f"WARN theme {theme} has no {t} component — using clean's") == 1, t
+    frame = (proj / "compositions" / "gx-01-panel.html").read_text(encoding="utf-8")
+    assert "var(--panel-bg" in frame
+
+
+def test_split_panel_theme_169_is_classic(out169, theme):
+    """Review Focus 2: a split-panel theme on a 16:9 recording renders classic, with no layout warning."""
+    _layout_theme(theme, {"mode": "split-panel"})
+    write_plan(out169, {"graphics": [{"type": "chip", "at": "S2:minus", "text": "X"}]})
+    r = B.build(out169, theme=theme)
+    assert not [w for w in r["warnings"] if "layout" in w]
+    assert r["layout"] == "classic" and r["panel"] == []
+    assert cfg_of((r["project"] / "index.html").read_text(encoding="utf-8"))["splits"] == []
+
+
+def test_classic_theme_with_panel_warns(out, theme):
+    _png(out)
+    _with_layout_components(theme)
+    write_plan(out, {"panel": [{"at": "S1:mniej", "media": "broll/p.png", "until": 3.0}]})
+    r = B.build(out, theme=theme)
+    assert f"WARN theme {theme} layout is classic — the panel uses default geometry" in r["warnings"]
+
+
+def test_split_panel_theme_without_panel_warns(out, theme):
+    _layout_theme(theme, {"mode": "split-panel"})
+    write_plan(out, {"graphics": [{"type": "chip", "at": "S2:minus", "text": "X"}]})
+    r = B.build(out, theme=theme)
+    assert "WARN theme layout is split-panel but plan.json has no panel" in r["warnings"]
+    assert r["layout"] == "split-panel" and r["panel"] == []
+    assert cfg_of((r["project"] / "index.html").read_text(encoding="utf-8"))["splits"] == []
+
+
+def test_split_panel_theme_ratio_drives_geometry(out, theme):
+    _png(out)
+    _fx(out, "orb")
+    _with_layout_components(theme)
+    _layout_theme(theme, {"mode": "split-panel", "ratio": 0.4})
+    write_plan(out, {"panel": [{"at": "S1:mniej", "effect": "orb"}, {"at": "S2:minus", "media": "broll/p.png",
+                                                                       "until": 3.0}]})
+    r = B.build(out, theme=theme)
+    proj = r["project"]
+    assert not [w for w in r["warnings"] if "layout" in w]
+    frame = _P((proj / "compositions" / "gx-01-panel.html").read_text(encoding="utf-8"))
+    assert frame["ratio"] == 0.4
+    assert 'style="height:768px"' in (proj / "compositions" / "gx-01-panel.html").read_text(encoding="utf-8")
+    sub = (proj / "compositions" / "gx-02-custom.html").read_text(encoding="utf-8")
+    assert "height:688px" in sub and "tl.fromTo(root, { y: -768 }" in sub
+    pm = (proj / "compositions" / "gx-03-panel-media.html").read_text(encoding="utf-8")
+    assert 'style="height:688px"' in pm and "tl.to(root, { y: -768" in pm
+    assert cfg_of((proj / "index.html").read_text(encoding="utf-8"))["splits"][0][2:4] == list(B.panel_offsets(0.4, 0.4))
+
+
+def test_panel_fade_transition(out, theme):
+    _png(out)
+    _with_layout_components(theme)
+    _layout_theme(theme, {"mode": "split-panel", "transition": "fade"})
+    write_plan(out, {"panel": [{"at": "S1:mniej", "media": "broll/p.png"}, {"at": "S2:minus", "media": "broll/p.png",
+                                                                             "until": 3.0}]})
+    proj = B.build(out, theme=theme)["project"]
+    second = (proj / "compositions" / "gx-03-panel-media.html").read_text(encoding="utf-8")
+    assert "tl.fromTo(root, { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.2 }, P.at);" in second
+
+
+@pytest.mark.hf
+def test_panel_build_renders(out, monkeypatch):
+    """A 3-item panel + a scene passes `hyperframes check`; mid item 2 the panel is on top and the A-roll at the bottom."""
+    from PIL import Image
+    from cutmate.hf import ensure_project as real_ensure
+    from cutmate.hf import check
+    from cutmate.media import run
+    from cutmate.hf import hf
+    monkeypatch.setattr(B, "ensure_project", real_ensure)
+    _png(out, "p.png", "orange")
+    _png(out, "s.png", "red")
+    write_plan(out, {"panel": [{"at": 0.1, "effect": "stat-card", "params": {"value": 44, "suffix": "%", "label": "TEST"}},
+                               {"at": "S1:mniej", "media": "broll/p.png"},
+                               {"at": "S2:minus", "effect": "stat-card", "params": {"value": 7, "label": "X"}}],
+                     "scenes": [{"from": "S2:Claude'a", "to": 3.9, "media": "broll/s.png"}]})
+    proj = B.build(out, theme="clean")["project"]
+    chk = check(proj)
+    assert chk.status in ("ok", "deadline"), chk.output[-3000:]
+    snap = run(hf("snapshot", "--at", "1.5", "--no-end", "--describe", "false", "-o", "snapshots"), cwd=proj)
+    assert snap.returncode == 0, (snap.stdout + snap.stderr)[-2000:]
+    shot = sorted((proj / "snapshots").glob("*.png"))[0]
+    img = Image.open(shot).convert("RGB")
+    w, h = img.size
+    top = img.getpixel((w // 2, round(400 * h / 1920)))
+    low = img.getpixel((w // 2, round(1500 * h / 1920)))
+    assert max(top) > 60 and top != low, (shot, top, low)
+    # the A-roll sits 672 px lower (the face in the bottom half): the bottom half matches the raw frame shifted by 672
+    from PIL import ImageChops, ImageStat
+    from cutmate.media import extract_frame
+    raw = Image.open(extract_frame(out / "aroll.mp4", 1.5, out / "raw15.png")).convert("L").resize((w, h))
+    k = h / 1920
+    bottom = img.convert("L").crop((0, round(1100 * k), w, h))
+    def diff(dy):
+        return ImageStat.Stat(ImageChops.difference(bottom, raw.crop((0, round((1100 - dy) * k), w, round((1920 - dy) * k))))).mean[0]
+    assert diff(672) < diff(0) / 2, (diff(672), diff(0))
+    print(f"snapshot: {shot} chk={chk.status} diff672={diff(672):.1f} diff0={diff(0):.1f}")

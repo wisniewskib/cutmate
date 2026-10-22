@@ -1,0 +1,14 @@
+<style>
+ROOT .scene { position: absolute; inset: 0; overflow: hidden; background: #000; }
+ROOT .scene-in { position: absolute; inset: 0; }
+ROOT .scene-in video { width: 100%; height: 100%; object-fit: cover; }
+ROOT .scene-in .img { position: absolute; inset: 0; background-size: cover; background-position: center; }
+</style>
+<markup><div class="scene"><div class="scene-in">{{media_tag}}</div></div></markup>
+<script>
+// a full-frame cover: 0.25 s fade in / out (of the whole composition) and a slow 1.00 → 1.06 push
+const inner = root.querySelector(".scene-in");
+tl.fromTo(root, { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.25, ease: "power2.out" }, P.at);
+tl.fromTo(inner, { scale: 1 }, { scale: 1.06, duration: Math.max(0.25, P.end - P.at), ease: "none" }, P.at);
+tl.to(root, { autoAlpha: 0, duration: 0.25, ease: "power2.in", immediateRender: false }, Math.max(P.at + 0.25, P.end - 0.25));
+</script>

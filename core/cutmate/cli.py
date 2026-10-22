@@ -289,6 +289,9 @@ def _dispatch(args) -> int:
                   factcheck=bool(cfg.steps.get("factcheck")), music=cfg.music, captions=cfg.captions)
         for w in r["warnings"]:
             print(w)
+        print(f"layout: {r['layout']}")
+        for line in r["panel"]:
+            print(f"panel: {line}")
         print(f"project: {r['project']}")
         print("checkpoints: " + ",".join(f"{t:.2f}" for t in r["checkpoints"]))
     elif args.cmd == "preview":

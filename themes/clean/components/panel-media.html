@@ -1,0 +1,12 @@
+<style>
+ROOT .pm { position: absolute; left: 40px; right: 40px; top: 40px; border-radius: var(--radius, 28px); overflow: hidden; box-shadow: var(--shadow); }
+ROOT .pm video { width: 100%; height: 100%; object-fit: contain; }
+ROOT .pm .img { position: absolute; inset: 0; background-size: contain; background-position: center; background-repeat: no-repeat; }
+ROOT .pm.fit-cover video { object-fit: cover; object-position: top; }
+ROOT .pm.fit-cover .img { background-size: cover; background-position: top center; }
+</style>
+<markup><div class="pm fit-{{fit}}" style="height:{{box_h}}px">{{media_tag}}</div></markup>
+<script>
+// an image / video inside the panel box; entering / leaving is added by the build (_enter / _exit)
+tl.set(root.querySelector(".pm"), { scale: 1 }, 0);
+</script>

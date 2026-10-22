@@ -2,13 +2,17 @@
 
 Root index.html: A-roll inside #split > #cam > #shake, one sub-composition host per graphic, #flash, #captions,
 SFX <audio> tags, and web/cutmate.js driving captions / punch-ins / hits / split moves on the main timeline.
+9:16 with a plan `panel`: one persistent panel frame host, its items swapping inside it, full-frame scenes, the A-roll
+moved once so the face sits in the bottom part and the captions on the seam (`panel_offsets`).
 """
 import html as _html
 import json
 import os
 import re
 import shutil
+import statistics
 import unicodedata
+from dataclasses import replace
 from pathlib import Path
 
 from .captions import to_srt
@@ -17,12 +21,13 @@ from .config import CAPTION_MODES, DEFAULT_CAPTIONS
 from .cut import load_timed
 from .effects import THREE_MARK, find_effect, held_slice, libs_head, lint_effect, track_slice
 from .errors import CutmateError
-from .formats import size_of
+from .formats import format_of, size_of
 from .hf import ensure_project, hf
+from .layout import CLASSIC, SPLIT_DEFAULTS, theme_layout
 from .media import duration, run
 from .music import carve, pick_source, prepare_music
 from .paths import assets_dir, plugin_root, theme_dir, web_dir
-from .plan import PLATE, Graphic, load_plan, plate_chapters
+from .plan import PLATE, Graphic, load_plan, panel_box, panel_summary, plate_chapters
 from .tracks import pick_hand
 
 CHAPTER_LABEL = {"pl": "ROZDZIAŁ", "en": "CHAPTER"}
@@ -58,8 +63,33 @@ FX_OPEN = 'Object.assign(window.CutmateFX.make(tl, root, "{cid}", P), '
 REGION = '<div class="cm-region" style="position:absolute;left:{x}px;top:{y}px;width:{w}px;height:{h}px;overflow:hidden">{markup}</div>'
 FADE = ("\n    tl.set(root, {{ autoAlpha: 0 }}, 0); tl.to(root, {{ autoAlpha: 1, duration: {f} }}, P.at); "
         "tl.to(root, {{ autoAlpha: 0, duration: {f}, immediateRender: false }}, Math.max(P.at + {f}, P.end - {f}));")
-SLIDE = ('\n    tl.fromTo(root, {{ y: -{d} }}, {{ y: 0, duration: 0.45, ease: "power3.out" }}, P.at); '   # = split.html's panel
-         'tl.to(root, {{ y: -{d}, duration: 0.4, ease: "power3.inOut", immediateRender: false }}, Math.max(P.at + 0.45, P.end - 0.4));')
+SLIDE_IN = '\n    tl.fromTo(root, {{ y: -{d} }}, {{ y: 0, duration: 0.45, ease: "power3.out" }}, P.at); '   # = split.html's panel
+SLIDE_OUT = 'tl.to(root, {{ y: -{d}, duration: 0.4, ease: "power3.inOut", immediateRender: false }}, Math.max(P.at + 0.45, P.end - 0.4));'
+SLIDE = SLIDE_IN + SLIDE_OUT
+FADE_IN = "\n    tl.fromTo(root, { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.2 }, P.at);"
+HANDOFF = 0.2                 # a panel item's host runs on this long after the next item starts (the next one covers it)
+SCENE_FADE = 0.25             # scene.html / an effect scene: fade in / out
+
+
+def _panel_moves(params: dict, d: int) -> str:
+    """A panel item's own moves: the first one slides in with the panel, the last one out with it, the rest swap in place
+    (cut: nothing, fade: 0.2 s) and are covered by the next item."""
+    enter = {"slide": SLIDE_IN.format(d=d).rstrip(), "fade": FADE_IN}.get(params.get("_enter"), "")
+    exit_ = "\n    " + SLIDE_OUT.format(d=d) if params.get("_exit") == "slide" else ""
+    return enter + exit_
+
+
+def hide_spans(spans: list[tuple]) -> list[list]:
+    """Merge one host's hidden spans (a, fade-out, b | None, fade-in) — overlapping ones become one."""
+    out = []
+    for a, da, b, db in sorted(spans, key=lambda x: x[0]):
+        if out and (out[-1][2] is None or a <= out[-1][2]):
+            last = out[-1]
+            if last[2] is not None and (b is None or b > last[2]):
+                last[2], last[3] = b, db
+            continue
+        out.append([a, da, b, db])
+    return [[round(a, 3), da, None if b is None else round(b, 3), db] for a, da, b, db in out]
 
 INDEX = """<!doctype html>
 <html lang="{lang}" class="{fcls}">
@@ -183,8 +213,18 @@ def cam_from_cuts(timed: list[dict], fmt: str = "9:16", face: dict | None = None
 
 CAM_ORIGIN = (0.5, 0.46)      # theme.css: #cam { transform-origin: 50% 46%; } (9:16 cam entries carry no origin)
 SPLIT_DY = 300                # #split moves the A-roll this far down while a split panel is on screen (cutmate.js)
+FACE_Y = 0.40                 # where the face sits in the A-roll frame (fraction of H) when plan.face has nothing
+FACE_IN_HALF = 0.5            # the persistent panel puts the face this far down the bottom part (0.5: dy 672 at 0.5 / 0.40)
+CAPTION_MID = 1375            # theme.css: #captions top 1250 + height 250 / 2 (9:16)
 PALM_LIFT = 0.05   # a palm-placed effect sits this far (frame fraction) above the palm centre, not on the fingers
 SAFE = {(1080, 1920): [60, 192, 960, 1344], (1920, 1080): [60, 60, 1800, 800]}  # x, y, w, h a placed chip stays in
+
+
+def panel_offsets(ratio: float, face_y: float, H: int = 1920) -> tuple[int, int]:
+    """(dy, capDy) while the persistent panel is up: #split moves down by dy so the face lands in the bottom part,
+    the caption box centre moves onto the seam (y = ratio × H)."""
+    dy = round(H * (ratio + (1 - ratio) * FACE_IN_HALF) - face_y * H)
+    return min(max(dy, 0), round(ratio * H)), round(ratio * H) - CAPTION_MID
 
 
 def screen_point(x: float, y: float, t: float, cam: list, splits: list, sides: list, W: int, H: int) -> tuple:
@@ -199,8 +239,11 @@ def screen_point(x: float, y: float, t: float, cam: list, splits: list, sides: l
                 ox, oy = c[2], c[3]
     px = (ox + (x - ox) * s) * W
     py = (oy + (y - oy) * s) * H
-    if any(a - 1e-9 <= t <= b + 0.4 + 1e-9 for a, b in splits):
-        py += SPLIT_DY
+    for e in splits:                                     # [tIn, tOut] (a split: SPLIT_DY) or [tIn, tOut|None, dy, …]
+        b = float("inf") if e[1] is None else e[1]
+        if e[0] - 1e-9 <= t <= b + 0.4 + 1e-9:
+            py += e[2] if len(e) >= 3 else SPLIT_DY
+            break
     for a, b, dx in sides:
         if a - 1e-9 <= t <= b + 0.4 + 1e-9:
             px += dx
@@ -249,7 +292,7 @@ def _prune(folder: Path, keep: set) -> None:
             f.unlink()
 
 
-FALLBACK = ("bg", "side", "chapter", "pip", "lower-third")  # components newer than many user themes
+FALLBACK = ("bg", "side", "chapter", "pip", "lower-third", "panel", "panel-media", "scene")  # newer than many user themes
 
 
 def _component(th: Path, kind: str, theme: str, warned: set) -> Path:
@@ -428,7 +471,9 @@ def subcomp(cid: str, g: Graphic, host_start: float, theme: Path, assets: Path, 
         u_open, u_close = FX_OPEN.format(cid=cid), ")"
         if region:
             root = f'document.querySelector("#{cid} > .cm-region")'
-        if g.params.get("_fade"):
+        if g.params.get("_panel"):
+            fade = _panel_moves(g.params, ry * 2 + rh)
+        elif g.params.get("_fade"):
             fade = FADE.format(f=g.params["_fade"])
         elif g.params.get("_slide"):
             fade = SLIDE.format(d=g.params["_slide"])
@@ -444,6 +489,16 @@ def subcomp(cid: str, g: Graphic, host_start: float, theme: Path, assets: Path, 
             media_tag = _media_tag(cid, g, P)
         else:
             P["side"] += " side-fx"
+    if g.type == "panel":
+        P["panel_h"] = round(g.params["ratio"] * H)
+    if g.type == "panel-media":
+        ratio = g.params.get("ratio", SPLIT_DEFAULTS.ratio)
+        P["fit"] = g.params.get("fit", "cover")
+        P["box_h"] = panel_box(ratio)[3]
+        media_tag = _media_tag(cid, g, P)
+        fade = _panel_moves(g.params, round(ratio * H))
+    if g.type == "scene":
+        media_tag = _media_tag(cid, g, P)
     back_tag = _media_tag(cid, g, P) if g.type == "bg" and "media" in g.params else ""
     tags = {"media_tag": media_tag, "back_tag": back_tag, **(extra_tags or {})}
     markup = _PLACEHOLDER.sub(lambda m: tags[m.group(1)] if m.group(1) in tags
@@ -514,7 +569,9 @@ def checkpoint(g: Graphic) -> float:
 def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: bool = False,
           music: dict | None = None, captions: dict | None = None) -> dict:
     out = Path(out_dir).resolve()
-    plan = load_plan(out, factcheck)
+    tall = format_of(out) == "9:16"                    # the theme layout applies to 9:16 only (16:9 is classic)
+    lay = theme_layout(theme_dir(theme)) if tall else CLASSIC
+    plan = load_plan(out, factcheck, lay if tall else None)
     fmt = plan.format
     W, H = size_of(fmt)
     mode = (captions or {}).get(fmt) or DEFAULT_CAPTIONS[fmt]
@@ -547,6 +604,18 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
     found = {}
     cam = cam_from_cuts(timed, fmt, plan.face, [(g.start, g.end) for g in plan.graphics if g.type == "bg"])
     splits = [[g.start, round(max(g.start + 0.45, g.end - 0.4), 3)] for g in plan.graphics if g.type == "split"]
+    pn = plan.panel
+    if pn:                                             # the persistent panel: the face moves into the bottom part once
+        ys = [v[1] for v in plan.face.values()]
+        dy, cap_dy = panel_offsets(pn["ratio"], statistics.median(ys) if ys else FACE_Y, H)
+        if lay.captions == "bottom":
+            cap_dy = 0
+        splits.append([pn["start"], None if pn["stays"] else round(max(pn["start"] + 0.45, pn["end"] - 0.4), 3),
+                       dy, cap_dy, 1 if pn["open_at_zero"] else 0])
+    panel_items = [g for g in items if g.params.get("_panel")]
+    item_end = {id(a): round(min(b.start + HANDOFF, end), 3) for a, b in zip(panel_items, panel_items[1:])}
+    scenes = [(g.start, g.end) for g in items if g.params.get("_scene")]
+    hide = []
     sides = [[g.start, round(max(g.start + 0.45, g.end - 0.4), 3),
               round((1440 if g.params["speaker"] == "right" else 480) - plan.face.get(_seg_at(timed, g.start), FACE_DEFAULT)[0] * W)]
              for g in plan.graphics if g.type == "side"]
@@ -557,11 +626,16 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
         if g.type == "custom" and g.params["name"] not in found:
             found[g.params["name"]] = find_effect(g.params["name"], out, theme)
             lint_effect(found[g.params["name"]])
+    scene_hosts, rest = [], 0
     for i, g in enumerate(items):
         cid = f"gx-{i + 1:02d}-{g.type}"
         ids.append(cid)
         hs = round(max(0.0, g.start - LEAD), 3)
         extra = None
+        if g.params.get("_panel"):                     # an item swaps in place at its start (no lead-in); the host runs
+            hs = g.start                               # on until the next item covers it (next start + 0.2 s)
+            g = replace(g, end=item_end.get(id(g), g.end),
+                        params={**g.params, "ratio": pn["ratio"]} if g.type == "panel-media" else g.params)
         if g.type == "pip":
             fx, fy = plan.face.get(_seg_at(timed, g.start), FACE_DEFAULT)
             name = f"pipface-{int(g.start * 1000)}-{int(g.end * 1000)}-{fx:.2f}-{fy:.2f}.mp4"
@@ -592,10 +666,26 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
         (proj / "compositions" / f"{cid}.html").write_text(
             subcomp(cid, g, hs, th, A, media_map, language, size=(W, H), extra_tags=extra, comp_path=comp_path,
                     tracks=tr, assets_url=assets_url, screen=screen), encoding="utf-8")
-        hosts.append(f'      <div id="{cid}-slot" data-composition-id="{cid}" data-composition-src="compositions/{cid}.html" '
-                     f'data-start="{hs}" data-duration="{round(g.end - hs, 3)}" data-track-index="{2 + i % 2}" '
-                     f'data-width="{W}" data-height="{H}"></div>')
+        scene = bool(g.params.get("_scene"))
+        if g.type == "panel":
+            track = 1                                  # under every graphic, over the A-roll
+        elif scene:
+            track = 4                                  # full-frame scenes: over the panel and graphics, under captions
+        else:
+            track, rest = 2 + rest % 2, rest + 1
+        # Hosts covered by something opaque fade out on the main timeline (cutmate.js): a panel item under the next one
+        # (from just before its start, over the handoff), any graphic under a full-frame scene (with the scene's fades).
+        # Nothing changes on screen; `hyperframes check` sees a mid-fade mount, not text hidden under an opaque layer.
+        spans = [(a, SCENE_FADE, b, SCENE_FADE) for a, b in scenes if not scene and a < g.end and b > hs]
+        if id(items[i]) in item_end:                   # (items[i]: the planned graphic, g: its host-length copy)
+            spans.append((max(hs, g.end - HANDOFF - 0.02), HANDOFF + 0.02, None, 0))
+        hide += [[f"#{cid}-slot", *h] for h in hide_spans(spans)]
+        (scene_hosts if scene else hosts).append(
+            f'      <div id="{cid}-slot" data-composition-id="{cid}" data-composition-src="compositions/{cid}.html" '
+            f'data-start="{hs}" data-duration="{round(g.end - hs, 3)}" data-track-index="{track}" '
+            f'data-width="{W}" data-height="{H}"></div>')
         cues += _sfx_cues(g, meta)
+    hosts += scene_hosts                               # painted last (DOM order): above the panel and its items
     _prune(A / "media", {Path(v).name for v in media_map.values()} | keep_media)
     if (A / "fx").exists():
         for d in (A / "fx").iterdir():
@@ -617,6 +707,8 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
     cfg = {"end": end, "pages": pages if mode in ("burn", "both") else [], "cam": cam, "hits": hits, "splits": splits}
     if sides:
         cfg["sides"] = sides
+    if hide:
+        cfg["hide"] = hide
     srt = out / "captions.srt"
     if mode in ("srt", "both"):
         srt.write_text(to_srt(pages), encoding="utf-8")
@@ -630,6 +722,10 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
     audio = sfx_tags(cues, end, A)
     src = pick_source(plan.music, music, out.parent)  # relative plan.music.src resolves against the recording folder
     warnings = list(plan.warnings)
+    if pn and lay.mode == "classic":
+        warnings.append(f"WARN theme {theme} layout is classic — the panel uses default geometry")
+    if lay.mode == "split-panel" and not pn:
+        warnings.append("WARN theme layout is split-panel but plan.json has no panel")
     if (music or {}).get("source") == "heygen" and not (plan.music or {}).get("src"):
         warnings.append("WARN music: config music.source is heygen but plan.json has no music.src — resolve a bed (edit skill §5) "
                         "or set music.source=none")
@@ -658,4 +754,5 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
         print(f"WARN music: no voice carve — bed volume halved to {half}")
     checkpoints = sorted({checkpoint(g) for g in items})
     (out / "work" / "checkpoints.json").write_text(json.dumps(checkpoints), encoding="utf-8")
-    return {"project": proj, "warnings": warnings, "checkpoints": checkpoints}
+    return {"project": proj, "warnings": warnings, "checkpoints": checkpoints, "layout": lay.mode,
+            "panel": panel_summary(plan)}

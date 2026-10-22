@@ -52,11 +52,22 @@
   function splits(tl, cfg) {
     tl.set("#split", { y: 0 }, 0);
     tl.set("#captions", { y: 0 }, 0);
-    (cfg.splits || []).forEach(([tIn, tOut]) => {
-      tl.fromTo("#split", { y: 0 }, { y: 300, duration: 0.45, ease: "power3.out", immediateRender: false }, tIn);
-      tl.fromTo("#captions", { y: 0 }, { y: -300, duration: 0.45, ease: "power3.out", immediateRender: false }, tIn);
-      tl.fromTo("#split", { y: 300 }, { y: 0, duration: 0.4, ease: "power3.inOut", immediateRender: false }, tOut);
-      tl.fromTo("#captions", { y: -300 }, { y: 0, duration: 0.4, ease: "power3.inOut", immediateRender: false }, tOut);
+    (cfg.splits || []).forEach(([tIn, tOut, dy, capDy, open]) => {
+      if (dy == null) {   // a split: [tIn, tOut]
+        tl.fromTo("#split", { y: 0 }, { y: 300, duration: 0.45, ease: "power3.out", immediateRender: false }, tIn);
+        tl.fromTo("#captions", { y: 0 }, { y: -300, duration: 0.45, ease: "power3.out", immediateRender: false }, tIn);
+        tl.fromTo("#split", { y: 300 }, { y: 0, duration: 0.4, ease: "power3.inOut", immediateRender: false }, tOut);
+        tl.fromTo("#captions", { y: -300 }, { y: 0, duration: 0.4, ease: "power3.inOut", immediateRender: false }, tOut);
+        return;
+      }
+      // the persistent panel: [tIn, tOut | null (stays), dy, capDy, open (1 = already up at 0 s, no move in)]
+      const layers = [["#split", dy], ["#captions", capDy]].filter(([, v]) => v);
+      layers.forEach(([sel, v]) => {
+        // (a zero-length tl.set at 0 after the reset above does not hold in the renderer: hold v with a fromTo)
+        if (open) tl.fromTo(sel, { y: v }, { y: v, duration: 0.01, ease: "none", immediateRender: true }, 0);
+        else tl.fromTo(sel, { y: 0 }, { y: v, duration: 0.45, ease: "power3.out", immediateRender: false }, tIn);
+        if (tOut != null) tl.fromTo(sel, { y: v }, { y: 0, duration: 0.4, ease: "power3.inOut", immediateRender: false }, tOut);
+      });
     });
   }
 
@@ -69,7 +80,14 @@
     });
   }
 
+  function hides(tl, cfg) {   // hosts covered by an opaque layer: [selector, a, fade-out, b | null, fade-in]
+    (cfg.hide || []).forEach(([sel, a, da, b, db]) => {
+      tl.fromTo(sel, { opacity: 1 }, { opacity: 0, duration: da, ease: "none", immediateRender: false }, a);
+      if (b != null) tl.fromTo(sel, { opacity: 0 }, { opacity: 1, duration: db, ease: "none", immediateRender: false }, b - db);
+    });
+  }
+
   window.Cutmate = {
-    build(tl, cfg) { captions(tl, cfg); camera(tl, cfg); hits(tl, cfg); splits(tl, cfg); sides(tl, cfg); },
+    build(tl, cfg) { captions(tl, cfg); camera(tl, cfg); hits(tl, cfg); splits(tl, cfg); sides(tl, cfg); hides(tl, cfg); },
   };
 })();

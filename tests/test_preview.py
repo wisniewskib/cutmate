@@ -56,3 +56,18 @@ def test_preview_skips_plate_near_end(tmp_path):
     (out / "work" / "aligned_words.json").write_text(json.dumps(words, ensure_ascii=False), encoding="utf-8")
     r = preview(out)
     assert _mean(extract_frame(r["preview"], 3.9, tmp_path / "late.png")) > 60       # no plate this close to the end
+
+
+def test_preview_916_with_panel_and_scene(tmp_path):
+    """A 9:16 plan with a persistent panel and a scene previews (the cut only — panel items are not drawn here)."""
+    out = make_out(tmp_path, {})
+    make_clip(out / "aroll.mp4", dur=4.0, size="1080x1920", gaps=())
+    (out / "edl.json").write_text(json.dumps({"format": "9:16", "segments": []}), encoding="utf-8")
+    (out.parent / "broll").mkdir()
+    Image.new("RGB", (32, 18), "blue").save(out.parent / "broll" / "p.png")
+    (out / "plan.json").write_text(json.dumps({
+        "panel": [{"at": "S1:Cześć", "media": "broll/p.png"}, {"at": "S2:Dalej", "media": "broll/p.png"}],
+        "scenes": [{"from": 1.0, "to": 2.1, "media": "broll/p.png"}]}), encoding="utf-8")
+    r = preview(out)
+    info = probe_video(r["preview"])
+    assert (info["width"], info["height"]) == (480, 854) and r["chapters"] is None

@@ -232,3 +232,15 @@ def test_theme_check_cli_saved_flag(monkeypatch, capsys):
     assert main(["theme", "check", "x", "--saved"]) == 0
     assert seen == {"name": "x", "saved": True}
     assert main(["theme", "check", "x"]) == 0 and seen["saved"] is False
+
+
+def test_build_prints_layout_and_panel_lines(tmp_path, monkeypatch, capsys):
+    import cutmate.build as B
+    monkeypatch.setattr(B, "build", lambda *a, **k: {"project": tmp_path / "composition", "warnings": ["WARN x"],
+                                                     "checkpoints": [1.0], "layout": "split-panel",
+                                                     "panel": ["0.00–1.40 stat-card 44%", "1.40–3.00 shot.png"]})
+    assert main(["build", str(tmp_path)]) == 0
+    lines = capsys.readouterr().out.splitlines()
+    i = lines.index("WARN x")
+    assert lines[i + 1:i + 4] == ["layout: split-panel", "panel: 0.00–1.40 stat-card 44%", "panel: 1.40–3.00 shot.png"]
+    assert lines[-2].startswith("project: ") and lines[-1] == "checkpoints: 1.00"

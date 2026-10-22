@@ -1,0 +1,13 @@
+<style>
+ROOT .panel-wrap { position: absolute; left: 0; right: 0; top: 0; }
+ROOT .panel-fill { position: absolute; inset: 0; background: var(--panel-bg, #0b0b0f); }
+ROOT .panel-edge { position: absolute; left: 0; right: 0; bottom: 0; height: 8px; background: var(--accent); }
+</style>
+<markup><div class="panel-wrap" style="height:{{panel_h}}px"><div class="panel-fill"></div><div class="panel-edge"></div></div></markup>
+<script>
+// the persistent panel frame: slides in once (or is already up at 0 s), slides out once (or stays to the end)
+const w = root.querySelector(".panel-wrap");
+if (P.open_at_zero) tl.set(w, { yPercent: 0 }, 0);
+else tl.fromTo(w, { yPercent: -100 }, { yPercent: 0, duration: 0.45, ease: "power3.out" }, P.at);
+if (!P.stays) tl.to(w, { yPercent: -100, duration: 0.4, ease: "power3.inOut", immediateRender: false }, Math.max(P.at + 0.45, P.end - 0.4));
+</script>

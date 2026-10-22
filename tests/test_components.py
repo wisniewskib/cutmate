@@ -155,3 +155,40 @@ def _fake_build(real):
                                                                           (proj / "hyperframes.json").write_text("{}"))):
             return real(out, **kw)
     return build
+
+
+LAYOUT_COMPONENTS = ("panel", "panel-media", "scene")
+
+
+def test_layout_components_scripted():
+    d = paths.theme_dir("clean") / "components"
+    for t in LAYOUT_COMPONENTS:
+        sec = _sections(d / f"{t}.html")
+        assert "tl." in sec["script"], t
+        for bad in effects.FORBIDDEN:
+            assert bad not in sec["script"], f"{t}: {bad}"
+    panel = (d / "panel.html").read_text(encoding="utf-8")
+    assert "var(--panel-bg" in panel and "var(--accent)" in panel
+    assert "P.open_at_zero" in panel and "P.stays" in panel
+    assert "{{media_tag}}" in _sections(d / "panel-media.html")["markup"]
+    assert "{{media_tag}}" in _sections(d / "scene.html")["markup"]
+
+
+def test_lint_checks_layout_components_when_present(tmp_path):
+    import shutil
+    from cutmate.themes import lint_theme
+    dst = tmp_path / "t"
+    shutil.copytree(paths.theme_dir("clean"), dst)
+    assert not [p for p in lint_theme(dst, "t") if p.startswith(LAYOUT_COMPONENTS)]
+    (dst / "components" / "panel.html").write_text("<style></style><markup><div></div></markup><script>\nconst a = 1;\n"
+                                                   "</script>", encoding="utf-8")
+    (dst / "components" / "scene.html").write_text("<markup><div></div></markup>", encoding="utf-8")
+    (dst / "components" / "panel-media.html").write_text("<script>tl.set(root, {}, 0); Math.random();</script>",
+                                                         encoding="utf-8")
+    probs = lint_theme(dst, "t")
+    assert "panel: script never uses tl. (no timeline animation)" in probs
+    assert "scene: no <script> section" in probs
+    assert "panel-media: uses Math.random (not allowed)" in probs
+    for t in LAYOUT_COMPONENTS:
+        (dst / "components" / f"{t}.html").unlink()
+    assert not [p for p in lint_theme(dst, "t") if p.startswith(LAYOUT_COMPONENTS)]     # optional: absent is fine
