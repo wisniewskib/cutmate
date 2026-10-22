@@ -628,7 +628,7 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
         if g.type == "custom" and g.params["name"] not in found:
             found[g.params["name"]] = find_effect(g.params["name"], out, theme)
             lint_effect(found[g.params["name"]])
-    scene_hosts, rest = [], 0
+    frame_hosts, scene_hosts, rest = [], [], 0
     for i, g in enumerate(items):
         cid = f"gx-{i + 1:02d}-{g.type}"
         ids.append(cid)
@@ -684,12 +684,14 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
         if id(items[i]) in item_end:                   # (items[i]: the planned graphic, g: its host-length copy)
             spans.append((max(hs, g.end - HANDOFF - 0.02), HANDOFF + 0.02, None, 0))
         hide += [[f"#{cid}-slot", *h] for h in hide_spans(spans)]
-        (scene_hosts if scene else hosts).append(
+        (scene_hosts if scene else frame_hosts if g.type == "panel" else hosts).append(
             f'      <div id="{cid}-slot" data-composition-id="{cid}" data-composition-src="compositions/{cid}.html" '
             f'data-start="{hs}" data-duration="{round(g.end - hs, 3)}" data-track-index="{track}" '
             f'data-width="{W}" data-height="{H}"></div>')
         cues += _sfx_cues(g, meta)
-    hosts += scene_hosts                               # painted last (DOM order): above the panel and its items
+    # stacking follows DOM order (data-track-index is display-only): the opaque panel frame first, right over the
+    # A-roll and under every graphic whatever its start; full-frame scenes last, above the panel and its items
+    hosts = frame_hosts + hosts + scene_hosts
     _prune(A / "media", {Path(v).name for v in media_map.values()} | keep_media)
     if (A / "fx").exists():
         for d in (A / "fx").iterdir():

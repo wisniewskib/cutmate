@@ -1327,3 +1327,41 @@ def test_band_graphic_hides_the_panel_item_under_it(out, theme):
     write_plan(out, PANEL3)                           # no overlapping graphic: exactly the handoff hides, as before
     html = (B.build(out, theme=theme)["project"] / "index.html").read_text(encoding="utf-8")
     assert not [h for h in cfg_of(html)["hide"] if h[2] == 0.15]
+
+
+def test_panel_frame_host_is_painted_under_earlier_graphics(out, theme):
+    """Stacking follows DOM order (track index is display-only): the opaque panel frame goes right after the A-roll,
+    so a title that started before the panel stays above it."""
+    _png(out)
+    _with_layout_components(theme)
+    write_plan(out, {"panel": [{"at": "S1:mniej", "media": "broll/p.png", "until": 3.0}],
+                     "graphics": [{"type": "title", "at": "S1:Mówić", "text": "HOOK"}]})
+    html = (B.build(out, theme=theme)["project"] / "index.html").read_text(encoding="utf-8")
+    slots = re.findall(r'<div id="(gx-[\w-]+)-slot"', html)
+    assert slots[0].endswith("-panel"), slots
+    assert html.index('id="aroll"') < html.index(f'{slots[0]}-slot') < html.index("-title-slot")
+
+
+@pytest.mark.hf
+def test_title_before_panel_stays_above_the_frame(out, monkeypatch):
+    """A hook title that starts before the panel slides in is painted above the opaque frame: `hyperframes check`
+    passes and the title's white text shows inside the panel area (its band, y 230–720) once the panel is up."""
+    from PIL import Image
+    from cutmate.hf import check, hf
+    from cutmate.hf import ensure_project as real_ensure
+    from cutmate.media import run
+    monkeypatch.setattr(B, "ensure_project", real_ensure)
+    _png(out, "p.png", "orange")
+    write_plan(out, {"panel": [{"at": "S1:mniej", "media": "broll/p.png"}],
+                     "graphics": [{"type": "title", "at": "S1:Mówić", "until": 2.5, "text": "HOOK"}]})
+    proj = B.build(out, theme="clean")["project"]
+    chk = check(proj)
+    assert chk.status in ("ok", "deadline"), chk.output[-3000:]
+    assert "text_occluded" not in chk.output
+    snap = run(hf("snapshot", "--at", "1.8", "--no-end", "--describe", "false", "-o", "snapshots"), cwd=proj)
+    assert snap.returncode == 0, (snap.stdout + snap.stderr)[-2000:]
+    img = Image.open(sorted((proj / "snapshots").glob("*.png"))[0]).convert("RGB")
+    k = img.size[1] / 1920
+    band = img.crop((round(60 * k), round(230 * k), round(1020 * k), round(720 * k)))
+    white = sum(1 for p in band.getdata() if min(p) > 225)
+    assert white > 500, white
