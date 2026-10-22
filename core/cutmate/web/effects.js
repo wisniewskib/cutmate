@@ -76,9 +76,10 @@
       return Promise.all((weights || [500, 800, 900]).map((wt) => document.fonts.load(wt + " 10px " + fam)))
         .catch(() => null);
     };
-    // when an explainer's build-in must be done (card, structure and most content readable): min(0.6 s, 40 % of the span);
-    // later beats (count-up, toggles, strike, tokens) may run after it
-    U.fullAt = function (at, end) { return at + Math.min(0.6, 0.4 * Math.max(0, end - at)); };
+    // when an explainer's build-in is done (card, structure and most content readable): min(0.5 s, 35 % of the span) —
+    // inside the min(0.6 s, 40 %) budget with a frame or two to spare; later beats (count-up, toggles, strike, tokens)
+    // may run after it
+    U.fullAt = function (at, end) { return at + Math.min(0.5, 0.35 * Math.max(0, end - at)); };
     // the numbers' font family: the theme's optional digit font (--font-num), else its display font
     U.numFamily = function () {
       if (typeof document === "undefined" || typeof getComputedStyle === "undefined") return "";

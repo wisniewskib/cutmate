@@ -187,7 +187,7 @@ def test_checklist_rows_tick_in_order():
     rows = [{"text": f"site{i}.com/x", "status": s} for i, s in enumerate(["ok", "bad", "warn", "ok"])]
     P = {"title": "Link check", "rows": rows, "strike": True, "summary": {"value": 50, "suffix": "%"},
          "lang": "en", "at": 1.0, "end": 5.0, "w": 1000, "h": 880, "dur": 5.0}
-    # 4 s item: the rows tick in over [1.05, 1.6] (U.fullAt = at + 0.6), one every 0.1375 s
+    # 4 s item: the rows tick in over [1.05, 1.5] (U.fullAt = at + 0.5), one every 0.1125 s
     d = _run_effect("checklist", P, [["mid", 1.2, ".ck-row", "shown"], ["sum", 4.8, ".ck-sum-v", "text"],
                                      ["start", 1.04, ".ck-row", "shown"]])
     assert d["mid"] == [True, True, False, False]
@@ -237,12 +237,12 @@ def _p(span, **kw):
     return dict(kw, lang="pl", at=1.0, end=1.0 + span, w=1000, h=820, dur=1.0 + span + 0.5)
 
 
-def test_full_at_is_min_of_0_6_s_and_40_percent():
+def test_full_at_is_inside_the_0_6_s_40_percent_budget():
     js = "global.window = {}; require(%s); const U = window.CutmateFX.make({ to() {} }, {}, 'c1', { dur: 1 });" \
          "console.log(JSON.stringify([U.fullAt(1, 2), U.fullAt(1, 2.5), U.fullAt(1, 6), U.fullAt(1, 1)]));"
     r = subprocess.run(["node", "-e", js % json.dumps(str(web_dir() / "effects.js"))], capture_output=True, text=True,
                        check=True)
-    assert json.loads(r.stdout) == [1.4, 1.6, 1.6, 1]
+    assert json.loads(r.stdout) == [1.35, 1.5, 1.5, 1]           # min(0.5 s, 35 %): a frame of margin
 
 
 @pytest.mark.parametrize("span", SPANS)

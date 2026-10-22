@@ -110,7 +110,7 @@ labels.forEach((L) => {
 
 // ---------- timing ----------
 const span = Math.max(1, P.end - P.at);
-// the machine is assembled and labelled by U.fullAt (min 0.6 s, 40 % of the span): the natural 1.35 s build-in is
+// the machine is assembled and labelled by U.fullAt (min 0.5 s, 35 % of the span): the natural 1.35 s build-in is
 // squeezed by kB; the conveyor, tokens and counter are later beats
 const BUILD = 1.35;
 const kB = Math.min(1, (U.fullAt(P.at, P.end) - P.at) / BUILD);

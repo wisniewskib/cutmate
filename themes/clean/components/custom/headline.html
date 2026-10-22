@@ -43,7 +43,7 @@ const spans = words.map((w, i) => {
 const caret = mode === "type" ? U.el("span", "hl-caret", null, text) : null;
 const total = spans.reduce((a, w) => a + w.ch.length, 0);
 
-// the whole headline is on screen by U.fullAt (min 0.6 s, 40 % of the span): typing / pops squeezed into that window
+// the whole headline is on screen by U.fullAt (min 0.5 s, 35 % of the span): typing / pops squeezed into that window
 const full = U.fullAt(P.at, P.end), F = full - P.at;
 const kickDur = Math.min(0.4, F * 0.6);
 const t0 = P.at + (kick ? Math.min(0.3, F * 0.35) : Math.min(0.05, F * 0.1));

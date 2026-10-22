@@ -167,7 +167,7 @@ if (kind === "browser") {
   U.el("div", "um-sub", kind === "post" ? handle : "online", who);
 }
 const body = U.el("div", "um-body", null, win);
-// the window and its content are readable by U.fullAt (min 0.6 s, 40 % of the span); the clicks, the circle and the
+// the window and its content are readable by U.fullAt (min 0.5 s, 35 % of the span); the clicks, the circle and the
 // post counters are later beats spread over the rest of the span
 const full = U.fullAt(P.at, P.end), F = full - P.at;
 const winDur = Math.min(0.5, F);

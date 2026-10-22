@@ -76,7 +76,7 @@ const cell = labels.map((_, i) => {
   return { r, c, x: pad + (c + 0.5) * cellW, y: top + (r + 0.5) * cellH };
 });
 
-// every node and arrow is on screen by U.fullAt (min 0.6 s, 40 % of the span); the dots along the arrows run on after it
+// every node and arrow is on screen by U.fullAt (min 0.5 s, 35 % of the span); the dots along the arrows run on after it
 const full = U.fullAt(P.at, P.end), F = full - P.at;
 const titleDur = Math.min(0.45, F * 0.6), popDur = Math.min(0.45, F * 0.4);
 const t0 = P.at + Math.min(title ? 0.15 : 0.05, F * 0.15);

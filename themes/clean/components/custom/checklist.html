@@ -90,7 +90,7 @@ if (sm) {
   if (sm.label) U.el("div", "ck-sum-l", String(sm.label), sumBox);
 }
 
-// the whole table is readable by U.fullAt (min 0.6 s, 40 % of the span): rows tick in one by one, each status lands
+// the whole table is readable by U.fullAt (min 0.5 s, 35 % of the span): rows tick in one by one, each status lands
 // just after its row; the strike lines and the summary count-up may run on after it
 const full = U.fullAt(P.at, P.end), F = full - P.at;
 const cardDur = Math.min(0.5, F);
