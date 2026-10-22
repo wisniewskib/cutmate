@@ -1,0 +1,149 @@
+<style>
+ROOT .ck { position: absolute; inset: 0; overflow: hidden; background: var(--panel-bg, #0b0b0f); font-family: var(--font);
+  display: flex; align-items: center; justify-content: center; }
+ROOT .ck-glow { position: absolute; inset: 0;
+  background: radial-gradient(closest-side at 50% 40%, color-mix(in srgb, var(--ac) 16%, transparent), transparent); }
+ROOT .ck-card { position: relative; box-sizing: border-box; display: flex; align-items: stretch; background: var(--card); color: var(--ink);
+  border-radius: calc(var(--s) * var(--radius, 28px)); box-shadow: var(--shadow, 0 10px 30px rgba(0, 0, 0, 0.35)); overflow: hidden; }
+ROOT .ck-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+ROOT .ck-head { display: flex; align-items: center; gap: 0.45em; padding: 0.7em 0.9em 0.6em;
+  border-bottom: 1px solid color-mix(in srgb, var(--ink) 10%, transparent);
+  font-family: var(--font-display); font-synthesis: none; font-weight: 900; font-size: calc(var(--s) * 44px * var(--fk, 1));
+  letter-spacing: -0.01em; line-height: 1.05; }
+ROOT .ck-head svg { flex: none; width: 0.9em; height: 0.9em; fill: none; stroke: var(--ac); stroke-width: 3;
+  stroke-linecap: round; stroke-linejoin: round; }
+ROOT .ck-rows { flex: 1; display: flex; flex-direction: column; justify-content: space-evenly; padding: 0.3em 0 0.5em; font-size: calc(var(--s) * 36px * var(--fk, 1)); }
+ROOT .ck-row { display: flex; align-items: center; gap: 0.6em; padding: 0.42em 0.95em;
+  border-bottom: 1px solid color-mix(in srgb, var(--ink) 6%, transparent); }
+ROOT .ck-row:last-child { border-bottom: none; }
+ROOT .ck-txt { position: relative; flex: 1; min-width: 0; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  line-height: 1.5; margin: -0.12em 0; }
+ROOT .ck-line { position: absolute; left: 0; right: 0; top: 54%; height: 0.09em; background: var(--c); transform-origin: left center; }
+ROOT .ck-pill { flex: none; box-sizing: border-box; min-width: 5.6em; padding: 0.2em 0.6em; text-align: center;
+  border-radius: calc(var(--s) * 999px); font-weight: 800; font-size: 0.8em; letter-spacing: 0.03em; white-space: nowrap;
+  background: color-mix(in srgb, var(--c) 16%, transparent); color: color-mix(in srgb, var(--c) 78%, var(--ink)); }
+ROOT .ck-row.s-ok { --c: var(--ok, #16a34a); }
+ROOT .ck-row.s-bad { --c: var(--bad, #dc2626); }
+ROOT .ck-row.s-warn { --c: var(--warn, #d97706); }
+ROOT .ck-row.s-info { --c: var(--muted); }
+ROOT .ck-row .ck-pill.wait { background: color-mix(in srgb, var(--ink) 8%, transparent); color: var(--muted); }
+ROOT .ck-sum { flex: none; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 0.3em; padding: 0 calc(var(--s) * 24px); border-left: 1px solid color-mix(in srgb, var(--ink) 10%, transparent);
+  background: color-mix(in srgb, var(--ac) 6%, var(--card)); text-align: center; }
+ROOT .ck-sum-v { font-family: var(--font-display); font-synthesis: none; font-weight: 900; line-height: 0.95; letter-spacing: -0.03em;
+  color: var(--ac); white-space: nowrap; font-feature-settings: "tnum" 1; }
+ROOT .ck-sum-v .aff { font-size: 0.6em; }
+ROOT .ck-sum-l { font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; line-height: 1.15;
+  font-size: calc(var(--s) * 24px * var(--fk, 1)); }
+</style>
+<markup><div class="ck"></div></markup>
+<script>
+const s = Math.min(P.w / 1000, P.h / 820);
+const box = root.querySelector(".ck");
+box.style.setProperty("--s", s);
+box.style.setProperty("--ac", P.accent || "var(--accent)");
+const clamp = (v) => Math.min(1, Math.max(0, v));
+const backOut = (u) => 1 + 2.4 * Math.pow(u - 1, 3) + 1.4 * Math.pow(u - 1, 2);
+const quartOut = (u) => 1 - Math.pow(1 - u, 4);
+const pl = P.lang === "pl";
+const LABELS = pl ? { ok: "OK", bad: "BŁĄD", warn: "UWAGA", info: "INFO" } : { ok: "OK", bad: "ERROR", warn: "WARNING", info: "INFO" };
+
+U.el("div", "ck-glow", null, box);
+const pad = 40 * s;
+const card = U.el("div", "ck-card", null, box);
+card.style.width = P.w - 2 * pad + "px";
+// the table fills more of the panel the more rows it has (rows spread out)
+card.style.minHeight = (P.h - 2 * pad) * Math.min(0.8, 0.3 + 0.1 * Math.max(2, Math.min(8, Array.isArray(P.rows) ? P.rows.length : 0))) + "px";
+const main = U.el("div", "ck-main", null, card);
+if (P.title) {
+  const head = U.el("div", "ck-head", null, main);
+  head.innerHTML = '<svg viewBox="0 0 24 24"><path d="M4 12.5l5 5L20 6.5"/></svg>';
+  U.el("span", null, String(P.title), head);
+}
+const list = U.el("div", "ck-rows", null, main);
+const rows = (Array.isArray(P.rows) ? P.rows : []).slice(0, 8).map((r) => (r && typeof r === "object" ? r : { text: String(r) }))
+  .map((r) => {
+    const st = ["ok", "bad", "warn", "info"].includes(r.status) ? r.status : "info";
+    const el = U.el("div", "ck-row s-" + st, null, list);
+    const tx = U.el("div", "ck-txt", String(r.text == null ? "" : r.text), el);
+    const line = P.strike && st === "bad" ? U.el("div", "ck-line", null, tx) : null;
+    const pill = U.el("div", "ck-pill wait", "···", el);
+    return { el, tx, pill, line, label: r.label != null && r.label !== "" ? String(r.label) : LABELS[st] };
+  });
+
+// summary: a big number beside the table that counts up while the rows land
+const SUMW = 0.28;
+const sm = P.summary && typeof P.summary === "object" && isFinite(Number(P.summary.value)) ? P.summary : null;
+let sumV = null, digits = null, sumBox = null;
+const value = sm ? Number(sm.value) : 0;
+const dec = sm ? (String(sm.value).split(".")[1] || "").length : 0;
+const fmt = (v) => {
+  const [i, f] = Math.abs(v).toFixed(dec).split(".");
+  return (v < 0 ? "-" : "") + i.replace(/\B(?=(\d{3})+(?!\d))/g, pl ? " " : ",") + (f ? (pl ? "," : ".") + f : "");
+};
+if (sm) {
+  sumBox = U.el("div", "ck-sum", null, card);
+  sumBox.style.width = (P.w - 2 * pad) * SUMW + "px";
+  sumV = U.el("div", "ck-sum-v", null, sumBox);
+  digits = U.el("span", null, fmt(0), sumV);
+  if (sm.suffix) U.el("span", "aff", String(sm.suffix), sumV);
+  if (sm.label) U.el("div", "ck-sum-l", String(sm.label), sumBox);
+}
+
+// rows tick in one by one over [P.at + 0.3, P.end - 0.4] (each in the middle of its slot), the status lands just after
+const a0 = P.at + 0.3, a1 = Math.max(a0 + 0.3, P.end - 0.4), n = Math.max(1, rows.length), step = (a1 - a0) / n;
+rows.forEach((r, k) => { r.t = a0 + (k + 0.5) * step; r.res = r.t + Math.min(0.35, step * 0.5); });
+const tS0 = rows.length ? rows[0].res : a0;
+const tS1 = Math.max(tS0 + 0.2, Math.min((rows.length ? rows[rows.length - 1].res : a0) + 0.5, P.end - 0.3));
+
+// fit: the largest text scale at which the card fits the panel and no row text is cut (down to 0.7 for width);
+// the summary number as big as its column allows
+const fit = () => {
+  let fk = 0.55;
+  for (const k of [1.3, 1.2, 1.1, 1, 0.9, 0.8, 0.7, 0.62, 0.55]) {
+    card.style.setProperty("--fk", k);
+    const cut = k > 0.7 && rows.some((r) => r.tx.scrollWidth > r.tx.clientWidth + 1);
+    if (card.offsetHeight <= P.h - 2 * pad && !cut) { fk = k; break; }
+  }
+  card.style.setProperty("--fk", fk);
+  if (sumV) {
+    const colW = (P.w - 2 * pad) * SUMW - 48 * s;
+    let fs = 170 * s;
+    digits.textContent = fmt(value);
+    sumV.style.fontSize = fs + "px";
+    const w = sumV.offsetWidth;
+    if (w > colW) sumV.style.fontSize = (fs = fs * colW / w) + "px";
+    digits.textContent = fmt(0);
+  }
+};
+fit();
+const dispFam = getComputedStyle(document.documentElement).getPropertyValue("--font-display").trim();
+U.ready(Promise.all([U.fonts([500, 800, 900]), U.fonts([400, 700, 900], dispFam)]).then(fit));
+
+U.clock((t) => {
+  const vis = clamp((t - P.at) / 0.25) * clamp((P.end - t) / 0.25);
+  box.style.opacity = vis;
+  box.style.visibility = vis > 0 ? "visible" : "hidden";
+  if (!vis) return;
+  const u = clamp((t - P.at) / 0.5);
+  card.style.opacity = clamp(u * 2.5);
+  card.style.transform = "translateY(" + ((1 - backOut(u)) * 60 * s) + "px) scale(" + (0.94 + 0.06 * backOut(u)) + ")";
+  rows.forEach((r) => {
+    const q = clamp((t - r.t) / Math.min(0.3, step));
+    r.el.style.visibility = t >= r.t ? "visible" : "hidden";
+    r.el.style.opacity = t >= r.t ? Math.max(0.01, clamp(q * 1.6)) : 0;
+    r.el.style.transform = "translateX(" + ((1 - quartOut(q)) * -30 * s) + "px)";
+    const done = t >= r.res;
+    r.pill.textContent = done ? r.label : "···";
+    r.pill.classList.toggle("wait", !done);
+    const p = clamp((t - r.res) / 0.3);
+    r.pill.style.transform = done ? "scale(" + (0.6 + 0.4 * backOut(p)) + ")" : "";
+    if (r.line) r.line.style.transform = "scaleX(" + quartOut(clamp((t - r.res - 0.15) / 0.35)) + ")";
+  });
+  if (sumBox) {
+    sumBox.style.opacity = 0.35 + 0.65 * clamp((t - tS0) / 0.3);
+    const c = quartOut(clamp((t - tS0) / (tS1 - tS0)));
+    digits.textContent = fmt(t >= tS1 ? value : value * c);
+  }
+});
+</script>

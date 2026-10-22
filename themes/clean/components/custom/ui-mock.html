@@ -1,9 +1,10 @@
 <style>
-ROOT .um { position: absolute; inset: 0; overflow: hidden; background: #0b0b0f; font-family: var(--font); }
+ROOT .um { position: absolute; inset: 0; overflow: hidden; background: var(--panel-bg, #0b0b0f); font-family: var(--font); }
 ROOT .um-glow { position: absolute; inset: -10%;
   background: radial-gradient(ellipse at 50% 20%, color-mix(in srgb, var(--ac) 24%, transparent), transparent 60%); }
+ROOT .um.lp .um-glow { display: none; }
 ROOT .um-win { position: absolute; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden;
-  border-radius: calc(var(--s) * 40px); box-shadow: 0 calc(var(--s) * 30px) calc(var(--s) * 80px) rgba(0, 0, 0, 0.6); }
+  border-radius: calc(var(--s) * var(--radius, 28px) * 10 / 7); box-shadow: 0 calc(var(--s) * 30px) calc(var(--s) * 80px) rgba(0, 0, 0, 0.6); }
 ROOT .um-head { flex: none; display: flex; align-items: center; gap: calc(var(--s) * 20px);
   padding: calc(var(--s) * 26px) calc(var(--s) * 34px); }
 ROOT .um-body { position: relative; flex: 1; overflow: hidden; }
@@ -11,7 +12,7 @@ ROOT .um-feed { position: absolute; left: 0; right: 0; top: 0; box-sizing: borde
 ROOT .um-caret { display: inline-block; width: 0.09em; height: 1.05em; margin-left: 0.06em; vertical-align: -0.17em;
   background: currentColor; border-radius: 0.04em; }
 ROOT .um-av { flex: none; width: calc(var(--s) * 68px); height: calc(var(--s) * 68px); border-radius: 50%; background: var(--ac);
-  color: var(--ink); display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: calc(var(--s) * 32px); }
+  color: var(--on-accent, var(--ink)); display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: calc(var(--s) * 32px); }
 
 /* chat */
 ROOT .k-chat .um-win { background: var(--card); color: var(--ink); }
@@ -24,7 +25,7 @@ ROOT .k-chat .um-feed { padding: calc(var(--s) * 30px) calc(var(--s) * 30px); ga
 ROOT .k-chat .msg { max-width: 86%; box-sizing: border-box; padding: calc(var(--s) * 22px * var(--fk, 1)) calc(var(--s) * 30px * var(--fk, 1));
   border-radius: calc(var(--s) * 34px); font-weight: 500; font-size: calc(var(--s) * 42px * var(--fk, 1)); line-height: 1.3;
   transform-origin: left bottom; white-space: pre-wrap; overflow-wrap: anywhere; }
-ROOT .k-chat .msg.user { align-self: flex-end; background: var(--ac); color: var(--ink); border-bottom-right-radius: calc(var(--s) * 8px);
+ROOT .k-chat .msg.user { align-self: flex-end; background: var(--ac); color: var(--on-accent, var(--ink)); border-bottom-right-radius: calc(var(--s) * 8px);
   transform-origin: right bottom; font-weight: 800; }
 ROOT .k-chat .msg.ai, ROOT .k-chat .msg.cmd { align-self: flex-start; background: #eef2f7; color: var(--ink);
   border-bottom-left-radius: calc(var(--s) * 8px); }
@@ -58,11 +59,72 @@ ROOT .k-post .um-foot { flex: none; display: flex; gap: calc(var(--s) * 56px); p
 ROOT .k-post .act { display: flex; align-items: center; gap: 0.4em; }
 ROOT .k-post .act svg { width: 1.3em; height: 1.3em; fill: none; stroke: currentColor; stroke-width: 2; stroke-linejoin: round; }
 ROOT .k-post .act.like svg path { fill: var(--like-fill, none); stroke: var(--like-stroke, currentColor); }
+/* browser / app: a page in the theme's card colours; text scales with --fk (fitted to the window) */
+ROOT .k-browser .um-win, ROOT .k-app .um-win { background: var(--card); color: var(--ink); }
+ROOT .k-browser .um-head, ROOT .k-app .um-head { border-bottom: 1px solid color-mix(in srgb, var(--ink) 9%, transparent); }
+ROOT .k-browser .um-head { gap: calc(var(--s) * 12px); padding: calc(var(--s) * 22px) calc(var(--s) * 28px);
+  background: color-mix(in srgb, var(--ink) 4%, var(--card)); }
+ROOT .k-browser .light { flex: none; width: calc(var(--s) * 20px); height: calc(var(--s) * 20px); border-radius: 50%;
+  background: color-mix(in srgb, var(--ink) 20%, transparent); }
+ROOT .um-url { flex: 1; min-width: 0; margin-left: calc(var(--s) * 18px); display: flex; align-items: center; gap: 0.45em;
+  padding: calc(var(--s) * 12px) calc(var(--s) * 24px); border-radius: calc(var(--s) * 999px); background: var(--card);
+  border: 1px solid color-mix(in srgb, var(--ink) 12%, transparent); color: var(--muted); font-weight: 500;
+  font-size: calc(var(--s) * 27px); line-height: 1.45; white-space: nowrap; overflow: hidden; }
+ROOT .um-url b { color: var(--ink); font-weight: 800; }
+ROOT .um-url svg, ROOT .um-search svg { flex: none; width: 1em; height: 1em; fill: none; stroke: currentColor; stroke-width: 2.4;
+  stroke-linecap: round; stroke-linejoin: round; }
+ROOT .k-app .um-head { padding: calc(var(--s) * 30px) calc(var(--s) * 40px); gap: calc(var(--s) * 20px); }
+ROOT .k-app .um-logo { flex: none; width: calc(var(--s) * 58px); height: calc(var(--s) * 58px); display: flex; align-items: center;
+  justify-content: center; border-radius: calc(var(--s) * var(--radius, 28px) * 0.5); background: var(--ac);
+  color: var(--on-accent, var(--ink)); font-family: var(--font-display); font-synthesis: none; font-weight: 900;
+  font-size: calc(var(--s) * 32px); }
+ROOT .k-app .um-name { font-family: var(--font-display); font-synthesis: none; font-weight: 900; font-size: calc(var(--s) * 46px);
+  letter-spacing: -0.02em; line-height: 1.05; }
+ROOT .um-page { position: absolute; left: 0; right: 0; top: 0; box-sizing: border-box; display: flex; flex-direction: column;
+  gap: calc(var(--s) * 24px * var(--fk, 1)); padding: calc(var(--s) * 34px * var(--fk, 1)) calc(var(--s) * 40px); }
+ROOT .um-h { font-family: var(--font-display); font-synthesis: none; font-weight: 900; font-size: calc(var(--s) * 60px * var(--fk, 1));
+  letter-spacing: -0.02em; line-height: 1.05; }
+ROOT .um-search { display: flex; align-items: center; gap: 0.5em; padding: 0.38em 0.7em; color: var(--ink);
+  border-radius: calc(var(--s) * var(--radius, 28px) * 0.6); border: calc(var(--s) * 3px) solid color-mix(in srgb, var(--ink) 14%, transparent);
+  font-weight: 500; font-size: calc(var(--s) * 36px * var(--fk, 1)); line-height: 1.45; white-space: pre; overflow: hidden; }
+ROOT .um-search.focus { border-color: var(--ac); box-shadow: 0 0 0 calc(var(--s) * 6px) color-mix(in srgb, var(--ac) 22%, transparent); }
+ROOT .um-search svg { color: var(--muted); }
+ROOT .um-search .ph { color: var(--muted); }
+ROOT .um-rows { display: flex; flex-direction: column; }
+ROOT .um-row { position: relative; display: flex; align-items: center; gap: calc(var(--s) * 22px * var(--fk, 1));
+  padding: calc(var(--s) * 18px * var(--fk, 1)) calc(var(--s) * 16px); border-radius: calc(var(--s) * var(--radius, 28px) * 0.5);
+  border-bottom: 1px solid color-mix(in srgb, var(--ink) 7%, transparent); }
+ROOT .um-ic { flex: none; width: calc(var(--s) * 66px * var(--fk, 1)); height: calc(var(--s) * 66px * var(--fk, 1));
+  display: flex; align-items: center; justify-content: center; border-radius: calc(var(--s) * var(--radius, 28px) * 0.5);
+  background: color-mix(in srgb, var(--ac) 16%, var(--card)); color: var(--ac); font-family: var(--font-display);
+  font-synthesis: none; font-weight: 900; font-size: calc(var(--s) * 32px * var(--fk, 1)); }
+ROOT .um-tx { flex: 1; min-width: 0; }
+ROOT .um-t, ROOT .um-s { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.45; }
+ROOT .um-t { font-weight: 800; font-size: calc(var(--s) * 38px * var(--fk, 1)); letter-spacing: -0.01em; }
+ROOT .k-browser .um-t { color: color-mix(in srgb, var(--ac) 70%, var(--ink)); }
+ROOT .um-s { font-weight: 500; font-size: calc(var(--s) * 27px * var(--fk, 1)); color: var(--muted); }
+ROOT .um-badge { flex: none; padding: 0.3em 0.75em; border-radius: calc(var(--s) * 999px); font-weight: 800;
+  font-size: calc(var(--s) * 25px * var(--fk, 1)); background: color-mix(in srgb, var(--ac) 16%, transparent);
+  color: color-mix(in srgb, var(--ac) 80%, var(--ink)); }
+ROOT .tg { flex: none; position: relative; width: calc(var(--s) * 92px * var(--fk, 1)); height: calc(var(--s) * 52px * var(--fk, 1));
+  border-radius: calc(var(--s) * 999px); background: color-mix(in srgb, var(--ink) 18%, transparent); }
+ROOT .tg::before { content: ""; position: absolute; inset: 0; border-radius: inherit; background: var(--ac); opacity: var(--q, 0); }
+ROOT .tg i { position: absolute; z-index: 1; left: calc(var(--s) * 6px * var(--fk, 1)); top: calc(var(--s) * 6px * var(--fk, 1));
+  width: calc(var(--s) * 40px * var(--fk, 1)); height: calc(var(--s) * 40px * var(--fk, 1)); border-radius: 50%; background: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3); transform: translateX(calc(var(--s) * 40px * var(--fk, 1) * var(--q, 0))); }
+ROOT .um-cur { position: absolute; left: 0; top: 0; z-index: 6; width: calc(var(--s) * 56px); height: calc(var(--s) * 56px);
+  margin: calc(var(--s) * -8px) 0 0 calc(var(--s) * -10px); transform-origin: 18% 12%; }
+ROOT .um-cur svg { width: 100%; height: 100%; fill: var(--ink); stroke: #ffffff; stroke-width: 1.6; stroke-linejoin: round;
+  filter: drop-shadow(0 calc(var(--s) * 4px) calc(var(--s) * 6px) rgba(0, 0, 0, 0.3)); }
+ROOT .um-ring { position: absolute; left: 0; top: 0; z-index: 5; width: calc(var(--s) * 84px); height: calc(var(--s) * 84px);
+  box-sizing: border-box; border-radius: 50%; border: calc(var(--s) * 5px) solid var(--ac); }
+ROOT svg.um-mark { position: absolute; left: 0; top: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+ROOT svg.um-mark rect { fill: none; stroke: var(--ac); stroke-width: calc(var(--s) * 6px); stroke-dasharray: 1 1; stroke-dashoffset: 1; }
 </style>
 <markup><div class="um"></div></markup>
 <script>
 const s = Math.min(P.w / 1000, P.h / 820);
-const kind = ["chat", "terminal", "post"].includes(P.kind) ? P.kind : "chat";
+const kind = ["chat", "terminal", "post", "browser", "app"].includes(P.kind) ? P.kind : "chat";
 const box = root.querySelector(".um");
 box.classList.add("k-" + kind);
 box.style.setProperty("--s", s);
@@ -71,6 +133,15 @@ const clamp = (v) => Math.min(1, Math.max(0, v));
 const backOut = (u) => 1 + 2.4 * Math.pow(u - 1, 3) + 1.4 * Math.pow(u - 1, 2);
 const quartOut = (u) => 1 - Math.pow(1 - u, 4);
 const pl = P.lang === "pl";
+const page = kind === "browser" || kind === "app";
+// a light --panel-bg drops the glow (its edge would show against the panel frame)
+if ((() => {
+  const pr = U.el("i", null, null, box);
+  pr.style.color = "var(--panel-bg, #0b0b0f)";
+  const m = String(getComputedStyle(pr).color || "").match(/[\d.]+/g);
+  pr.remove();
+  return m && m.length >= 3 && 0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2] > 150;
+})()) box.classList.add("lp");
 
 U.el("div", "um-glow", null, box);
 const pad = 40 * s;
@@ -78,7 +149,18 @@ const win = U.el("div", "um-win", null, box);
 Object.assign(win.style, { left: pad + "px", top: pad + "px", width: P.w - 2 * pad + "px", height: P.h - 2 * pad + "px" });
 const head = U.el("div", "um-head", null, win);
 const titleText = String(P.title || (kind === "terminal" ? "zsh" : kind === "post" ? "cutmate" : "AI"));
-if (kind === "terminal") {
+if (kind === "browser") {
+  [0, 1, 2].forEach(() => U.el("span", "light", null, head));
+  const bar = U.el("div", "um-url", null, head);
+  bar.innerHTML = '<svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>';
+  const url = String(P.url || "").replace(/^[a-z]+:\/\//i, "").replace(/^www\./, "");
+  const cut = url.indexOf("/");
+  U.el("b", null, cut < 0 ? url : url.slice(0, cut), bar);
+  if (cut >= 0) U.el("span", null, url.slice(cut), bar);
+} else if (kind === "app") {
+  U.el("div", "um-logo", titleText.trim().charAt(0).toUpperCase() || "A", head);
+  U.el("div", "um-name", P.title ? titleText : "", head);
+} else if (kind === "terminal") {
   ["#ff5f57", "#febc2e", "#28c840"].forEach((c) => { U.el("span", "light", null, head).style.background = c; });
   U.el("div", "um-name", titleText, head);
 } else {
@@ -89,135 +171,282 @@ if (kind === "terminal") {
   U.el("div", "um-sub", kind === "post" ? handle : "online", who);
 }
 const body = U.el("div", "um-body", null, win);
-const feed = U.el("div", "um-feed", null, body);
+if (page) {
+  // browser / app: a page whose actions are spaced evenly over [P.at + 0.3, P.end - 0.4]:
+  // type the search -> rows in one by one -> (app) the cursor clicks each `click` row, its toggle flips / (browser) circle a row
+  const pg = U.el("div", "um-page", null, body);
+  if (kind === "browser" && P.title) U.el("div", "um-h", String(P.title), pg);
+  let field = null, ftx = null, fcaret = null, fph = null;
+  const query = Array.from(String(P.search == null ? "" : P.search));
+  if (query.length) {
+    field = U.el("div", "um-search", null, pg);
+    field.innerHTML = '<svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5 21 21"/></svg>';
+    fph = U.el("span", "ph", pl ? "Szukaj…" : "Search…", field);
+    ftx = U.el("span", null, "", field);
+    fcaret = U.el("span", "um-caret", null, field);
+  }
+  const list = U.el("div", "um-rows", null, pg);
+  const rows = (Array.isArray(P.rows) ? P.rows : []).slice(0, 8).map((r) => (r && typeof r === "object" ? r : { text: String(r) }))
+    .map((r) => {
+      const el = U.el("div", "um-row", null, list);
+      if (kind === "app") U.el("div", "um-ic", String(r.text || "").trim().charAt(0).toUpperCase() || "•", el);
+      const tx = U.el("div", "um-tx", null, el);
+      U.el("div", "um-t", String(r.text == null ? "" : r.text), tx);
+      if (r.sub) U.el("div", "um-s", String(r.sub), tx);
+      if (r.badge != null && r.badge !== "") U.el("div", "um-badge", String(r.badge), el);
+      let tg = null;
+      const has = kind === "app" && typeof r.toggle === "boolean";
+      if (has) { tg = U.el("div", "tg", null, el); U.el("i", null, null, tg); }
+      const clk = kind === "app" && r.click === true;
+      // `toggle` is the final state; a clicked row starts the other way and flips at the click
+      return { el, tg, to: has ? r.toggle : null, from: has ? (clk ? !r.toggle : r.toggle) : null, clk, click: null };
+    });
+  const acts = [];
+  if (field) acts.push({ type: "type" });
+  rows.forEach((r) => acts.push({ type: "row", r }));
+  if (kind === "app") rows.filter((r) => r.clk).forEach((r) => acts.push({ type: "click", r }));
+  const hi = kind === "browser" && Number.isInteger(P.highlight) && rows[P.highlight] ? rows[P.highlight] : null;
+  if (hi) acts.push({ type: "mark", r: hi });
+  const a0 = P.at + 0.3, a1 = Math.max(a0 + 0.3, P.end - 0.4), step = (a1 - a0) / Math.max(1, acts.length);
+  acts.forEach((a, k) => { a.t = a0 + k * step; a.d = step; if (a.r) a.r[a.type] = a; });
+  const typeAct = acts.find((a) => a.type === "type");
+  const clicks = acts.filter((a) => a.type === "click");
 
-// lines: typed (chat / post / terminal commands) or printed fast (terminal output)
-const raw = (P.lines || []).map((l) => (typeof l === "string" ? { who: "ai", text: l } : l))
-  .map((l) => ({ who: ["user", "ai", "cmd"].includes(l.who) ? l.who : "ai", text: String(l.text == null ? "" : l.text) }));
-const typed = (l) => !(kind === "terminal" && l.who === "ai");
-const span = Math.max(0.8, P.end - P.at);
-const think = kind === "chat" ? 0.5 : 0;
-const gap = kind === "post" ? 0.18 : 0.3;
-const thinks = raw.filter((l) => kind === "chat" && l.who === "ai").length;
-const chars = raw.reduce((a, l) => a + (typed(l) ? Array.from(l.text).length : Array.from(l.text).length / 5), 0);
-const avail = Math.max(0.4, span * 0.78 - 0.45 - raw.length * gap - thinks * think);
-const cps = Math.min(90, Math.max(16, chars / avail));
-let cur = P.at + 0.45;
-const lines = raw.map((l) => {
-  const el = U.el("div", "msg " + l.who, null, feed);
-  if (kind === "terminal" && l.who !== "ai") U.el("span", "ps", "$", el);
-  const dots = kind === "chat" && l.who === "ai" ? U.el("span", "dots", null, el) : null;
-  if (dots) [0, 1, 2].forEach(() => U.el("i", null, null, dots));
-  const tx = U.el("span", null, "", el);
-  const caret = typed(l) ? U.el("span", "um-caret", null, el) : null;
-  const ch = Array.from(l.text);
-  const show = cur;
-  const start = show + (dots ? think : 0);
-  const dur = ch.length / (typed(l) ? cps : cps * 5);
-  cur = start + dur + gap;
-  return { el, tx, caret, dots, ch, show, start, end: start + dur };
-});
-let prompt = null;
-if (kind === "terminal") {
-  prompt = U.el("div", "msg cmd", null, feed);
-  U.el("span", "ps", "$", prompt);
-  prompt.caret = U.el("span", "um-caret", null, prompt);
-}
-const doneAt = lines.length ? lines[lines.length - 1].end : P.at + 0.45;
-
-// post: engagement counters only from P.replies / P.reposts / P.likes (no invented numbers); none given -> no footer
-let foot = null, counts = [];
-const given = [["reply", P.replies], ["repost", P.reposts], ["like", P.likes]].filter(([, v]) => v != null && v !== "");
-if (kind === "post" && given.length) {
-  foot = U.el("div", "um-foot", null, win);
-  const icons = {
-    reply: "M4 5h16v11H9l-5 4z",
-    repost: "M7 7h11v4l3-3-3-3v2M17 17H6v-4l-3 3 3 3v-2",
-    like: "M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z",
+  // cursor (app) and the circle (browser) live in the window, over the page
+  const cur = clicks.length ? U.el("div", "um-cur", null, win) : null;
+  if (cur) cur.innerHTML = '<svg viewBox="0 0 24 24"><path d="M5 3l14 8.2-6.3 1.4L9.6 19z"/></svg>';
+  const ring = cur ? U.el("div", "um-ring", null, win) : null;
+  const NS = "http://www.w3.org/2000/svg";
+  let mark = null;
+  if (hi) {
+    const svg = document.createElementNS(NS, "svg");
+    svg.setAttribute("class", "um-mark");
+    win.appendChild(svg);
+    mark = document.createElementNS(NS, "rect");
+    mark.setAttribute("pathLength", "1");
+    svg.appendChild(mark);
+  }
+  const offIn = (el) => {                             // el's box in window coordinates (layout only, no transforms)
+    let x = 0, y = 0;
+    for (let e = el; e && e !== win; e = e.offsetParent) { x += e.offsetLeft; y += e.offsetTop; }
+    return { x, y, w: el.offsetWidth, h: el.offsetHeight };
   };
-  const fmtK = (v) => (v >= 1000 ? (v / 1000).toFixed(1).replace(".", pl ? "," : ".") + (pl ? " tys." : "K") : String(Math.round(v)));
-  counts = given.map(([name, to], i) => {
-    const a = U.el("div", "act " + name, null, foot);
-    a.innerHTML = '<svg viewBox="0 0 24 24"><path d="' + icons[name] + '"/></svg>';
-    const num = typeof to === "number" && isFinite(to);             // numbers count up; text ("1,2 tys.") is shown as is
-    const v = U.el("span", null, num ? "0" : String(to), a);
-    return { a, v, to, num, fmtK, at: doneAt + 0.15 + i * 0.12 };
+  // fit: the largest text scale (1.25 … 0.6) at which the finished page fits the window body; then shrink the window
+  // to its content (at least 55 %) and centre it; measured once the theme fonts have loaded
+  const maxH = P.h - 2 * pad;
+  let home = { x: P.w, y: maxH };
+  const fitPage = () => {
+    Object.assign(win.style, { top: pad + "px", height: maxH + "px" });
+    if (ftx) ftx.textContent = query.join("");
+    let fk = 0.6;
+    for (const k of [1.25, 1.15, 1.05, 1, 0.9, 0.8, 0.7, 0.6]) {
+      win.style.setProperty("--fk", k);
+      if (pg.offsetHeight <= body.clientHeight) { fk = k; break; }
+    }
+    win.style.setProperty("--fk", fk);
+    const h = Math.min(maxH, Math.max(maxH * 0.55, head.offsetHeight + pg.offsetHeight + 12 * s));
+    Object.assign(win.style, { top: (P.h - h) / 2 + "px", height: h + "px" });
+    if (ftx) ftx.textContent = "";
+    home = { x: (P.w - 2 * pad) * 0.82, y: h * 0.96 };
+    rows.forEach((r) => {
+      const b = offIn(r.tg ? r.tg : r.el);
+      r.aim = r.tg ? { x: b.x + b.w * 0.62, y: b.y + b.h * 0.6 } : { x: b.x + b.w * 0.5, y: b.y + b.h * 0.55 };
+      r.box = offIn(r.el);
+    });
+    if (mark) {
+      const b = hi.box, m = 10 * s;
+      [["x", b.x - m], ["y", b.y - m * 0.4], ["width", b.w + 2 * m], ["height", b.h + m * 0.8], ["rx", 22 * s]]
+        .forEach(([k, v]) => mark.setAttribute(k, v));
+    }
+  };
+  fitPage();
+  const dispFam = getComputedStyle(document.documentElement).getPropertyValue("--font-display").trim();
+  U.ready(Promise.all([U.fonts([500, 800, 900]), U.fonts([400, 700, 900], dispFam)]).then(fitPage));
+  const inOut = (u) => (u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2);
+
+  U.clock((t) => {
+    const vis = clamp((t - P.at) / 0.25) * clamp((P.end - t) / 0.25);
+    box.style.opacity = vis;
+    box.style.visibility = vis > 0 ? "visible" : "hidden";
+    if (!vis) return;
+    const u = clamp((t - P.at) / 0.5);
+    win.style.opacity = clamp(u * 2.5);
+    win.style.transform = "translateY(" + ((1 - backOut(u)) * 70 * s) + "px) scale(" + (0.93 + 0.07 * backOut(u)) + ")";
+    const blink = Math.floor((t - P.at) * 2.2) % 2 === 0 ? 1 : 0;
+    if (field) {
+      const a = typeAct, d = a.d * 0.85;
+      const n = Math.max(0, Math.min(query.length, Math.floor((t - a.t) / d * query.length + 1e-6)));
+      ftx.textContent = t >= a.t + d ? query.join("") : query.slice(0, n).join("");
+      fph.style.display = t >= a.t && (n > 0 || t >= a.t + d) ? "none" : "";
+      field.classList.toggle("focus", t >= a.t);
+      fcaret.style.display = t >= a.t ? "" : "none";
+      fcaret.style.opacity = t >= a.t && t < a.t + d ? 1 : blink;
+    }
+    rows.forEach((r) => {
+      const q = clamp((t - r.row.t) / Math.min(0.3, r.row.d));
+      r.el.style.visibility = t >= r.row.t ? "visible" : "hidden";
+      r.el.style.opacity = t >= r.row.t ? Math.max(0.01, clamp(q * 1.6)) : 0;
+      r.el.style.transform = "translateY(" + ((1 - quartOut(q)) * 24 * s) + "px)";
+      const at = r.click ? r.click.t + r.click.d * 0.6 : Infinity;    // the press
+      if (r.tg) {
+        const k = r.to === r.from ? 0 : clamp((t - at) / 0.2);
+        const v = r.from ? 1 - k : k;                                // 0 off .. 1 on
+        r.tg.style.setProperty("--q", v);
+        r.tg.classList.toggle("on", v >= 0.5);
+      } else if (r.click) {
+        r.el.style.background = t >= at ? "color-mix(in srgb, var(--ac) " + Math.round(14 * clamp((t - at) / 0.15)) + "%, transparent)" : "";
+      }
+    });
+    if (cur) {
+      let j = -1;
+      clicks.forEach((c, i) => { if (t >= c.t) j = i; });
+      const c = clicks[Math.max(0, j)];
+      const from = j <= 0 ? home : clicks[j - 1].r.aim, to = j < 0 ? home : c.r.aim;
+      const k = j < 0 ? 0 : clamp((t - c.t) / (c.d * 0.55)), press = j < 0 ? -1 : c.t + c.d * 0.6;
+      const e = inOut(k), x = from.x + (to.x - from.x) * e, y = from.y + (to.y - from.y) * e;
+      const down = press > 0 && t >= press && t < press + 0.12;
+      cur.style.opacity = clamp((t - clicks[0].t) / 0.15);
+      cur.style.transform = "translate(" + x + "px," + y + "px) scale(" + (down ? 0.86 : 1) + ")";
+      const rq = press > 0 ? clamp((t - press) / 0.35) : 0;
+      ring.style.opacity = press > 0 && t >= press ? 1 - rq : 0;
+      ring.style.transform = "translate(" + x + "px," + y + "px) translate(-50%,-50%) scale(" + (0.3 + 1.1 * quartOut(rq)) + ")";
+    }
+    if (mark) {
+      const a = hi.mark;
+      mark.style.strokeDashoffset = String(1 - inOut(clamp((t - a.t) / Math.min(0.5, a.d))));
+    }
+  });
+} else {
+  const feed = U.el("div", "um-feed", null, body);
+
+  // lines: typed (chat / post / terminal commands) or printed fast (terminal output)
+  const raw = (P.lines || []).map((l) => (typeof l === "string" ? { who: "ai", text: l } : l))
+    .map((l) => ({ who: ["user", "ai", "cmd"].includes(l.who) ? l.who : "ai", text: String(l.text == null ? "" : l.text) }));
+  const typed = (l) => !(kind === "terminal" && l.who === "ai");
+  const span = Math.max(0.8, P.end - P.at);
+  const think = kind === "chat" ? 0.5 : 0;
+  const gap = kind === "post" ? 0.18 : 0.3;
+  const thinks = raw.filter((l) => kind === "chat" && l.who === "ai").length;
+  const chars = raw.reduce((a, l) => a + (typed(l) ? Array.from(l.text).length : Array.from(l.text).length / 5), 0);
+  const avail = Math.max(0.4, span * 0.78 - 0.45 - raw.length * gap - thinks * think);
+  const cps = Math.min(90, Math.max(16, chars / avail));
+  let cur = P.at + 0.45;
+  const lines = raw.map((l) => {
+    const el = U.el("div", "msg " + l.who, null, feed);
+    if (kind === "terminal" && l.who !== "ai") U.el("span", "ps", "$", el);
+    const dots = kind === "chat" && l.who === "ai" ? U.el("span", "dots", null, el) : null;
+    if (dots) [0, 1, 2].forEach(() => U.el("i", null, null, dots));
+    const tx = U.el("span", null, "", el);
+    const caret = typed(l) ? U.el("span", "um-caret", null, el) : null;
+    const ch = Array.from(l.text);
+    const show = cur;
+    const start = show + (dots ? think : 0);
+    const dur = ch.length / (typed(l) ? cps : cps * 5);
+    cur = start + dur + gap;
+    return { el, tx, caret, dots, ch, show, start, end: start + dur };
+  });
+  let prompt = null;
+  if (kind === "terminal") {
+    prompt = U.el("div", "msg cmd", null, feed);
+    U.el("span", "ps", "$", prompt);
+    prompt.caret = U.el("span", "um-caret", null, prompt);
+  }
+  const doneAt = lines.length ? lines[lines.length - 1].end : P.at + 0.45;
+
+  // post: engagement counters only from P.replies / P.reposts / P.likes (no invented numbers); none given -> no footer
+  let foot = null, counts = [];
+  const given = [["reply", P.replies], ["repost", P.reposts], ["like", P.likes]].filter(([, v]) => v != null && v !== "");
+  if (kind === "post" && given.length) {
+    foot = U.el("div", "um-foot", null, win);
+    const icons = {
+      reply: "M4 5h16v11H9l-5 4z",
+      repost: "M7 7h11v4l3-3-3-3v2M17 17H6v-4l-3 3 3 3v-2",
+      like: "M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z",
+    };
+    const fmtK = (v) => (v >= 1000 ? (v / 1000).toFixed(1).replace(".", pl ? "," : ".") + (pl ? " tys." : "K") : String(Math.round(v)));
+    counts = given.map(([name, to], i) => {
+      const a = U.el("div", "act " + name, null, foot);
+      a.innerHTML = '<svg viewBox="0 0 24 24"><path d="' + icons[name] + '"/></svg>';
+      const num = typeof to === "number" && isFinite(to);             // numbers count up; text ("1,2 tys.") is shown as is
+      const v = U.el("span", null, num ? "0" : String(to), a);
+      return { a, v, to, num, fmtK, at: doneAt + 0.15 + i * 0.12 };
+    });
+  }
+
+  // few / short lines: grow the text (up to 1.7x) while the finished conversation still fits in ~92% of the window body,
+  // then shrink the window to its finished content (head + feed + footer) and centre it in the panel, so one message
+  // does not leave a mostly empty window; measured once the theme font has loaded (fallback metrics would mis-size it)
+  const maxH = P.h - 2 * pad;
+  const fit = () => {
+    Object.assign(win.style, { top: pad + "px", height: maxH + "px" });
+    lines.forEach((l) => { l.tx.textContent = l.ch.join(""); if (l.dots) l.dots.style.display = "none"; });
+    let fk = 1;
+    for (const k of [1.7, 1.55, 1.4, 1.3, 1.2, 1.1]) {
+      win.style.setProperty("--fk", k);
+      if (feed.offsetHeight <= body.clientHeight * 0.92) { fk = k; break; }
+    }
+    win.style.setProperty("--fk", fk);
+    const need = head.offsetHeight + feed.offsetHeight + (foot ? foot.offsetHeight : 0) + 8 * s;
+    const h = Math.min(maxH, Math.max(maxH * 0.4, need));
+    Object.assign(win.style, { top: (P.h - h) / 2 + "px", height: h + "px" });
+    lines.forEach((l) => { l.tx.textContent = ""; if (l.dots) l.dots.style.display = ""; });
+  };
+  fit();
+  U.ready(U.fonts([500, 800, 900]).then(fit));
+
+  U.clock((t) => {
+    const vis = clamp((t - P.at) / 0.25) * clamp((P.end - t) / 0.25);
+    box.style.opacity = vis;
+    box.style.visibility = vis > 0 ? "visible" : "hidden";
+    if (!vis) return;
+    const u = clamp((t - P.at) / 0.5);
+    win.style.opacity = clamp(u * 2.5);
+    win.style.transform = "translateY(" + ((1 - backOut(u)) * 70 * s) + "px) scale(" + (0.93 + 0.07 * backOut(u)) + ")";
+    const blink = Math.floor((t - P.at) * 2.2) % 2 === 0 ? 1 : 0;
+    let active = -1;
+    lines.forEach((l, i) => {
+      if (t < l.show) { l.el.style.display = "none"; return; }
+      l.el.style.display = "";
+      if (t >= l.show) active = i;
+      const q = clamp((t - l.show) / 0.3);
+      l.el.style.opacity = clamp(q * 2);
+      l.el.style.transform = kind === "chat" ? "scale(" + (0.8 + 0.2 * backOut(q)) + ")" : "translateY(" + ((1 - quartOut(q)) * 14 * s) + "px)";
+      const thinking = l.dots && t < l.start;
+      if (l.dots) {
+        l.dots.style.display = thinking ? "" : "none";
+        Array.from(l.dots.children).forEach((d, k) => {
+          d.style.transform = "translateY(" + (-0.22 * Math.max(0, Math.sin((t - l.show) * 9 - k * 0.9))) + "em)";
+        });
+      }
+      const n = Math.max(0, Math.min(l.ch.length, Math.floor((t - l.start) / (l.end - l.start || 1) * l.ch.length + 1e-6)));
+      l.tx.textContent = t >= l.end ? l.ch.join("") : l.ch.slice(0, n).join("");
+    });
+    const last = lines.length - 1;
+    lines.forEach((l, i) => {
+      if (!l.caret) return;
+      const typing = t >= l.start && t < l.end;
+      const tail = !prompt && i === last && t >= l.end;
+      l.caret.style.display = (i === active && !(l.dots && t < l.start)) && (typing || tail) ? "" : "none";
+      l.caret.style.opacity = typing ? 1 : blink;
+    });
+    if (prompt) {
+      prompt.style.display = t >= doneAt + 0.1 ? "" : "none";
+      prompt.caret.style.opacity = blink;
+    }
+    counts.forEach((c) => {
+      const q = quartOut(clamp((t - c.at) / 0.9));
+      if (c.num) c.v.textContent = c.fmtK(c.to * q);
+      c.a.style.opacity = 0.35 + 0.65 * clamp((t - c.at) / 0.3);
+      if (c.a.classList.contains("like")) {
+        const on = t >= c.at + 0.5;
+        c.a.style.setProperty("--like-fill", on ? "var(--ac)" : "none");
+        c.a.style.setProperty("--like-stroke", on ? "var(--ac)" : "currentColor");
+        const pop = clamp((t - c.at - 0.5) / 0.35);
+        c.a.style.transform = on ? "scale(" + (1 + 0.25 * Math.sin(Math.PI * pop)) + ")" : "";
+      }
+    });
+    const over = feed.offsetHeight - body.clientHeight;
+    feed.style.transform = "translateY(" + (-Math.max(0, over)) + "px)";
   });
 }
-
-// few / short lines: grow the text (up to 1.7x) while the finished conversation still fits in ~92% of the window body,
-// then shrink the window to its finished content (head + feed + footer) and centre it in the panel, so one message
-// does not leave a mostly empty window; measured once the theme font has loaded (fallback metrics would mis-size it)
-const maxH = P.h - 2 * pad;
-const fit = () => {
-  Object.assign(win.style, { top: pad + "px", height: maxH + "px" });
-  lines.forEach((l) => { l.tx.textContent = l.ch.join(""); if (l.dots) l.dots.style.display = "none"; });
-  let fk = 1;
-  for (const k of [1.7, 1.55, 1.4, 1.3, 1.2, 1.1]) {
-    win.style.setProperty("--fk", k);
-    if (feed.offsetHeight <= body.clientHeight * 0.92) { fk = k; break; }
-  }
-  win.style.setProperty("--fk", fk);
-  const need = head.offsetHeight + feed.offsetHeight + (foot ? foot.offsetHeight : 0) + 8 * s;
-  const h = Math.min(maxH, Math.max(maxH * 0.4, need));
-  Object.assign(win.style, { top: (P.h - h) / 2 + "px", height: h + "px" });
-  lines.forEach((l) => { l.tx.textContent = ""; if (l.dots) l.dots.style.display = ""; });
-};
-fit();
-U.ready(U.fonts([500, 800, 900]).then(fit));
-
-U.clock((t) => {
-  const vis = clamp((t - P.at) / 0.25) * clamp((P.end - t) / 0.25);
-  box.style.opacity = vis;
-  box.style.visibility = vis > 0 ? "visible" : "hidden";
-  if (!vis) return;
-  const u = clamp((t - P.at) / 0.5);
-  win.style.opacity = clamp(u * 2.5);
-  win.style.transform = "translateY(" + ((1 - backOut(u)) * 70 * s) + "px) scale(" + (0.93 + 0.07 * backOut(u)) + ")";
-  const blink = Math.floor((t - P.at) * 2.2) % 2 === 0 ? 1 : 0;
-  let active = -1;
-  lines.forEach((l, i) => {
-    if (t < l.show) { l.el.style.display = "none"; return; }
-    l.el.style.display = "";
-    if (t >= l.show) active = i;
-    const q = clamp((t - l.show) / 0.3);
-    l.el.style.opacity = clamp(q * 2);
-    l.el.style.transform = kind === "chat" ? "scale(" + (0.8 + 0.2 * backOut(q)) + ")" : "translateY(" + ((1 - quartOut(q)) * 14 * s) + "px)";
-    const thinking = l.dots && t < l.start;
-    if (l.dots) {
-      l.dots.style.display = thinking ? "" : "none";
-      Array.from(l.dots.children).forEach((d, k) => {
-        d.style.transform = "translateY(" + (-0.22 * Math.max(0, Math.sin((t - l.show) * 9 - k * 0.9))) + "em)";
-      });
-    }
-    const n = Math.max(0, Math.min(l.ch.length, Math.floor((t - l.start) / (l.end - l.start || 1) * l.ch.length + 1e-6)));
-    l.tx.textContent = t >= l.end ? l.ch.join("") : l.ch.slice(0, n).join("");
-  });
-  const last = lines.length - 1;
-  lines.forEach((l, i) => {
-    if (!l.caret) return;
-    const typing = t >= l.start && t < l.end;
-    const tail = !prompt && i === last && t >= l.end;
-    l.caret.style.display = (i === active && !(l.dots && t < l.start)) && (typing || tail) ? "" : "none";
-    l.caret.style.opacity = typing ? 1 : blink;
-  });
-  if (prompt) {
-    prompt.style.display = t >= doneAt + 0.1 ? "" : "none";
-    prompt.caret.style.opacity = blink;
-  }
-  counts.forEach((c) => {
-    const q = quartOut(clamp((t - c.at) / 0.9));
-    if (c.num) c.v.textContent = c.fmtK(c.to * q);
-    c.a.style.opacity = 0.35 + 0.65 * clamp((t - c.at) / 0.3);
-    if (c.a.classList.contains("like")) {
-      const on = t >= c.at + 0.5;
-      c.a.style.setProperty("--like-fill", on ? "var(--ac)" : "none");
-      c.a.style.setProperty("--like-stroke", on ? "var(--ac)" : "currentColor");
-      const pop = clamp((t - c.at - 0.5) / 0.35);
-      c.a.style.transform = on ? "scale(" + (1 + 0.25 * Math.sin(Math.PI * pop)) + ")" : "";
-    }
-  });
-  const over = feed.offsetHeight - body.clientHeight;
-  feed.style.transform = "translateY(" + (-Math.max(0, over)) + "px)";
-});
 </script>

@@ -90,3 +90,91 @@ def test_ready_extends_build_ready():
     d = json.loads(r.stdout)
     assert d["same"] and d["log"][-1] == "ready" and {"p1", "p2", "tick"} <= set(d["log"])
     assert d["log"].index("p1") < d["log"].index("ready")                  # waits for every registered promise
+
+
+# a tiny DOM + timeline stub: runs a stock effect's <script> the way build.py's SUBCOMP does and seeks its U.clock
+DOM = r"""
+global.window = {};
+require(%(fx)s);
+class Style { constructor() { this._p = {}; } setProperty(k, v) { this._p[k] = String(v); } getPropertyValue(k) { return this._p[k] || ""; } }
+class El {
+  constructor(tag) { this.tagName = String(tag).toUpperCase(); this.children = []; this.parentNode = null; this.style = new Style();
+    this._cls = new Set(); this._text = ""; this.attrs = {}; this.offsetWidth = 0; this.offsetHeight = 0; this.offsetTop = 0;
+    this.offsetLeft = 0; this.clientHeight = 0; this.clientWidth = 0; const self = this;
+    this.classList = { add: (...c) => c.forEach((x) => self._cls.add(x)), remove: (...c) => c.forEach((x) => self._cls.delete(x)),
+      contains: (c) => self._cls.has(c), toggle: (c, on) => { const v = on === undefined ? !self._cls.has(c) : !!on;
+        if (v) self._cls.add(c); else self._cls.delete(c); return v; } }; }
+  get className() { return Array.from(this._cls).join(" "); }
+  set className(v) { this._cls = new Set(String(v).split(/\s+/).filter(Boolean)); }
+  get textContent() { return this.children.length ? this.children.map((c) => c.textContent).join("") : this._text; }
+  set textContent(v) { this.children = []; this._text = String(v); }
+  set innerHTML(v) { this.children = []; this._html = String(v); }
+  get innerHTML() { return this._html || ""; }
+  appendChild(c) { if (c.parentNode) c.remove(); c.parentNode = this; this.children.push(c); return c; }
+  insertBefore(c, ref) { this.appendChild(c); return c; }
+  remove() { if (this.parentNode) { const p = this.parentNode; p.children = p.children.filter((x) => x !== this); this.parentNode = null; } }
+  removeChild(c) { c.remove(); return c; }
+  setAttribute(k, v) { this.attrs[k] = String(v); } getAttribute(k) { return this.attrs[k]; }
+  getBoundingClientRect() { return { left: 0, top: 0, width: 0, height: 0, right: 0, bottom: 0 }; }
+  getTotalLength() { return 1; } getPointAtLength() { return { x: 0, y: 0 }; }
+  all() { return this.children.reduce((a, c) => a.concat([c], c.all()), []); }
+  querySelectorAll(sel) { const c = sel.replace(/^\./, ""); return this.all().filter((e) => e._cls.has(c)); }
+  querySelector(sel) { return this.querySelectorAll(sel)[0] || null; }
+}
+global.document = { createElement: (t) => new El(t), createElementNS: (ns, t) => new El(t), documentElement: new El("html") };
+global.getComputedStyle = () => ({ getPropertyValue: () => "", color: "" });
+const updates = [];
+const tl = { to(target, vars) { if (vars && vars.onUpdate) updates.push([target, vars]); return tl; },
+             set() { return tl; }, fromTo() { return tl; } };
+const root = new El("div");
+const m = %(markup)s.match(/class="([^"]+)"/);
+if (m) root.appendChild(new El("div")).className = m[1];
+const P = %(params)s;
+const U = Object.assign(window.CutmateFX.make(tl, root, "c1", P), {
+  el(tag, cls, text, parent) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; (parent || root).appendChild(e); return e; },
+});
+%(script)s
+const seek = (t) => updates.forEach(([c, v]) => { c.t = t; v.onUpdate(); });
+const shown = (e) => { for (let x = e; x; x = x.parentNode) { const s = x.style;
+  if (s.display === "none" || s.visibility === "hidden" || (s.opacity !== undefined && s.opacity !== "" && Number(s.opacity) <= 0)) return false; }
+  return true; };
+const out = {};
+for (const [k, t, sel, what] of %(probes)s) {
+  seek(t);
+  out[k] = root.querySelectorAll(sel).map((e) => (what === "on" ? e.classList.contains("on") : what === "text" ? e.textContent : shown(e)));
+}
+console.log(JSON.stringify(out));
+"""
+
+
+def _run_effect(name: str, params: dict, probes: list) -> dict:
+    from cutmate.build import _sections
+    sec = _sections(plugin_root() / "themes" / "clean" / "components" / "custom" / f"{name}.html")
+    js = DOM % {"fx": json.dumps(str(web_dir() / "effects.js")), "markup": json.dumps(sec.get("markup", "")),
+                "params": json.dumps(params), "script": sec["script"], "probes": json.dumps(probes)}
+    r = subprocess.run(["node", "-e", js], capture_output=True, text=True, encoding="utf-8")
+    assert r.returncode == 0, r.stderr[-3000:]
+    return json.loads(r.stdout.strip().splitlines()[-1])
+
+
+def test_ui_mock_app_flips_toggles():
+    P = {"kind": "app", "title": "Connectors", "search": "fire", "lang": "pl", "at": 0.5, "end": 4.5, "w": 1000, "h": 880,
+         "dur": 4.5, "rows": [{"text": "Gmail", "toggle": False}, {"text": "Firecrawl", "toggle": True, "click": True},
+                              {"text": "Drive", "toggle": False}]}
+    d = _run_effect("ui-mock", P, [["early", 0.6, ".um-row", "shown"], ["late", 4.2, ".tg", "on"],
+                                   ["rows", 4.2, ".um-row", "shown"], ["before", 1.0, ".tg", "on"]])
+    assert d["early"] == [False, False, False]
+    assert d["rows"] == [True, True, True]
+    assert d["late"] == [False, True, False]
+    assert d["before"] == [False, False, False]           # the clicked row starts off and flips on at the click
+
+
+def test_checklist_rows_tick_in_order():
+    rows = [{"text": f"site{i}.com/x", "status": s} for i, s in enumerate(["ok", "bad", "warn", "ok"])]
+    P = {"title": "Link check", "rows": rows, "strike": True, "summary": {"value": 50, "suffix": "%"},
+         "lang": "en", "at": 1.0, "end": 5.0, "w": 1000, "h": 880, "dur": 5.0}
+    d = _run_effect("checklist", P, [["mid", 3.0, ".ck-row", "shown"], ["sum", 4.8, ".ck-sum-v", "text"],
+                                     ["start", 1.1, ".ck-row", "shown"]])
+    assert d["mid"] == [True, True, False, False]
+    assert d["start"] == [False, False, False, False]
+    assert d["sum"] == ["50%"]

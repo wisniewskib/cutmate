@@ -4,25 +4,29 @@ ROOT .im { position: absolute; inset: 0; overflow: hidden; font-family: var(--fo
   --lead: rgba(15, 23, 42, 0.38); --head: #0f172a; }
 ROOT .im.dark { --bg1: #1a1d25; --bg2: #0b0c10; --dot: rgba(255, 255, 255, 0.10); --lab: #1f232c; --labink: #ffffff;
   --labmut: #94a3b8; --lead: rgba(255, 255, 255, 0.42); --head: #ffffff; }
+/* theme "panel": the theme's own panel colour, cards and ink (light or dark follows the panel colour) */
+ROOT .im.panel { --bg1: var(--panel-bg, #0b0b0f); --bg2: var(--panel-bg, #0b0b0f); --lab: var(--card); --labink: var(--ink);
+  --labmut: var(--muted); }
 ROOT .im-bg { position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 42%, var(--bg1) 0%, var(--bg2) 100%); }
 ROOT .im-dots { position: absolute; inset: 0; background-image: radial-gradient(circle, var(--dot) 1.4px, transparent 1.7px);
   background-size: calc(var(--s) * 34px) calc(var(--s) * 34px); }
 ROOT .im-stage { position: absolute; inset: 0; }
 ROOT svg.im-lines { position: absolute; left: 0; top: 0; overflow: visible; }
-ROOT .im-title { position: absolute; left: 0; right: 0; text-align: center; color: var(--head); font-weight: 900;
+ROOT .im-title { position: absolute; left: 0; right: 0; text-align: center; color: var(--head); font-family: var(--font-display);
+  font-synthesis: none; font-weight: 900;
   letter-spacing: -0.03em; line-height: 1.05; }
 ROOT .im-title .bar { display: block; margin: calc(var(--s) * 14px) auto 0; width: calc(var(--s) * 110px);
   height: calc(var(--s) * 9px); border-radius: calc(var(--s) * 5px); background: var(--ac); transform-origin: center; }
 ROOT .im-label { position: absolute; left: 0; top: 0; box-sizing: border-box; display: flex; align-items: center;
   gap: calc(var(--s) * 14px); max-width: calc(var(--s) * 300px); background: var(--lab); color: var(--labink);
   padding: calc(var(--s) * 12px) calc(var(--s) * 20px) calc(var(--s) * 12px) calc(var(--s) * 12px);
-  border-radius: calc(var(--s) * 18px); font-weight: 800; font-size: calc(var(--s) * 30px); line-height: 1.1;
+  border-radius: calc(var(--s) * var(--radius, 28px) * 9 / 14); font-weight: 800; font-size: calc(var(--s) * 30px); line-height: 1.1;
   letter-spacing: -0.015em; box-shadow: 0 calc(var(--s) * 10px) calc(var(--s) * 28px) rgba(15, 23, 42, 0.18); }
 ROOT .im-label .n { flex: none; width: calc(var(--s) * 40px); height: calc(var(--s) * 40px); border-radius: 50%;
   display: flex; align-items: center; justify-content: center; color: #ffffff; font-weight: 900; font-size: calc(var(--s) * 22px); }
 ROOT .im-label.cnt { flex-direction: column; align-items: flex-start; gap: calc(var(--s) * 4px);
   padding: calc(var(--s) * 14px) calc(var(--s) * 26px); }
-ROOT .im-label.cnt .v { font-weight: 900; font-size: calc(var(--s) * 64px); line-height: 0.95; letter-spacing: -0.04em;
+ROOT .im-label.cnt .v { font-family: var(--font-display); font-synthesis: none; font-weight: 900; font-size: calc(var(--s) * 64px); line-height: 0.95; letter-spacing: -0.04em;
   font-feature-settings: "tnum" 1; }
 ROOT .im-label.cnt .l { font-weight: 800; font-size: calc(var(--s) * 24px); color: var(--labmut); text-transform: uppercase;
   letter-spacing: 0.04em; }
@@ -32,8 +36,17 @@ ROOT .im-label.cnt .l { font-weight: 800; font-size: calc(var(--s) * 24px); colo
 const s = Math.min(P.w / 1000, P.h / 820);
 const W = P.w, H = P.h;
 const box = root.querySelector(".im");
-const dark = P.theme === "dark";
+const onPanel = P.theme === "panel";
+const lightPanel = onPanel && (() => {           // "panel": light or dark follows the theme's --panel-bg
+  const pr = U.el("i", null, null, box);
+  pr.style.color = "var(--panel-bg, #0b0b0f)";
+  const m = String(getComputedStyle(pr).color || "").match(/[\d.]+/g);
+  pr.remove();
+  return !!(m && m.length >= 3 && 0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2] > 150);
+})();
+const dark = P.theme === "dark" || (onPanel && !lightPanel);
 if (dark) box.classList.add("dark");
+if (onPanel) box.classList.add("panel");
 box.style.setProperty("--s", s);
 box.style.setProperty("--ac", P.accent || "var(--accent)");
 const accent = P.accent || getComputedStyle(root).getPropertyValue("--accent").trim() || "#7dd3fc";
@@ -127,7 +140,8 @@ const timeAtD = (D) => {                                  // first time the belt
   return hi;
 };
 
-U.ready(Promise.all([U.three({ el: stage }), U.fonts([800, 900]).then(measure)]).then(([S]) => {
+const dispFam = getComputedStyle(document.documentElement).getPropertyValue("--font-display").trim();
+U.ready(Promise.all([U.three({ el: stage }), Promise.all([U.fonts([800, 900]), U.fonts([400, 700, 900], dispFam)]).then(measure)]).then(([S]) => {
   const { THREE, scene, renderer } = S;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap;

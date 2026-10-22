@@ -15,7 +15,7 @@
   {
     "name": "stat-card",
     "kind": "explainer",
-    "description": "One big number that counts up on a white card with a highlighter sweep, a label and an optional note; optional darkened screenshot behind.",
+    "description": "One big number that counts up: on a card with a highlighter sweep, a label and an optional note (optional darkened screenshot behind), or as a hero number filling the panel. Takes the theme's panel colour and fonts.",
     "params": {
       "value": "the number (counts up from 0; decimals kept)",
       "prefix": "optional text before the number, e.g. \"$\"",
@@ -23,7 +23,8 @@
       "label": "what the number means (short sentence)",
       "note": "optional small source / context line",
       "media": "optional screenshot shown darkened behind the card",
-      "accent": "optional accent colour (default theme --accent)"
+      "accent": "optional accent colour (default theme --accent)",
+      "layout": "\"card\" (default: the number on a card) or \"hero\" (the number fills the panel, no card, label under it)"
     },
     "follow": false,
     "place": false
@@ -46,11 +47,15 @@
   {
     "name": "ui-mock",
     "kind": "explainer",
-    "description": "Mock app window whose text types in character by character: an AI chat, a terminal session or a social post.",
+    "description": "Mock window in the theme's look: an AI chat, a terminal session or a social post whose text types in, a browser page (address bar, typed search, result rows, one row circled) or an app screen (typed filter, rows with toggles that a cursor clicks on). Browser / app actions are spaced evenly over the span: type search, rows in, clicks / circle.",
     "params": {
-      "kind": "\"chat\" (default), \"terminal\" or \"post\"",
-      "lines": "[{\"who\": \"user\"|\"ai\"|\"cmd\", \"text\": \"...\"}, ...] (terminal: user/cmd typed after $, ai printed as output)",
-      "title": "optional window / account name",
+      "kind": "\"chat\" (default), \"terminal\", \"post\", \"browser\" or \"app\"",
+      "lines": "chat / terminal / post: [{\"who\": \"user\"|\"ai\"|\"cmd\", \"text\": \"...\"}, ...] (terminal: user/cmd typed after $, ai printed as output)",
+      "title": "optional window / account name; browser: page heading; app: screen title (e.g. \"Connectors\")",
+      "url": "browser: the address shown in the address bar (domain bold, path muted)",
+      "search": "browser / app, optional: text typed into the page search / filter field (first action)",
+      "rows": "browser / app: up to 8 [{\"text\", \"sub\"?, \"badge\"?}] (app also \"toggle\"?: true|false = the switch's final state, \"click\"?: true = the cursor clicks the row and its switch flips to that state); they appear one by one after the search",
+      "highlight": "browser, optional: row index circled in the accent colour at the end",
       "accent": "optional accent colour (default theme --accent)",
       "replies": "post only, optional: real reply count (number counts up; text shown as is); absent = not shown",
       "reposts": "post only, optional: real repost count; absent = not shown",
@@ -68,8 +73,35 @@
       "token": "optional \"cube\" or \"sphere\": items travelling through the parts on the conveyor",
       "counter": "optional {\"to\": number, \"label\": \"...\"}: an output crate whose number counts up as tokens land in it",
       "title": "optional heading above the machine",
-      "theme": "\"light\" (default) or \"dark\" panel",
+      "theme": "\"light\" (default), \"dark\" or \"panel\" (the theme's --panel-bg, cards and ink; light or dark follows the panel colour)",
       "accent": "optional accent colour for tokens / crate / screen (default theme --accent)"
+    },
+    "follow": false,
+    "place": false
+  },
+  {
+    "name": "checklist",
+    "kind": "explainer",
+    "description": "Status table in the theme's look (e.g. a link check): 2-8 rows tick in one by one, each status pill resolves from \"···\" to OK / ERROR / WARNING / INFO (or your own label like \"200 OK\", \"404\", \"OUTDATED\"); bad rows can be struck through; optional big number beside the table that counts up.",
+    "params": {
+      "title": "optional heading of the table (e.g. \"Link check\")",
+      "rows": "2-8 [{\"text\", \"status\": \"ok\"|\"bad\"|\"warn\"|\"info\", \"label\"?}] in order (default labels pl: OK / BŁĄD / UWAGA / INFO, en: OK / ERROR / WARNING / INFO; label overrides)",
+      "strike": "optional true: bad rows are struck through after their status lands",
+      "summary": "optional {\"value\": number, \"suffix\"?, \"label\"?}: a big number beside the table, counting up while the rows land (e.g. {\"value\": 50, \"suffix\": \"%\", \"label\": \"failed\"})",
+      "accent": "optional accent colour (default theme --accent)"
+    },
+    "follow": false,
+    "place": false
+  },
+  {
+    "name": "headline",
+    "kind": "explainer",
+    "description": "The sentence's key phrase in big display type on the panel (filler for a sentence with no number, product or steps): typed letter by letter with a block caret, or words popping in; optional kicker label above.",
+    "params": {
+      "text": "1-6 words taken from the sentence",
+      "kicker": "optional small label above (e.g. \"Krok 1\")",
+      "mode": "\"type\" (default: typed with a block caret) or \"pop\" (words pop in one by one)",
+      "accent": "optional accent colour (default theme --accent)"
     },
     "follow": false,
     "place": false

@@ -192,3 +192,81 @@ def test_lint_checks_layout_components_when_present(tmp_path):
     for t in LAYOUT_COMPONENTS:
         (dst / "components" / f"{t}.html").unlink()
     assert not [p for p in lint_theme(dst, "t") if p.startswith(LAYOUT_COMPONENTS)]     # optional: absent is fine
+
+
+EXPLAINERS = ("stat-card", "flow", "ui-mock", "iso-machine", "checklist", "headline")
+
+
+def _custom_dir() -> Path:
+    return paths.theme_dir("clean") / "components" / "custom"
+
+
+def test_explainers_use_theme_tokens():
+    for name in EXPLAINERS:
+        text = (_custom_dir() / f"{name}.html").read_text(encoding="utf-8")
+        assert "var(--panel-bg" in text and "var(--font-display)" in text, name
+        assert "#0b0b0f" not in re.sub(r"var\([^)]*\)", "", text), name
+
+
+def test_index_json_documents_new_params():
+    import json
+    idx = {e["name"]: e for e in json.loads((_custom_dir() / "index.json").read_text(encoding="utf-8"))}
+    for name in ("checklist", "headline"):
+        assert idx[name]["kind"] == "explainer", name
+    ui = json.dumps(idx["ui-mock"]["params"], ensure_ascii=False)
+    assert "browser" in ui and "app" in ui
+    assert "layout" in idx["stat-card"]["params"]
+
+
+def test_new_templates_lint():
+    for name in ("checklist", "headline"):
+        effects.lint_effect(_custom_dir() / f"{name}.html")
+
+
+@pytest.mark.hf
+def test_explainers_take_theme_look(tmp_path, monkeypatch):
+    """A theme with a light panel colour: checklist, ui-mock app and stat-card hero all paint the panel in it."""
+    import json
+    import shutil
+    import sys
+    from PIL import Image
+    sys.path.insert(0, str(Path(__file__).parent))
+    from conftest import make_clip
+    from test_build import TIMED, WORDS
+    from cutmate import build as B
+    from cutmate.hf import check, hf
+    from cutmate.media import run
+    home = tmp_path / "home"
+    dst = home / "themes" / "lightpanel"
+    shutil.copytree(paths.theme_dir("clean"), dst)
+    tokens = (dst / "tokens.css").read_text(encoding="utf-8")
+    tokens = tokens.replace("--panel-bg: #0b0b0f;", "--panel-bg: #efece7;").replace("--accent: #7dd3fc;", "--accent: #c2501f;")
+    assert "#efece7" in tokens and "#c2501f" in tokens
+    (dst / "tokens.css").write_text(tokens, encoding="utf-8")
+    monkeypatch.setenv("CUTMATE_HOME", str(home))
+    o = tmp_path / "rec" / "out"
+    (o / "work").mkdir(parents=True)
+    make_clip(o / "aroll.mp4", dur=4.0, gaps=())
+    (o / "work" / "aligned_words.json").write_text(json.dumps(WORDS, ensure_ascii=False), encoding="utf-8")
+    (o / "work" / "edl_timed.json").write_text(json.dumps(TIMED), encoding="utf-8")
+    plan = {"panel": [
+        {"at": 0.1, "effect": "checklist", "params": {"title": "Link check", "summary": {"value": 50, "suffix": "%"}, "rows": [
+            {"text": "example.com/a", "status": "ok", "label": "200 OK"},
+            {"text": "example.com/b", "status": "bad", "label": "404"}]}},
+        {"at": "S1:mniej", "effect": "ui-mock", "params": {"kind": "app", "title": "Connectors", "search": "fire", "rows": [
+            {"text": "Alpha", "toggle": False}, {"text": "Beta", "toggle": True, "click": True}]}},
+        {"at": "S2:minus", "effect": "stat-card", "params": {"layout": "hero", "value": 50, "suffix": "%", "label": "X"}}]}
+    (o / "plan.json").write_text(json.dumps(plan, ensure_ascii=False), encoding="utf-8")
+    proj = B.build(o, theme="lightpanel")["project"]
+    chk = check(proj)
+    assert chk.status in ("ok", "deadline"), chk.output[-3000:]
+    for at in ("0.6", "1.7", "3.0"):
+        d = f"snap-{at}"
+        snap = run(hf("snapshot", "--at", at, "--no-end", "--describe", "false", "-o", d), cwd=proj)
+        assert snap.returncode == 0, (snap.stdout + snap.stderr)[-2000:]
+        shot = sorted((proj / d).glob("*.png"))[0]
+        img = Image.open(shot).convert("RGB")
+        w, h = img.size
+        px = img.getpixel((round(60 * w / 1080), round(60 * h / 1920)))
+        print(f"snapshot {at}: {shot} corner={px}")
+        assert all(abs(c - e) <= 6 for c, e in zip(px, (0xef, 0xec, 0xe7))), (at, shot, px)

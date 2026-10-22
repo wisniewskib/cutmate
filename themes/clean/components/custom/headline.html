@@ -1,0 +1,97 @@
+<style>
+ROOT .hl { position: absolute; inset: 0; overflow: hidden; background: var(--panel-bg, #0b0b0f); font-family: var(--font);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; color: var(--pi, #ffffff); }
+ROOT .hl-dots { position: absolute; inset: 0; opacity: 0.12;
+  background-image: radial-gradient(circle, var(--pi, #ffffff) 1.4px, transparent 1.6px);
+  background-size: calc(var(--s) * 38px) calc(var(--s) * 38px); }
+ROOT .hl-glow { position: absolute; inset: 0;
+  background: radial-gradient(closest-side at 50% 50%, color-mix(in srgb, var(--ac) 18%, transparent), transparent); }
+ROOT .hl-kick { position: relative; margin-bottom: calc(var(--s) * 34px); padding: 0.3em 0.8em; border-radius: calc(var(--s) * var(--radius, 28px) * 0.5);
+  background: var(--ac); color: var(--on-accent, var(--ink)); font-weight: 800; font-size: calc(var(--s) * 34px);
+  letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; }
+ROOT .hl-text { position: relative; box-sizing: border-box; font-family: var(--font-display); font-synthesis: none; font-weight: 900;
+  line-height: 1.02; letter-spacing: -0.02em; overflow-wrap: break-word; }
+ROOT .hl-text .w { display: inline-block; white-space: pre; }
+ROOT .hl-caret { display: inline-block; width: 0.5em; height: 0.82em; margin-left: 0.06em; vertical-align: -0.06em; background: var(--ac); }
+</style>
+<markup><div class="hl"></div></markup>
+<script>
+const s = Math.min(P.w / 1000, P.h / 820);
+const box = root.querySelector(".hl");
+box.style.setProperty("--s", s);
+box.style.setProperty("--ac", P.accent || "var(--accent)");
+const clamp = (v) => Math.min(1, Math.max(0, v));
+const backOut = (u) => 1 + 2.4 * Math.pow(u - 1, 3) + 1.4 * Math.pow(u - 1, 2);
+const quartOut = (u) => 1 - Math.pow(1 - u, 4);
+// ink on the panel: the theme's --ink on a light --panel-bg, white on a dark one
+box.style.setProperty("--pi", (() => {
+  const pr = U.el("i", null, null, box);
+  pr.style.color = "var(--panel-bg, #0b0b0f)";
+  const m = String(getComputedStyle(pr).color || "").match(/[\d.]+/g);
+  pr.remove();
+  return m && m.length >= 3 && 0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2] > 150 ? "var(--ink)" : "#ffffff";
+})());
+const mode = P.mode === "pop" ? "pop" : "type";
+
+U.el("div", "hl-dots", null, box);
+const glow = U.el("div", "hl-glow", null, box);
+const kick = P.kicker ? U.el("div", "hl-kick", String(P.kicker), box) : null;
+const pad = 60 * s;
+const text = U.el("div", "hl-text", null, box);
+text.style.maxWidth = P.w - 2 * pad + "px";
+const words = String(P.text == null ? "" : P.text).trim().split(/\s+/).filter(Boolean).slice(0, 6);
+// type: every word is a span filled letter by letter (the line breaks stay where the full text puts them)
+const spans = words.map((w, i) => {
+  const el = U.el("span", "w", null, text);
+  if (i < words.length - 1) U.el("span", null, " ", text);
+  return { el, ch: Array.from(w) };
+});
+const caret = mode === "type" ? U.el("span", "hl-caret", null, text) : null;
+const total = spans.reduce((a, w) => a + w.ch.length, 0);
+
+const t0 = P.at + (kick ? 0.45 : 0.3);
+const tEnd = Math.max(t0 + 0.3, Math.min(t0 + total / 16, P.end - 0.6));    // ~16 letters / s, done before the end
+const popStep = (tEnd - t0) / Math.max(1, words.length);
+
+// fit: the largest size at which the full headline fits the panel (measured with the display font loaded)
+const fit = () => {
+  spans.forEach((w) => { w.el.textContent = w.ch.join(""); });
+  const room = P.h - 2 * pad - (kick ? kick.offsetHeight + 34 * s : 0);
+  let fs = 210 * s;
+  for (let k = 0; k < 24; k++) {
+    text.style.fontSize = fs + "px";
+    if (text.offsetHeight <= room && text.scrollWidth <= P.w - 2 * pad + 1) break;
+    fs *= 0.92;
+  }
+  if (mode === "type") spans.forEach((w) => { w.el.textContent = ""; });
+};
+fit();
+const dispFam = getComputedStyle(document.documentElement).getPropertyValue("--font-display").trim();
+U.ready(Promise.all([U.fonts([800, 900]), U.fonts([400, 700, 900], dispFam)]).then(fit));
+
+U.clock((t) => {
+  const vis = clamp((t - P.at) / 0.25) * clamp((P.end - t) / 0.25);
+  box.style.opacity = vis;
+  box.style.visibility = vis > 0 ? "visible" : "hidden";
+  if (!vis) return;
+  glow.style.transform = "scale(" + (0.9 + 0.12 * clamp((t - P.at) / 1.2)) + ")";
+  if (kick) {
+    const q = clamp((t - P.at) / 0.4);
+    kick.style.opacity = clamp(q * 2);
+    kick.style.transform = "translateY(" + ((1 - quartOut(q)) * -24 * s) + "px) scale(" + (0.8 + 0.2 * backOut(q)) + ")";
+  }
+  if (mode === "type") {
+    const n = t >= tEnd ? total : Math.max(0, Math.floor((t - t0) / (tEnd - t0) * total + 1e-6));
+    let left = n;
+    spans.forEach((w) => { const k = Math.min(w.ch.length, Math.max(0, left)); w.el.textContent = w.ch.slice(0, k).join(""); left -= k; });
+    const typing = t >= t0 && t < tEnd;
+    caret.style.opacity = typing || Math.floor((t - P.at) * 2.2) % 2 === 0 ? 1 : 0;
+  } else {
+    spans.forEach((w, i) => {
+      const q = clamp((t - t0 - i * popStep) / 0.35);
+      w.el.style.opacity = clamp(q * 3);
+      w.el.style.transform = "translateY(" + ((1 - quartOut(q)) * 30 * s) + "px) scale(" + (0.6 + 0.4 * backOut(q)) + ")";
+    });
+  }
+});
+</script>
