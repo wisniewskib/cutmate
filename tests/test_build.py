@@ -1277,10 +1277,9 @@ def test_panel_fade_transition(out, theme):
 def test_panel_build_renders(out, monkeypatch):
     """A 3-item panel + a scene passes `hyperframes check`; mid item 2 the panel is on top and the A-roll at the bottom."""
     from PIL import Image
+    from cutmate.hf import check, hf
     from cutmate.hf import ensure_project as real_ensure
-    from cutmate.hf import check
     from cutmate.media import run
-    from cutmate.hf import hf
     monkeypatch.setattr(B, "ensure_project", real_ensure)
     _png(out, "p.png", "orange")
     _png(out, "s.png", "red")
@@ -1308,7 +1307,6 @@ def test_panel_build_renders(out, monkeypatch):
     def diff(dy):
         return ImageStat.Stat(ImageChops.difference(bottom, raw.crop((0, round((1100 - dy) * k), w, round((1920 - dy) * k))))).mean[0]
     assert diff(672) < diff(0) / 2, (diff(672), diff(0))
-    print(f"snapshot: {shot} chk={chk.status} diff672={diff(672):.1f} diff0={diff(0):.1f}")
 
 
 def test_band_graphic_hides_the_panel_item_under_it(out, theme):
