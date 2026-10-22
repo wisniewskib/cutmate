@@ -11,7 +11,7 @@ import math
 import tempfile
 from pathlib import Path
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 
 from .build import build, checkpoint
 from .errors import CutmateError
@@ -50,37 +50,37 @@ GRAPHICS_916 = [
          {"label": "Wejście", "shape": "funnel"}, {"label": "Cięcie", "shape": "cylinder"},
          {"label": "Podgląd", "shape": "screen"}, {"label": "Napęd", "shape": "gear"}]}},
 ]
-# split-panel 9:16: the panel lives in S3-S4 (the band graphics of S1-S2 would overlap its text), 2-2.5 s items; a
-# full-screen scene in S3 covers most of the ~3 s hole between item 3 and 4 (so no "panel gap" warning); the panel
-# slides in with item 1 and out after the last
+# split-panel 9:16: the panel opens at 0 (first item at 0.2 s) and runs on 3 s items; band graphics that overlap an item
+# hide it meanwhile (build); a full-screen scene in S3 covers most of the ~3 s hole between items 8 and 9 (so no "panel
+# gap" warning); the panel slides out after the last item
 PANEL_916 = [
-    {"at": 24.2, "until": 26.6, "effect": "stat-card",
+    {"at": 0.2, "until": 3.0, "effect": "stat-card",
      "params": {"value": 75, "suffix": "%", "label": "mniej tokenów w każdej odpowiedzi", "note": "dane przykładowe",
                 "layout": "hero"}},
-    {"at": 26.6, "until": 29.0, "effect": "checklist",
+    {"at": 3.0, "until": 6.0, "effect": "checklist",
      "params": {"title": "Sprawdzenie linków", "rows": [
          {"text": "strona główna", "status": "ok"}, {"text": "cennik", "status": "ok"},
          {"text": "stary wpis", "status": "bad", "label": "404"}, {"text": "regulamin", "status": "warn"}],
                 "summary": {"value": 25, "suffix": "%", "label": "błędnych"}}},
-    {"at": 29.0, "until": 31.2, "effect": "ui-mock",
+    {"at": 6.0, "until": 9.0, "effect": "ui-mock",
      "params": {"kind": "browser", "url": "example.com/narzędzia", "title": "Narzędzia", "search": "wideo",
                 "rows": [{"text": "Edytor wideo", "sub": "montaż"}, {"text": "Generator napisów", "sub": "AI"},
                          {"text": "Kompresor", "sub": "pliki"}], "highlight": 1}},
-    {"at": 34.1, "until": 36.3, "effect": "ui-mock",
+    {"at": 9.0, "until": 12.0, "effect": "ui-mock",
      "params": {"kind": "app", "title": "Połączenia", "rows": [
          {"text": "Dysk", "toggle": False, "click": True}, {"text": "Kalendarz", "toggle": True},
          {"text": "Poczta", "toggle": False, "click": True}]}},
-    {"at": 36.3, "until": 38.3, "effect": "flow",
+    {"at": 12.0, "until": 15.0, "effect": "flow",
      "params": {"title": "Jak to działa", "nodes": ["Nagranie", "Transkrypcja", "Plan", "Gotowy film"]}},
-    {"at": 38.3, "until": 39.9, "effect": "headline", "params": {"text": "Zero zbędnych pauz", "kicker": "Efekt"}},
-    {"at": 39.9, "until": 42.4, "effect": "iso-machine",
+    {"at": 15.0, "until": 18.0, "effect": "headline", "params": {"text": "Zero zbędnych pauz", "kicker": "Efekt"}},
+    {"at": 18.0, "until": 21.0, "effect": "iso-machine",
      "params": {"title": "Od nagrania do filmu", "theme": "panel", "token": "cube", "counter": {"to": 12, "label": "klipów"},
                 "parts": [{"label": "Wejście", "shape": "funnel"}, {"label": "Cięcie", "shape": "cylinder"},
                           {"label": "Podgląd", "shape": "screen"}]}},
-    {"at": 42.4, "until": 44.4, "media": "broll/page.png"},
-    {"at": 44.4, "until": 46.4, "media": "broll/clip.mp4", "fit": "contain"},
+    {"at": 21.0, "until": 24.0, "media": "broll/page.png"},
+    {"at": 26.8, "until": 29.8, "media": "broll/clip.mp4", "fit": "contain"},
 ]
-SCENES_916 = [{"from": 31.5, "to": 33.5, "media": "broll/page.png"}]
+SCENES_916 = [{"from": 24.4, "to": 26.4, "media": "broll/page.png"}]
 GRAPHICS_169 = [
     {"type": "title", "at": "S1:słowo1", "until": "S1:słowo3", "kicker": "Kicker", "text": "Tytuł ąę"},
     {"type": "counter", "at": "S1:słowo6", "until": "S1:słowo8", "to": 75, "prefix": "-", "suffix": "%", "label": "TOKENÓW", "hit": True},
@@ -120,6 +120,27 @@ SEG = 12.0
 LOOK = ("title", "counter", "list", "chip", "stamp", "bars")  # snapshotted at their entrance as well
 
 
+def _page_image() -> Image.Image:
+    """A recognisable web page (window bar, heading, text lines, a button): proves media renders in the panel / a scene."""
+    img = Image.new("RGB", (1600, 1000), "#f8fafc")
+    d = ImageDraw.Draw(img)
+    d.rectangle((0, 0, 1600, 90), fill="#1e293b")
+    for i, c in enumerate(("#f87171", "#fbbf24", "#4ade80")):
+        d.ellipse((40 + i * 50, 30, 70 + i * 50, 60), fill=c)
+    d.rounded_rectangle((260, 20, 1400, 70), radius=24, fill="#334155")
+    try:
+        big, small = ImageFont.load_default(size=96), ImageFont.load_default(size=40)
+    except TypeError:                                    # old Pillow: fixed-size default font
+        big = small = ImageFont.load_default()
+    d.text((100, 170), "Example page", fill="#0f172a", font=big)
+    d.text((300, 28), "example.com/strona", fill="#e2e8f0", font=small)
+    for i, w in enumerate((1300, 1180, 1250, 900, 1120, 760)):
+        d.rounded_rectangle((100, 340 + i * 70, 100 + w, 380 + i * 70), radius=12, fill="#cbd5e1")
+    d.rounded_rectangle((100, 810, 480, 910), radius=24, fill="#2563eb")
+    d.text((165, 840), "Dalej", fill="white", font=small)
+    return img
+
+
 def _split_panel(fmt: str, layout: Layout | None) -> bool:
     return fmt == "9:16" and layout is not None and layout.mode == "split-panel"
 
@@ -154,9 +175,7 @@ def _synthetic_rec(root: Path, fmt: str = "9:16", clip: Path | None = None, layo
         r = run(cmd)
         if r.returncode:
             raise CutmateError("ffmpeg failed creating theme-check media: " + " ".join(r.stderr.split())[-300:])
-    img = Image.new("RGB", (1600, 1000), "#1e293b")
-    ImageDraw.Draw(img).rectangle((80, 80, 1520, 920), outline="#7dd3fc", width=12)
-    img.save(rec / "broll" / "page.png")
+    _page_image().save(rec / "broll" / "page.png")
     words, timed = [], []
     for s in range(nseg):
         sid = f"S{s + 1}"

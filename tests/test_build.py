@@ -1309,3 +1309,21 @@ def test_panel_build_renders(out, monkeypatch):
         return ImageStat.Stat(ImageChops.difference(bottom, raw.crop((0, round((1100 - dy) * k), w, round((1920 - dy) * k))))).mean[0]
     assert diff(672) < diff(0) / 2, (diff(672), diff(0))
     print(f"snapshot: {shot} chk={chk.status} diff672={diff(672):.1f} diff0={diff(0):.1f}")
+
+
+def test_band_graphic_hides_the_panel_item_under_it(out, theme):
+    """A stamp / counter over a panel item hides that item for the overlap (0.15 s fades); other items and a plan
+    without overlap are untouched."""
+    _png(out)
+    _fx(out, "orb")
+    _with_layout_components(theme)
+    plan = {**PANEL3, "graphics": [{"type": "stamp", "at": 1.0, "until": 1.5, "text": "NIE."}]}
+    write_plan(out, plan)
+    html = (B.build(out, theme=theme)["project"] / "index.html").read_text(encoding="utf-8")
+    first = next(h[0] for h in _hosts(html) if h[0].endswith("-custom"))
+    band = [h for h in cfg_of(html)["hide"] if h[2] == 0.15]
+    assert band == [[f"#{first}-slot", 1.0, 0.15, 1.5, 0.15]]
+    assert [h for h in cfg_of(html)["hide"] if h[0].endswith("-stamp-slot")] == []
+    write_plan(out, PANEL3)                           # no overlapping graphic: exactly the handoff hides, as before
+    html = (B.build(out, theme=theme)["project"] / "index.html").read_text(encoding="utf-8")
+    assert not [h for h in cfg_of(html)["hide"] if h[2] == 0.15]

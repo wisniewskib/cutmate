@@ -68,6 +68,7 @@ SLIDE_OUT = 'tl.to(root, {{ y: -{d}, duration: 0.4, ease: "power3.inOut", immedi
 SLIDE = SLIDE_IN + SLIDE_OUT
 FADE_IN = "\n    tl.fromTo(root, { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.2 }, P.at);"
 HANDOFF = 0.2                 # a panel item's host runs on this long after the next item starts (the next one covers it)
+BAND_FADE = 0.15              # a panel item fades out / in under a band graphic (title, counter…) that overlaps it
 SCENE_FADE = 0.25             # scene.html / an effect scene: fade in / out
 
 
@@ -616,6 +617,7 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
     item_end = {id(a): round(min(b.start + HANDOFF, end), 3) for a, b in zip(panel_items, panel_items[1:])}
     scenes = [(g.start, g.end) for g in items if g.params.get("_scene")]
     hide = []
+    bands = [(x.start, x.end) for x in items if x.type != "panel" and not x.params.get("_panel") and not x.params.get("_scene")]
     sides = [[g.start, round(max(g.start + 0.45, g.end - 0.4), 3),
               round((1440 if g.params["speaker"] == "right" else 480) - plan.face.get(_seg_at(timed, g.start), FACE_DEFAULT)[0] * W)]
              for g in plan.graphics if g.type == "side"]
@@ -677,6 +679,8 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
         # (from just before its start, over the handoff), any graphic under a full-frame scene (with the scene's fades).
         # Nothing changes on screen; `hyperframes check` sees a mid-fade mount, not text hidden under an opaque layer.
         spans = [(a, SCENE_FADE, b, SCENE_FADE) for a, b in scenes if not scene and a < g.end and b > hs]
+        if items[i].params.get("_panel"):               # a band graphic over a panel item hides the item while it shows
+            spans += [(max(a, hs), BAND_FADE, b, BAND_FADE) for a, b in bands if a < g.end and b > hs]
         if id(items[i]) in item_end:                   # (items[i]: the planned graphic, g: its host-length copy)
             spans.append((max(hs, g.end - HANDOFF - 0.02), HANDOFF + 0.02, None, 0))
         hide += [[f"#{cid}-slot", *h] for h in hide_spans(spans)]

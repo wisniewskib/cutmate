@@ -283,7 +283,7 @@ def test_synthetic_split_panel_plan(tmp_path):
     assert len(raw["panel"]) == 9 and len(raw["scenes"]) == 1
     assert (out.parent / "broll" / "page.png").exists() and (out.parent / "broll" / "clip.mp4").exists()
     plan = load_plan(out, layout=SPLIT_DEFAULTS)
-    assert not [w for w in plan.warnings if "WARN panel gap" in w]
+    assert not [w for w in plan.warnings if "WARN panel gap" in w] and plan.panel["open_at_zero"]
     # classic 9:16 and 16:9 keep the old plan
     out2 = _synthetic_rec(tmp_path / "c", "9:16", None, None)
     assert "panel" not in json.loads((out2 / "plan.json").read_text(encoding="utf-8"))
