@@ -3,12 +3,11 @@ from pathlib import Path
 
 import pytest
 
-SPLIT_PANEL_SNAPSHOTS = 35
-LOOK_TYPES = ("title", "counter", "list", "chip", "stamp", "bars")
-
 from cutmate import effects, paths
 from cutmate.build import _sections
 from cutmate.plan import TYPES
+
+SPLIT_PANEL_SNAPSHOTS = 35   # the split-panel theme check sample: panel item / scene mids + LOOK + settled tiles
 
 EXTRA = ("chapter",)
 PENDING = ()  # components arrive in Tasks 6 and 7 — remove each when its file exists
@@ -328,3 +327,32 @@ def test_theme_check_split_panel(tmp_path, monkeypatch):
     contact = tmp_path / "contact.png"
     themes._contact_sheet({"9:16": r, "16:9": r}, contact)    # every LOOK type has its entrance + settled tile
     assert Image.open(contact).width == 1620
+
+
+def test_split_panel_items_have_a_free_window_and_mid_snapshot(tmp_path):
+    from cutmate.layout import SPLIT_DEFAULTS
+    from cutmate.plan import load_plan
+    from cutmate.theme_check import LOOK, _synthetic_rec, free_window, snapshot_times
+    out = _synthetic_rec(tmp_path, "9:16", None, SPLIT_DEFAULTS)
+    plan = load_plan(out, layout=SPLIT_DEFAULTS)
+    assert not [w for w in plan.warnings if "WARN panel gap" in w]
+    cps, labels = snapshot_times(plan.graphics, [])
+    items = [g for g in plan.graphics if g.params.get("_panel")]
+    assert len(items) == 9
+    for g in items:
+        w = free_window(g, plan.graphics)
+        assert w and w[1] - w[0] >= 1.0, (g.type, g.start, g.end, w)
+        mids = [t for t, ty, k in labels if k == "mid" and g.start <= t <= g.end]
+        assert any(w[0] <= t <= w[1] for t in mids), (g.start, w, mids)
+    assert {ty for _, ty, k in labels if k == "entrance"} == set(LOOK)    # every LOOK type keeps its tile
+
+
+def test_free_window():
+    from cutmate.theme_check import free_window
+    item = _g("custom", 0.0, 6.0, _panel=True)
+    assert free_window(item, [item]) == (0.0, 6.0)                                       # no band at all
+    assert free_window(item, [item, _g("title", -1.0, 2.0)]) == (2.0, 6.0)               # a band covering the start
+    assert free_window(item, [item, _g("title", 1.0, 2.0), _g("chip", 4.5, 5.0)]) == (2.0, 4.5)   # bands in the middle
+    assert free_window(item, [item, _g("title", 0.0, 6.5)]) is None                      # a band covering it all
+    assert free_window(item, [item, _g("scene", 1.0, 5.0, _scene=True)]) == (0.0, 6.0)   # scenes / panel layers are no bands
+    assert free_window(item, [item, _g("panel", 0.0, 6.0)]) == (0.0, 6.0)
