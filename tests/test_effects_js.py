@@ -858,6 +858,24 @@ def test_burst_out_layers():
     assert d["gl"][1] < d["cut"][1] and d["gl"][2] > d["cut"][2]
 
 
+def test_burst_out_held_object_clears_a_leaning_head():
+    """test clip 2.4–3.1 s: the static face (P.face) is left of centre, but the tracked face (P.faces) leans right
+    toward the held gem; the gem slides away so it stays >= head + its radius off the tracked face at every frame of
+    the hold, inside the frame, without jumps (<= 0.03·W per 1/30 s); without P.faces the path is unchanged."""
+    P = {"at": 0.3, "end": 3.2, "hit_at": 1.56, "dur": 3.2, "w": 1920, "h": 1080, "lang": "pl", "face": [822, 255],
+         "label": "cutmate"}
+    lean = [[round(0.1 * i, 2), 822 + max(0, 0.1 * i - 2.0) * 320, 255 - max(0, 0.1 * i - 2.0) * 120] for i in range(33)]
+    ts = [round(1.8 + i / 30, 4) for i in range(int((3.2 - 0.35 - 1.8) * 30))]
+    base, moved = _burst(P, [0.3], ts)["path"], _burst(dict(P, faces=lean), [0.3], ts)
+    hr = moved["spec"]["head"]
+    for t, p in zip(ts, moved["path"]):
+        fx_, fy_ = next(([x, y] for tt, x, y in reversed(lean) if tt <= t), lean[0][1:])
+        assert ((p["x"] - fx_) ** 2 + (p["y"] - fy_) ** 2) ** 0.5 >= p["r"] + hr - 2, (t, p, fx_)
+        assert p["r"] <= p["x"] <= 1920 - p["r"], p
+    xs = [p["x"] for p in moved["path"]]
+    assert max(abs(a - b) for a, b in zip(xs, xs[1:])) <= 0.03 * 1920
+    assert _burst(dict(P, faces=[]), [0.3], ts)["path"] == base
+
 def test_burst_out_overshoots_at_the_hit():
     """The "flies at the camera" beat: the object is ~1.25x its held size on the impact word, then settles to 1.0 (no
     second pop); the label under the held object keeps a clear gap above the burned captions."""

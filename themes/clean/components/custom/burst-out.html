@@ -46,7 +46,9 @@ function burstSpec(P) {
     const R = 0.08 * m;
     best = { R, cx: side > 0 ? w - R - pad : R + pad, cy: Math.max(sb.y + R + pad, Math.min(face[1], sb.y + sb.h - R - pad - lab)) };
   }
-  return { w, h, m, face, at, end, hit, head, side, pad, labelPx, R: best.R, cx: best.cx, cy: best.cy, low: sb.y + sb.h - 0.1 * m,
+  const faces = Array.isArray(P.faces) && P.faces.length ? P.faces : null;   // the tracked face over time (build)
+  return { w, h, m, face, faces, at, end, hit, head, side, pad, labelPx, lab, sb, R: best.R, cx: best.cx, cy: best.cy,
+           low: sb.y + sb.h - 0.1 * m,
            settle: Math.min(0.9, Math.max(0.2, (end - BO_EXIT - hit) * 0.5)) };
 }
 const bez = (a, b, c, d, u) => { const v = 1 - u; return v * v * v * a + 3 * v * v * u * b + 3 * v * u * u * c + u * u * u * d; };
@@ -73,11 +75,31 @@ function burstPath(o, t) {
   let k;
   if (t < o.hit) { const p = Math.min(1, Math.max(0, (t - o.at) / Math.max(1e-3, o.hit - o.at))); k = 0.2 + 1.05 * p * p * p; }
   else { const dt = t - o.hit; k = 1 + 0.25 * Math.exp(-5 * dt) * Math.cos(6 * dt); }
-  const s = k * (1 - e * e);
-  return { x, y, z, s, u, r: o.R * s * (BO_CAMZ - BO_ZF) / (BO_CAMZ - z), spin: e * e * 9, vis: t >= o.at && t < o.end && s > 0.001 };
+  const s = k * (1 - e * e), r = o.R * s * (BO_CAMZ - BO_ZF) / (BO_CAMZ - z);
+  const push = burstClear(o, t, x, y, r);
+  return { x: x + push[0], y: y + push[1], z, s, u, r, spin: e * e * 9, push, vis: t >= o.at && t < o.end && s > 0.001 };
+}
+// the held object keeps clear of the TRACKED face (o.faces, the speaker leaning toward it): from the hit on (ramped in
+// over 0.2 s) it slides away from the face (smoothed over ±0.1 s) to >= head + its radius, on its own side; at the frame
+// edge it drops lower instead (above the label / captions). [dx, dy] px; [0, 0] without a face track
+function burstClear(o, t, x, y, r) {
+  if (!o.faces || t <= o.hit) return [0, 0];
+  const TA = window.CutmateFX.pure.trackAt, fs = [t - 0.1, t, t + 0.1].map((q) => TA(o.faces, q)).filter(Boolean);
+  if (!fs.length) return [0, 0];
+  const fx = fs.reduce((a, f) => a + f[0], 0) / fs.length, fy = fs.reduce((a, f) => a + f[1], 0) / fs.length;
+  const need = o.head + r + 0.01 * o.m, ramp = Math.min(1, (t - o.hit) / 0.2);
+  const dy0 = y - fy, gapX = Math.sqrt(Math.max(0, need * need - dy0 * dy0));
+  let nx = o.side > 0 ? Math.max(x, fx + gapX) : Math.min(x, fx - gapX);
+  nx = Math.min(Math.max(nx, r + o.pad), o.w - r - o.pad);
+  let ny = y;
+  const dx1 = nx - fx;
+  if (Math.hypot(dx1, ny - fy) < need) {             // still too close at the edge: lower, down to the label / captions
+    ny = Math.min(Math.max(ny, fy + Math.sqrt(Math.max(0, need * need - dx1 * dx1))), o.sb.y + o.sb.h - r - o.pad - o.lab);
+  }
+  return [(nx - x) * ramp, (ny - y) * ramp];
 }
 const WOW = (window.CutmateFX.wow = window.CutmateFX.wow || {});
-if (!WOW.burstPath) Object.assign(WOW, { burstSpec, burstPath });
+if (!WOW.burstPath) Object.assign(WOW, { burstSpec, burstPath, burstClear });
 
 // ---- layers and label (synchronous: the timeline holds them before any WebGL exists) ----
 const sp = burstSpec(P);
@@ -99,7 +121,7 @@ if (P.label) {
     let x0 = Math.min(Math.max(p.x - width / 2, sp.pad), sp.w - sp.pad - width);
     if (sp.side > 0) x0 = Math.max(x0, Math.min(sp.face[0] + sp.head, sp.w - sp.pad - width));   // never over the face
     else x0 = Math.min(x0, Math.max(sp.face[0] - sp.head - width, sp.pad));
-    const y0 = sp.cy + sp.R + 0.02 * sp.m;
+    const y0 = sp.cy + sp.R + 0.02 * sp.m + p.push[1];    // follows the object when it drops below a leaning head
     const k = 0.6 + 0.4 * (1 - Math.pow(1 - a, 3)) + 0.08 * Math.sin(Math.PI * a);
     labelEl.style.opacity = String(a * (1 - out));
     labelEl.style.transform = "translate(" + x0.toFixed(1) + "px," + (y0 + (1 - a) * 30).toFixed(1) + "px) scale(" + k.toFixed(3) + ")";

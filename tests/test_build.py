@@ -1537,6 +1537,26 @@ def _fake_cut(calls):
     return fake
 
 
+def test_wow_bg_effect_gets_the_face_track(out, theme, monkeypatch):
+    """A WOW bg effect (burst-out) also gets P.faces = the tracked face over its span (region px, local s, held through
+    gaps), so its held object keeps clear of the head when the speaker leans; none without a face track."""
+    monkeypatch.setattr(B, "bg_cutout", lambda aroll, a, b, media: ((media / "bgcut-1000-3000.webm").write_bytes(b"w"),
+                                                                    "bgcut-1000-3000.webm")[-1])
+    (out / "work").mkdir(exist_ok=True)
+    (out / "work" / "tracks.json").write_text(json.dumps({"tracks": {
+        "face": [[t / 10, 0.4 + t / 400, 0.3, 0.9] for t in range(50)]}}), encoding="utf-8")
+    write_plan(out, {"graphics": [{"type": "bg", "from": "S2:minus", "to": "S2:Claude'a", "effect": "burst-out",
+                                   "hit": "S2:75%"}]})
+    fx = (B.build(out, theme=theme)["project"] / "compositions" / "gx-01-custom.html").read_text(encoding="utf-8")
+    P = json.loads(re.search(r"const P = (\{.*?\});?\n", fx).group(1))
+    faces = P["faces"]
+    assert faces and faces[0][0] == P["at"] and faces[-1][0] >= P["end"] - 0.1     # local s over the span
+    t, x, y = faces[0]
+    assert x == pytest.approx((0.4 + (t + 1.8) / 40) * 1080, abs=1) and y == pytest.approx(0.3 * 1920, abs=1)
+    (out / "work" / "tracks.json").write_text(json.dumps({"tracks": {"face": []}}), encoding="utf-8")
+    fx = (B.build(out, theme=theme)["project"] / "compositions" / "gx-01-custom.html").read_text(encoding="utf-8")
+    assert "faces" not in json.loads(re.search(r"const P = (\{.*?\});?\n", fx).group(1))
+
 def test_hits_use_hit_anchor(out, theme):
     write_plan(out, {"graphics": [{"type": "title", "at": "S2:minus", "until": "S2:</script>", "text": "X",
                                    "hit": "S2:Claude'a"}]})

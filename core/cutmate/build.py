@@ -525,6 +525,10 @@ def subcomp(cid: str, g: Graphic, host_start: float, theme: Path, assets: Path, 
             P["hit_at"] = loc(g.params["_hit_at"])
         if face:                                         # the bg segment's face (plan.face) in region px
             P["face"] = [round(face[0] * W - rx, 1), round(face[1] * H - ry, 1)]
+            faces = [[t, round(x - rx, 1), round(y - ry, 1)] for t, x, y in held_slice(
+                (tracks or {}).get("tracks", {}).get("face", []), g.start, g.end, host_start, W, H, screen)]
+            if faces:                                    # the tracked face over time (a held object keeps off it)
+                P["faces"] = faces
         if caption_band:                                 # the burned captions in region px (only where they cross it)
             y0, y1 = max(0, caption_band[0] - ry), min(rh, caption_band[1] - ry)
             if y1 > y0:
