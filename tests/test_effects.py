@@ -317,6 +317,24 @@ def test_new_forbidden_apis(tmp_path, api):
         E.lint_effect(p)
 
 
+def test_lint_rejects_unbundled_three_addon(tmp_path):
+    """Only the vendored three.js addons resolve offline (importmap three/addons/ -> the local examples/jsm/): an effect
+    importing another one is a one-line build error that lists the bundled ones; a bundled one lints."""
+    bad = tmp_path / "rb.html"
+    bad.write_text(GOOD.replace("U.clock((t) => {});", 'import("three/addons/geometries/RoundedBoxGeometry.js");'),
+                   encoding="utf-8")
+    with pytest.raises(PlanError) as e:
+        E.lint_effect(bad)
+    msg = str(e.value)
+    assert msg.startswith("rb.html: imports three/addons/geometries/RoundedBoxGeometry.js, which cutmate does not bundle")
+    assert "\n" not in msg and "loaders/GLTFLoader.js" in msg and "postprocessing/UnrealBloomPass.js" in msg
+    assert E.three_addons()[:2] == ["environments/RoomEnvironment.js", "geometries/TextGeometry.js"]
+    ok = tmp_path / "ok3.html"
+    ok.write_text(GOOD.replace("U.clock((t) => {});", "import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';"),
+                  encoding="utf-8")
+    E.lint_effect(ok)
+
+
 def test_every_repo_effect_passes_the_extended_lint():
     """Every stock effect / component script in the repo still lints with the extended FORBIDDEN list."""
     root = plugin_root()

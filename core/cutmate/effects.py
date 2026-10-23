@@ -50,6 +50,15 @@ def find_effect(name: str, out_dir: Path, theme: str) -> Path:
     raise PlanError(f"effect {name!r} not found — write {places[0]} (also looked in {', '.join(map(str, places[1:]))})")
 
 
+_THREE_ADDON = re.compile(r"""three/addons/([^"'`\s)]+)""")
+
+
+def three_addons() -> list[str]:
+    """The three.js addons cutmate vendors (paths under examples/jsm/, the importmap's three/addons/), sorted."""
+    jsm = vendor_root(VENDOR["three"]) / "examples" / "jsm"
+    return sorted(p.relative_to(jsm).as_posix() for p in jsm.rglob("*.js"))
+
+
 def lint_effect(path: Path) -> None:
     text = Path(path).read_text(encoding="utf-8")
     if "script" not in dict(_SECTION.findall(text)):
@@ -57,6 +66,13 @@ def lint_effect(path: Path) -> None:
     for api in FORBIDDEN:
         if api in text:
             raise PlanError(f"{Path(path).name}: uses {api} — not allowed in effects (see SKILL.md, effects rules)")
+    wanted = _THREE_ADDON.findall(text)
+    if wanted:                                         # only the vendored addons exist offline (no CDN fallback)
+        have = three_addons()
+        for addon in wanted:
+            if addon not in have:
+                raise PlanError(f"{Path(path).name}: imports three/addons/{addon}, which cutmate does not bundle — "
+                                f"use one of: {', '.join(have)}")
 
 
 def effect_meta(path: Path) -> dict:
