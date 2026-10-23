@@ -272,7 +272,12 @@ def _scale_at(cam: list[list[float]], t: float) -> float:
     return s
 
 
-def hits_for(graphics: list[Graphic], cam: list[list[float]], timed: list[dict], end: float) -> list[list[float]]:
+SOFT_FLASH = 0.35   # the #flash peak of a hit on a bg effect that draws the cut-out (its own reveal; 0.8 would white it out)
+
+
+def hits_for(graphics: list[Graphic], cam: list[list[float]], timed: list[dict], end: float,
+             soft: set | frozenset = frozenset()) -> list[list[float]]:
+    """[t, scale, punch] per hit; a graphic in `soft` (by id) gets a 4th entry, its #flash peak (SOFT_FLASH)."""
     bgs = [(g.start, g.end) for g in graphics if g.type == "bg"]
     cuts = sorted([float(s["start"]) for s in timed] + [t for r in bgs for t in r])  # camera changes end a punch
     out = []
@@ -284,7 +289,7 @@ def hits_for(graphics: list[Graphic], cam: list[list[float]], timed: list[dict],
         punch = min(0.5, nxt - (t + 0.12) - 0.02)
         if any(a - 1e-9 <= t < b for a, b in bgs):
             punch = 0                                    # no punch-in over a bg cut-out (shake only)
-        out.append([t, _scale_at(cam, t), round(punch, 3) if punch >= 0.15 else 0])
+        out.append([t, _scale_at(cam, t), round(punch, 3) if punch >= 0.15 else 0] + ([SOFT_FLASH] if id(g) in soft else []))
     return out
 
 
@@ -675,6 +680,19 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
                  if "{{cut_tag}}" in _sections(found[c.params["name"]]).get("markup", "")}
     shake = {id(c) for c in items if id(c) in bg_of and id(bg_of[id(c)]) in cut_in_fx and bg_of[id(c)].hit}
     shake |= {id(b) for b in items if b.type == "bg" and id(b) in cut_in_fx and b.hit}
+    # an effect whose index.json declares an impact ("impact": s after its start, "impact_tail": s it needs after it)
+    # takes its hit there, so the shake, flash and hit sound land on its visual impact (P.hit_at): "hit": true at
+    # start + impact, an anchor too close to the end pulled back to end - impact_tail
+    for g in items:
+        fx = g if g.type == "custom" else next((c for c in items if bg_of.get(id(c)) is g), None)
+        if not g.hit or fx is None or fx.type != "custom":
+            continue
+        m = effect_meta(found[fx.params["name"]])
+        if not isinstance(m.get("impact"), (int, float)) or isinstance(m.get("impact"), bool):
+            continue
+        t = g.params.get("_hit_at", g.start + float(m["impact"]))
+        t = round(max(g.start, min(t, g.end - float(m.get("impact_tail") or 0))), 3)
+        g.params["_hit_at"] = fx.params["_hit_at"] = t
     frame_hosts, scene_hosts, rest = [], [], 0
     for i, g in enumerate(items):
         cid = f"gx-{i + 1:02d}-{g.type}"
@@ -770,7 +788,7 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
     for f in (proj / "compositions").glob("gx-*.html"):
         if f.stem not in ids:
             f.unlink()
-    hits = hits_for(plan.graphics, cam, timed, end)
+    hits = hits_for(plan.graphics, cam, timed, end, {i for i in shake if any(id(b) == i for b in items if b.type == "bg")})
     hit_name, hit_vol = meta["hit_sfx"]
     cues += [(hit_name, h[0], hit_vol) for h in hits]
     pages = caption_pages(words, end, plan.captions["key"], plan.captions["max_words"])

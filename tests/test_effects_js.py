@@ -754,7 +754,7 @@ global.window = {};
 global.document = { getElementById: () => ({ appendChild: (c) => c }), createElement: () => ({ appendChild: (c) => c }) };
 const calls = [];
 const tl = {};
-for (const m of ["set", "to", "fromTo"]) tl[m] = (t, a, b, c) => { calls.push([m, t, m === "fromTo" ? b : a]); return tl; };
+for (const m of ["set", "to", "fromTo"]) tl[m] = (t, a, b, c) => { calls.push([m, t, m === "fromTo" ? b : a, a]); return tl; };
 require(%s);
 const out = {};
 for (const [k, cfg] of Object.entries(%s)) {
@@ -762,6 +762,7 @@ for (const [k, cfg] of Object.entries(%s)) {
   window.Cutmate.build(tl, cfg);
   out[k] = calls.filter(([m, t, v]) => m === "to" && v && v.keyframes).map(([, t]) => t)
     .concat(calls.filter(([m, t, v]) => m === "set" && v && "rotation" in v).map(([, t]) => t));
+  out[k + "_flash"] = calls.filter(([m, t, v, f]) => m === "fromTo" && t === "#flash").map((c) => c[3].opacity);
 }
 console.log(JSON.stringify(out));
 """
@@ -774,6 +775,9 @@ def test_hits_shake_hosts():
               json.dumps({"hosts": {**base, "shake_hosts": True}, "plain": base}))
     assert d["hosts"] == ["#shake, .cm-shake", "#shake, .cm-shake"]
     assert d["plain"] == ["#shake", "#shake"]
+    assert d["hosts_flash"] == [0.8] and d["plain_flash"] == [0.8]
+    soft = {**base, "hits": [[1.0, 1.0, 0, 0.35], [2.0, 1.0, 0]], "shake_hosts": True}
+    assert _node(HITS, json.dumps(str(web_dir() / "cutmate.js")), json.dumps({"s": soft}))["s_flash"] == [0.35, 0.8]
 
 
 # burst-out: the effect script as in a bg composition (root > .bo-gl canvas layer, the cut-out .clip video in its own
@@ -851,3 +855,19 @@ def test_burst_out_layers():
     assert all(p["x"] < 540 for p in d["path"])
     d = _burst({k: v for k, v in P.items() if k != "hit_at"}, [0.3, 1.15, 1.25], [])   # default hit: at + 1.0
     assert d["gl"][1] < d["cut"][1] and d["gl"][2] > d["cut"][2]
+
+
+def test_burst_out_overshoots_at_the_hit():
+    """The "flies at the camera" beat: the object is ~1.25x its held size on the impact word, then settles to 1.0 (no
+    second pop); the label under the held object keeps a clear gap above the burned captions."""
+    P = {"at": 0.2, "end": 3.6, "hit_at": 1.0, "dur": 3.6, "w": 1080, "h": 1920, "lang": "pl", "face": [380, 700],
+         "caption_band": [1295, 1455], "label": "Gotowe"}
+    after = [round(1.05 + 0.05 * i, 2) for i in range(int((3.6 - 0.35 - 1.05) / 0.05))]
+    d = _burst(P, [0.3], [0.99, 1.0, 1.02, *after, 2.7])
+    s = [p["s"] for p in d["path"]]
+    assert 1.18 <= s[1] <= 1.32, s[:3]
+    assert max(s[3:]) <= s[1] + 1e-9 and max(s[3:]) <= 1.3
+    assert 0.96 <= s[-1] <= 1.04, s[-1]
+    o = d["spec"]
+    label_bottom = o["cy"] + o["R"] + 0.02 * 1080 + o["labelPx"] * 1.9
+    assert 1295 - label_bottom >= 60, label_bottom

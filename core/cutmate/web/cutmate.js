@@ -36,8 +36,8 @@
     // never ghosts against it
     const shake = cfg.shake_hosts ? "#shake, .cm-shake" : "#shake";
     tl.set(shake, { x: 0, y: 0, rotation: 0 }, 0);
-    (cfg.hits || []).forEach(([t, base, punch]) => {
-      tl.fromTo("#flash", { opacity: 0.8 }, { opacity: 0, duration: 0.22, ease: "power2.out", immediateRender: false }, t);
+    (cfg.hits || []).forEach(([t, base, punch, flash]) => {   // flash: a softer peak (a bg effect's own reveal)
+      tl.fromTo("#flash", { opacity: flash == null ? 0.8 : flash }, { opacity: 0, duration: 0.22, ease: "power2.out", immediateRender: false }, t);
       const amp = 24, steps = Math.round(0.35 / 0.033), pts = [];
       for (let i = 1; i <= steps; i++) {
         const k = amp * (1 - i / steps);

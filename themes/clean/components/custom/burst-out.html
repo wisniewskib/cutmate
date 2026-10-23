@@ -32,7 +32,7 @@ function burstSpec(P) {
   hit = Math.min(Math.max(hit, at + 0.05), end - BO_EXIT - 0.1);
   const head = 0.16 * m, side = face[0] <= w / 2 ? 1 : -1, pad = 0.035 * m;
   const sb = window.CutmateFX.pure.safeBox(P);
-  const labelPx = 54 * m / 1080, lab = P.label ? labelPx * 1.9 + 0.02 * m : 0;
+  const labelPx = 54 * m / 1080, lab = P.label ? labelPx * 1.9 + 0.045 * m : 0;   // label + a clear gap above the captions
   let best = null;
   for (let R = 0.21 * m; R >= 0.08 * m && !best; R *= 0.95) {
     // close beside the face, overlapping his shoulder (held in front of him: the depth reads all the time)
@@ -68,7 +68,12 @@ function burstPath(o, t) {
   y += Math.sin((t - o.hit) * 2.2) * 0.012 * o.m * held;
   x += Math.cos((t - o.hit) * 1.6) * 0.006 * o.m * held;
   const e = Math.min(1, Math.max(0, (t - (o.end - BO_EXIT)) / BO_EXIT));
-  const s = (0.2 + 0.8 * u) * (1 - e * e);
+  // scale: 0.2 behind → an overshoot to 1.25 on the impact word (it flies past the camera's comfort) → settles to 1.0
+  // with one small damped bounce; power3.in up to the hit like the path
+  let k;
+  if (t < o.hit) { const p = Math.min(1, Math.max(0, (t - o.at) / Math.max(1e-3, o.hit - o.at))); k = 0.2 + 1.05 * p * p * p; }
+  else { const dt = t - o.hit; k = 1 + 0.25 * Math.exp(-5 * dt) * Math.cos(6 * dt); }
+  const s = k * (1 - e * e);
   return { x, y, z, s, u, r: o.R * s * (BO_CAMZ - BO_ZF) / (BO_CAMZ - z), spin: e * e * 9, vis: t >= o.at && t < o.end && s > 0.001 };
 }
 const WOW = (window.CutmateFX.wow = window.CutmateFX.wow || {});
@@ -134,6 +139,7 @@ const ready = U.three({ el: glEl, camera: { fov: BO_FOV, z: BO_CAMZ } }).then(as
   scene.add(new THREE.HemisphereLight(0xffffff, MUT.clone().multiplyScalar(0.4), 0.6));
   const key = new THREE.DirectionalLight(0xffffff, 2.2); key.position.set(-4, 5, 6); scene.add(key);
   const rim = new THREE.DirectionalLight(ACC.clone().lerp(WHITE, 0.3), 5); rim.position.set(3, 2, -6); scene.add(rim);
+  const spec = new THREE.DirectionalLight(0xffffff, 2.4); spec.position.set(2.5, 6, 4); scene.add(spec);   // facet flashes
   const back = new THREE.PointLight(ACC.clone().lerp(WHITE, 0.5), 60, 14, 2);    // the rays' light, at the head
   back.position.copy(S.toWorld(sp.face[0], sp.face[1], BO_ZB + 0.5)); scene.add(back);
 
@@ -193,10 +199,24 @@ const ready = U.three({ el: glEl, camera: { fov: BO_FOV, z: BO_CAMZ } }).then(as
     geo.translate(0, 0, -0.1);
   } else {                                         // gem: a faceted brilliant (crown, girdle, pavilion)
     const pts = [[0.001, -1.0], [0.98, 0.08], [0.64, 0.46], [0.001, 0.46]].map(([x, y]) => new THREE.Vector2(x, y));
-    geo = new THREE.LatheGeometry(pts, 9);
+    geo = new THREE.LatheGeometry(pts, 9).toNonIndexed();
     geo.translate(0, 0.25, 0);
+    // facet contrast: a bright crown (table + star facets), a deep pavilion, every other facet a shade apart — so the
+    // turning stone flashes facet by facet instead of reading as one flat plastic colour
+    const pos = geo.attributes.position, cols = new Float32Array(pos.count * 3), c = new THREE.Color();
+    const crown = ACC.clone().lerp(WHITE, 0.18).multiplyScalar(0.9), deep = ACC.clone().multiplyScalar(0.4);
+    for (let f = 0; f < pos.count / 3; f++) {
+      const y = (pos.getY(f * 3) + pos.getY(f * 3 + 1) + pos.getY(f * 3 + 2)) / 3;
+      c.copy(y > 0.4 ? crown : deep).multiplyScalar(Math.floor(f / 2) % 2 ? 1.0 : 0.62);
+      for (let v = 0; v < 3; v++) cols.set([c.r, c.g, c.b], (f * 3 + v) * 3);
+    }
+    geo.setAttribute("color", new THREE.BufferAttribute(cols, 3));
   }
   const mesh = new THREE.Mesh(geo, shape === "logo" ? mat.clone() : mat);
+  if (shape === "gem") {
+    Object.assign(mesh.material, { vertexColors: true, metalness: 0.78, roughness: 0.08, emissiveIntensity: 0.14 });
+    mesh.material.color = WHITE.clone();
+  }
   if (shape === "logo") { mesh.material.flatShading = false; mesh.material.color = ACC.clone().lerp(new THREE.Color(0.05, 0.05, 0.07), 0.55); }
   obj.add(mesh);
   const edges = new THREE.LineSegments(new THREE.EdgesGeometry(geo, shape === "sphere" ? 8 : 20),
@@ -220,6 +240,29 @@ const ready = U.three({ el: glEl, camera: { fov: BO_FOV, z: BO_CAMZ } }).then(as
                                                                          opacity: 0.55 }, ADD)));
   halo.scale.setScalar(1.7); halo.renderOrder = -1;
   obj.add(halo);
+  // glints: four-point star sparkles on the object's rim that twinkle in turn (seeded phases), a big one at the hit
+  const starTex = (() => {
+    const c = document.createElement("canvas"); c.width = c.height = 128;
+    const g = c.getContext("2d");
+    g.translate(64, 64);
+    for (const [sx, sy] of [[1, 0.06], [0.06, 1], [0.5, 0.035], [0.035, 0.5]]) {
+      const gr = g.createRadialGradient(0, 0, 0, 0, 0, 64);
+      gr.addColorStop(0, "rgba(255,255,255,1)"); gr.addColorStop(1, "rgba(255,255,255,0)");
+      g.save(); g.rotate(sx === 0.5 || sx === 0.035 ? Math.PI / 4 : 0); g.scale(sx, sy); g.fillStyle = gr;
+      g.beginPath(); g.arc(0, 0, 64, 0, Math.PI * 2); g.fill(); g.restore();
+    }
+    const core = g.createRadialGradient(0, 0, 0, 0, 0, 14);
+    core.addColorStop(0, "rgba(255,255,255,1)"); core.addColorStop(1, "rgba(255,255,255,0)");
+    g.fillStyle = core; g.beginPath(); g.arc(0, 0, 14, 0, Math.PI * 2); g.fill();
+    return new THREE.CanvasTexture(c);
+  })();
+  const gr = U.seed(29);
+  const glints = [[0.62, 0.72, 0.3], [-0.85, 0.3, 0.4], [0.3, -0.55, 0.6], [-0.2, 0.75, -0.3], [0.95, 0.05, 0.1]].map((q, i) => {
+    const g = new THREE.Sprite(new THREE.SpriteMaterial(Object.assign({ map: starTex, color: WHITE.clone().lerp(ACC, 0.15) }, ADD)));
+    g.position.set(q[0], q[1], q[2] + 0.5); g.renderOrder = 2;
+    g.userData = { ph: gr() * 6.28, w: 2.6 + gr() * 2.2, k: 0.55 + 0.35 * gr() };
+    obj.add(g); return g;
+  });
   scene.add(obj);
 
   // impact: a shockwave ring and a spark burst from where the object is at the hit (pure functions of t - hit)
@@ -272,6 +315,14 @@ const ready = U.three({ el: glEl, camera: { fov: BO_FOV, z: BO_CAMZ } }).then(as
     fx.chroma.offset.set(ch, ch * 0.5);
     fx.bloom.intensity = 1.0 + (dt >= 0 ? 0.9 * Math.exp(-dt * 9) : 0);
     halo.material.opacity = 0.32 + (dt >= 0 ? 0.4 * Math.exp(-dt * 8) : 0);
+    glints.forEach((g, i) => {
+      const tw = Math.pow(Math.max(0, Math.sin(t * g.userData.w + g.userData.ph)), 10);
+      const flash = i === 0 && dt >= 0 ? Math.exp(-dt * 5) : 0;                 // the impact glint
+      const v = Math.max(tw * (dt >= 0 ? 1 : 0.5), flash);
+      g.material.opacity = v;
+      g.visible = v > 0.01;
+      g.scale.setScalar(g.userData.k * (0.5 + 0.7 * v) * (1 + 1.2 * flash));
+    });
     edges.material.opacity = 0.9;
     back.intensity = on ? (dt < 0 ? 60 : 60 * (1 - clamp(dt / 0.4)) + 8) : 0;
     // shockwave

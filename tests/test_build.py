@@ -1582,7 +1582,7 @@ def test_shake_hosts_marked(out, theme, monkeypatch):
     hosts = re.findall(r'<div id="(gx-[^"]+)-slot"( class="[^"]*")? data-composition-id', html)
     assert [(c, k) for c, k in hosts] == [("gx-01-custom", ' class="clip cm-shake"'), ("gx-02-bg", ' class="clip cm-shake"')]
     cfg = cfg_of(html)
-    assert cfg["shake_hosts"] is True and cfg["hits"] == [[2.35, 1.0, 0]]
+    assert cfg["shake_hosts"] is True and cfg["hits"] == [[2.35, 1.0, 0, 0.35]]
 
 
 FIXTURE_BG_HIT = Path(__file__).parent / "fixtures" / "build_bg_hit"   # built by the pre-burst-out code (HEAD 5ce13a0)
@@ -1604,3 +1604,29 @@ def test_no_wow_no_change(out, theme, monkeypatch):
     assert html == (FIXTURE_BG_HIT / "index.html").read_text(encoding="utf-8")
     for f in FIXTURE_BG_HIT.glob("gx-*.html"):
         assert (proj / "compositions" / f.name).read_text(encoding="utf-8") == f.read_text(encoding="utf-8"), f.name
+
+
+def test_hit_true_lands_on_effect_impact(out, theme, monkeypatch):
+    """"hit": true on an effect whose index.json declares an `impact` offset (burst-out: 1 s) shakes, flashes and plays the
+    hit sound at the effect's real impact (start + impact), where the effect jumps in front (P.hit_at) — not at the start.
+    An anchor in the effect's last `impact_tail` s is pulled back to where the effect can still land it. The cut-out
+    hit's flash is soft (0.35, no white-out of the reveal); other hits keep three entries (flash 0.8)."""
+    monkeypatch.setattr(B, "bg_cutout", _fake_cut([]))
+    write_plan(out, {"graphics": [{"type": "bg", "from": "S1:Mówić", "to": "S2:</script>", "effect": "burst-out", "hit": True},
+                                  {"type": "stamp", "at": "S2:Claude'a", "text": "X", "hit": True}]})
+    proj = B.build(out, theme=theme)["project"]
+    html = (proj / "index.html").read_text(encoding="utf-8")
+    hits = cfg_of(html)["hits"]
+    assert hits[0] == [1.1, 1.0, 0, 0.35] and len(hits[1]) == 3
+    starts = [float(s) for s in re.findall(r'<audio id="sfx-\d+" src="assets/sfx/impact[^"]*" data-start="([\d.]+)"', html)]
+    assert 1.1 in starts and 0.1 not in starts
+    fx = (proj / "compositions" / "gx-01-custom.html").read_text(encoding="utf-8")
+    P = json.loads(re.search(r"const P = (\{.*?\});?\n", fx).group(1))
+    assert P["hit_at"] == 1.1                                                   # host starts at 0: local == global
+    write_plan(out, {"graphics": [{"type": "bg", "from": "S1:Mówić", "to": "S2:</script>", "effect": "burst-out",
+                                   "hit": "S2:</script>"}]})
+    proj = B.build(out, theme=theme)["project"]
+    hits = cfg_of((proj / "index.html").read_text(encoding="utf-8"))["hits"]
+    P = json.loads(re.search(r"const P = (\{.*?\});?\n", (proj / "compositions" / "gx-01-custom.html")
+                             .read_text(encoding="utf-8")).group(1))
+    assert hits[0][0] == P["hit_at"] == round(3.5 - 0.45, 3)

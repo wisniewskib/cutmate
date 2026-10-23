@@ -198,7 +198,9 @@
       "bg"
     ],
     "webgl": true,
-    "description": "3D burst from behind the speaker (bg effect only: it draws the speaker cut-out itself): an object starts small behind his head with god rays streaming out around it, arcs up over him and flies at the camera; on the impact word the canvas jumps in front of him with an RGB-split pulse, sparks, a shockwave and a frame shake, it holds big beside him (side away from the face, never over it, above the captions), then spins out. Use as {\"type\": \"bg\", \"from\", \"to\", \"effect\": \"burst-out\", \"hit\": \"<S#:impact word>\"} — always anchor hit on the impact word (default impact: 1 s after the start). Once per short.",
+    "impact": 1.0,
+    "impact_tail": 0.45,
+    "description": "3D burst from behind the speaker (bg effect only: it draws the speaker cut-out itself): an object starts small behind his head with god rays streaming out around it, arcs up over him and flies at the camera; on the impact word the canvas jumps in front of him with an RGB-split pulse, sparks, a shockwave and a frame shake, it holds big beside him (side away from the face, never over it, above the captions), then spins out. Use as {\"type\": \"bg\", \"from\", \"to\", \"effect\": \"burst-out\", \"hit\": \"<S#:impact word>\"} — always anchor hit on the impact word (\"hit\": true lands the shake at the default impact, 1 s after the start). Once per short.",
     "params": {
       "shape": "\"gem\" (default), \"cube\", \"knot\", \"sphere\" or \"logo\" (params.media image on a rounded extruded card)",
       "color": "optional object colour (default: the theme's --accent)",
