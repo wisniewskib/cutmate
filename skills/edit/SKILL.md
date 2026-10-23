@@ -202,7 +202,7 @@ U.three({ el: root.querySelector(".fx"), bloom: { strength: 1.2, radius: 0.6, th
 </script>
 ```
 
-**Checkpoint "zrozumiałem tak":** map every request into `plan.json` in §5 first (a word anchor in requests.md matches a graphic starting within ±1 s of that word). Then, right before build (16:9: together with the preview), when `requests.md` has ≥ 1 line, run `$CM requests <folder>/out` — it needs aligned_words.json, edl_timed.json and plan.json (one line per request: OK / MISSING /
+**Checkpoint "zrozumiałem tak":** map every request into `plan.json` in §5 first (a word anchor in requests.md matches a graphic starting — or with its `hit` landing — within ±1 s of that word). Then, right before build (16:9: together with the preview), when `requests.md` has ≥ 1 line, run `$CM requests <folder>/out` — it needs aligned_words.json, edl_timed.json and plan.json (one line per request: OK / MISSING /
 NOTE / SURPRISE OK|MISSING / BAD, then `requests: N ok, M missing, K bad`), fix every `MISSING` and `BAD` and every `WARN density` (§5 Gęstość), then show the user the list as "zrozumiałem tak: …"
 and wait for OK. No requests → no pause. Split-panel layout: the list also shows the panel compactly — the `panel:`
 lines from `$CM build`, one line each (`0.00–1.40 stat-card 44%`, `… SCENE globe.png`); without requests there is no

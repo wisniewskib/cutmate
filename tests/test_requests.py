@@ -153,3 +153,13 @@ def test_explainer_request_matches_panel_item(tmp_path):
     assert lines[0].startswith("OK") and lines[1].startswith("OK") and lines[2].startswith("OK")
     (out / "requests.md").write_text("- [czat] explainer → explainer @ S2\n", encoding="utf-8")
     assert check_requests(out)[0].startswith("MISSING")      # a panel screenshot is not an explainer
+
+
+def test_word_anchor_matches_the_hit_of_an_effect(tmp_path):
+    # the skill logs a requested burst-out on its impact word; the bg starts >= 1 s before that word
+    out = _setup(tmp_path, "- [czat] klejnot → custom:burst-out @ S2:75%\n- [czat] b → custom:burst-out @ S1:a\n")
+    (out / "plan.json").write_text(json.dumps({"graphics": [
+        {"type": "bg", "from": 2.0, "to": 7.0, "effect": "burst-out", "hit": "S2:75%"}]}))
+    lines = check_requests(out)
+    assert lines[0].startswith("OK"), lines
+    assert lines[1].startswith("MISSING"), lines

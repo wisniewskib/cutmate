@@ -93,7 +93,8 @@ def check_requests(out_dir: Path) -> list[str]:
         except CutmateError as e:
             lines.append(f"{pre}BAD  {label} ({' '.join(str(e).split())})")
             continue
-        found = any(_matches(g, r["target"]) and lo <= g.start <= hi for g in plan.graphics)
+        found = any(_matches(g, r["target"]) and (lo <= g.start <= hi or lo <= g.params.get("_hit_at", -1.0) <= hi)
+                    for g in plan.graphics)               # a burst-out / kinetic-word is logged on its hit word
         status = "OK  " if found else "MISSING"
         lines.append(f"{pre}{status} {label}")
     return lines
