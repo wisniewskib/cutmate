@@ -15,7 +15,11 @@ FORBIDDEN = ("Date.now", "Math.random", "performance.now", "requestAnimationFram
              # callbacks fire only when playback crosses a point (a worker seeking straight to a frame skips them);
              # GlitchEffect / ScrambleTextPlugin draw from Math.random inside the library
              "onComplete", "onRepeat", "onRender", "onBegin", "onLoop", ".restart(", "GlitchEffect", "ScrambleTextPlugin",
-             "onStart", "onReverseComplete", "onBeforeUpdate")
+             "onStart", "onReverseComplete", "onBeforeUpdate",
+             # Math.random inside the library: anime.js v4 utils, GSAP utils and "random(…)" values, random staggers
+             # (from: "random"); and the remaining crossing callbacks
+             "gsap.utils.random", "utils.randomPick", "utils.random", "utils.shuffle", '"random', "'random",
+             "onPause", "onInterrupt", "onSwapped")
 _SECTION = re.compile(r"<(style|markup|script)>(.*?)</\1>", re.S)
 VENDOR = {"gsap": "gsap@3.14.2", "three": "three@0.181.2", "postprocessing": "postprocessing@6.39.5",
           "animejs": "animejs@4.5.0", "lottie": "lottie@5.12.2", "katex": "katex@0.19.0", "roughjs": "roughjs@4.6.6",

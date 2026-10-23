@@ -142,8 +142,10 @@ Also keep:
 - FORBIDDEN (lint): `Date.now`, `Math.random`, `performance.now`, `requestAnimationFrame`, `setTimeout`,
   `setInterval`, `onUpdate`, `setAnimationLoop`, `anime.utils.random`, `d3.transition`, `AfterimagePass`,
   `THREE.Clock`, `new Date`, `crypto.getRandomValues`, `gsap.ticker`, `.play(`, `GlitchEffect`, `ScrambleTextPlugin`,
+  library randomness `gsap.utils.random`, `utils.random`, `utils.randomPick`, `utils.shuffle`, `"random`, `'random`
+  (anime.js v4 / GSAP utils, `"random(…)"` values, `from: "random"` staggers),
   and the crossing callbacks `onComplete`, `onRepeat`, `onRender`, `onBegin`, `onLoop`, `onStart`, `onReverseComplete`,
-  `onBeforeUpdate`, `.restart(` (a render worker seeking straight to a frame skips them).
+  `onBeforeUpdate`, `onPause`, `onInterrupt`, `onSwapped`, `.restart(` (a render worker seeking straight to a frame skips them).
 - Randomness only `U.seed(n)`: `const rnd = U.seed(7); … rnd()` (fixed n, e.g. `direction.seed`).
 - No fetchable `http(s)` refs anywhere (themes work offline; lint rejects them).
 - Measure text (`offsetWidth`, fitting, per-character splits that need widths) only after

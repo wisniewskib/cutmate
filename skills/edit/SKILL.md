@@ -177,9 +177,11 @@ components; `ROOT` in style is the effect root. Rules:
 - Forbidden (build rejects the file, even in comments or strings): `Date.now`, `new Date`, `Math.random`,
   `crypto.getRandomValues`, `performance.now`, `requestAnimationFrame`, `setTimeout`, `setInterval`, `onUpdate`,
   `setAnimationLoop`, `THREE.Clock`, `gsap.ticker`, `.play(`, `anime.utils.random`, `d3.transition`, `AfterimagePass`,
-  `GlitchEffect`, `ScrambleTextPlugin` (random inside the library: use `U.scramble`), and the callbacks that fire only when
+  `GlitchEffect`, `ScrambleTextPlugin` (random inside the library: use `U.scramble`), library randomness `gsap.utils.random`,
+  `utils.random`, `utils.randomPick`, `utils.shuffle` (anime.js v4 / GSAP utils), `"random` and `'random` (GSAP
+  `"random(…)"` values, `from: "random"` staggers: use `U.seed`), and the callbacks that fire only when
   playback crosses a point (a render worker seeking straight to a frame skips them): `onComplete`, `onRepeat`, `onRender`,
-  `onBegin`, `onLoop`, `onStart`, `onReverseComplete`, `onBeforeUpdate`, `.restart(`. Create Anime.js / Lottie objects with
+  `onBegin`, `onLoop`, `onStart`, `onReverseComplete`, `onBeforeUpdate`, `onPause`, `onInterrupt`, `onSwapped`, `.restart(`. Create Anime.js / Lottie objects with
   `autoplay: false` and hand them to `U.anime` / `U.lottie` (the clock seeks them; never push them on `window.__hfAnime`).
   Libraries (GSAP plugins, Three.js, Anime.js, Lottie, KaTeX, Rough.js, D3) are vendored and load automatically when used.
   Three.js addons: only the vendored ones load (`three/addons/` + `environments/RoomEnvironment.js`, `geometries/TextGeometry.js`, `loaders/FontLoader.js`, `loaders/GLTFLoader.js`, `postprocessing/` `EffectComposer` / `RenderPass` / `UnrealBloomPass` / `OutputPass` / `ShaderPass` / `SavePass` / `MaskPass` / `Pass`, `shaders/` `CopyShader` / `LuminosityHighPassShader` / `OutputShader`, `utils/BufferGeometryUtils.js`); build rejects any other addon — build the shape from core `THREE` instead.

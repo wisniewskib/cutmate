@@ -307,7 +307,11 @@ def test_effect_meta(tmp_path):
 
 
 @pytest.mark.parametrize("api", ["onComplete", "onRepeat", "onRender", "onBegin", "onLoop", ".restart(", "GlitchEffect",
-                                 "ScrambleTextPlugin", "onStart", "onReverseComplete", "onBeforeUpdate"])
+                                 "ScrambleTextPlugin", "onStart", "onReverseComplete", "onBeforeUpdate",
+                                 # library randomness (anime v4 utils, GSAP utils / "random(…)" values, random staggers)
+                                 # and the remaining crossing callbacks
+                                 "gsap.utils.random", "utils.randomPick", "utils.random", "utils.shuffle", '"random',
+                                 "'random", "onPause", "onInterrupt", "onSwapped"])
 def test_new_forbidden_apis(tmp_path, api):
     assert api in E.FORBIDDEN
     p = tmp_path / "wow.html"
