@@ -19,9 +19,9 @@ from .captions import to_srt
 from .chapters import chapters_txt
 from .config import CAPTION_MODES, DEFAULT_CAPTIONS
 from .cut import load_timed
-from .effects import (THREE_MARK, VENDOR_URL, effect_meta, find_effect, held_slice, libs_head, lint_effect, track_slice, vendor_files,
-                      vendor_root)
-from .errors import CutmateError
+from .effects import (THREE_MARK, VENDOR_URL, effect_meta, find_effect, held_slice, libs_head, lint_effect, tip_slice, track_slice,
+                      vendor_files, vendor_root)
+from .errors import CutmateError, PlanError
 from .formats import format_of, size_of
 from .hf import ensure_project, hf
 from .layout import CLASSIC, SPLIT_DEFAULTS, theme_layout
@@ -29,7 +29,7 @@ from .media import duration, run
 from .music import carve, pick_source, prepare_music
 from .paths import assets_dir, plugin_root, theme_dir, web_dir
 from .plan import PLATE, SCENE_FADE, Graphic, _expanded_pair, load_plan, panel_box, panel_summary, plate_chapters
-from .tracks import pick_hand
+from .tracks import FINGERS, TIP_TRACKS, pick_hand
 
 CHAPTER_LABEL = {"pl": "ROZDZIAŁ", "en": "CHAPTER"}
 LEAD = 0.3                    # host starts this much before the graphic's word (entrance lead-in)
@@ -423,10 +423,36 @@ def _media_tag(cid: str, g: Graphic, P: dict) -> str:
     return f'<div class="img" style="background-image:url(\'{P["media"]}\')"></div>'
 
 
+def _hand_params(tr: dict, g: Graphic, host_start: float, size: tuple, origin: tuple, screen) -> dict:
+    """For an effect whose index.json has "tips": per hand side with any sample in [start - 0.75, end], in region px and
+    local s: P.tips[side] = 5 fingertip series [[t, x, y, ext], …] (thumb … pinky, tip_slice), P.palm_open[side] =
+    [[t, 0|1], …] (the palm's open flag, off when the hand is gone), P.palms[side] = the palm centre (held_slice);
+    P.faces = the face track (held_slice; the card keeps off it); P.lift = how far above the palm a palm-placed thing
+    sits (px), P.safe = the SAFE box in region px."""
+    (W, H), (rx, ry) = size, origin
+    tips, opened, palms = {}, {}, {}
+    for side in ("left", "right"):
+        names = [f"{f}_{side}" for f in FINGERS] + [f"palm_{side}"]
+        if not any(g.start - 0.75 <= s[0] <= g.end for n in names for s in tr.get(n, [])):
+            continue
+        tips[side] = [[[t, round(x - rx, 1), round(y - ry, 1), e]
+                       for t, x, y, e in tip_slice(tr.get(f"{f}_{side}", []), g.start, g.end, host_start, W, H, screen)]
+                      for f in FINGERS]
+        palm = tr.get(f"palm_{side}", [])
+        opened[side] = [[t, int(e)] for t, _, _, e in tip_slice(palm, g.start, g.end, host_start, W, H, screen)]
+        palms[side] = [[t, round(x - rx, 1), round(y - ry, 1)]
+                       for t, x, y in held_slice(palm, g.start, g.end, host_start, W, H, screen)]
+    faces = [[t, round(x - rx, 1), round(y - ry, 1)]
+             for t, x, y in held_slice(tr.get("face", []), g.start, g.end, host_start, W, H, screen)]
+    sx, sy, sw, sh = SAFE.get((W, H), [0, 0, W, H])
+    return {"tips": tips, "palm_open": opened, "palms": palms, "faces": faces, "lift": round(PALM_LIFT * H, 1),
+            "safe": [sx - rx, sy - ry, sw, sh]}
+
+
 def subcomp(cid: str, g: Graphic, host_start: float, theme: Path, assets: Path, media_map: dict, lang: str,
             size: tuple = (1080, 1920), extra_tags: dict | None = None, comp_path: Path | None = None,
             tracks: dict | None = None, assets_url: str | None = None, screen=None, caption_band: list | None = None,
-            face: list | None = None) -> str:
+            face: list | None = None, tips: bool = False) -> str:
     sec = _sections(comp_path or theme / "components" / f"{g.type}.html")
     W, H = size
     screen = screen or (lambda x, y, t: (round(x * W, 1), round(y * H, 1)))  # noqa: E731  tracked point -> screen px
@@ -497,6 +523,8 @@ def subcomp(cid: str, g: Graphic, host_start: float, theme: Path, assets: Path, 
             if mine and not follow:
                 P["track"] = mine
                 P["place"] = list(mine[0][1:])
+        if tips and tracks:                              # meta "tips" (hand-control): fingertips, palms, open palm
+            P.update(_hand_params(tracks["tracks"], g, host_start, (W, H), (rx, ry), screen))
         if "media" in g.params:
             P["media"] = _copy_media(g.params["media"], assets, media_map)
         u_open, u_close = FX_OPEN.format(cid=cid), ")"
@@ -672,6 +700,12 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
         if g.type == "custom" and g.params["name"] not in found:
             found[g.params["name"]] = find_effect(g.params["name"], out, theme)
             lint_effect(found[g.params["name"]])
+        if g.type == "custom" and effect_meta(found[g.params["name"]]).get("tips"):
+            where = f'graphic #{g.index + 1} (custom {g.params["name"]})'
+            if not tr:
+                raise PlanError(f'{where}: needs hand tracks — run cutmate track "{out}"')
+            if not all(n in tr["tracks"] for n in TIP_TRACKS):
+                raise PlanError(f'{where}: needs fingertip tracks — run cutmate track --force "{out}"')
     # bg pre-pass: each bg range is cut once; a bg effect whose markup has {{cut_tag}} draws the cut-out itself (so it
     # can put things behind the speaker) and its bg host gets none. A hit in such a pair shakes both hosts with #shake
     bg_of = {id(c): b for c in items for b in items if c.type == "custom" and b.type == "bg" and _expanded_pair(c, b)}
@@ -742,7 +776,8 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
             comp_path = _component(th, g.type, theme, warned)
         (proj / "compositions" / f"{cid}.html").write_text(
             subcomp(cid, g, hs, th, A, media_map, language, size=(W, H), extra_tags=extra, comp_path=comp_path,
-                    tracks=tr, assets_url=assets_url, screen=screen, caption_band=band, face=face), encoding="utf-8")
+                    tracks=tr, assets_url=assets_url, screen=screen, caption_band=band, face=face,
+                    tips=g.type == "custom" and bool(effect_meta(comp_path).get("tips"))), encoding="utf-8")
         scene = bool(g.params.get("_scene"))
         if g.type == "panel":
             track = 1                                  # under every graphic, over the A-roll

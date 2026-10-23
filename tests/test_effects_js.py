@@ -871,3 +871,142 @@ def test_burst_out_overshoots_at_the_hit():
     o = d["spec"]
     label_bottom = o["cy"] + o["R"] + 0.02 * 1080 + o["labelPx"] * 1.9
     assert 1295 - label_bottom >= 60, label_bottom
+
+
+# hand-control: the effect script with a tiny DOM (style objects kept), a no-op 2D canvas, U.fonts / U.ready resolved;
+# the clock is seeked to each probe time and the card's transform / the pure tipSparks are read
+HAND = """
+global.window = {};
+require(%(fx)s);
+const noop = new Proxy(function () {}, { get: (f, k) => (k === "canvas" ? undefined : noop), apply: () => noop });
+class El {
+  constructor(tag) { this.tagName = String(tag).toUpperCase(); this.children = []; this.parentNode = null; this._cls = new Set();
+    this.style = { setProperty(k, v) { this[k] = v; } }; this.attrs = {}; this._text = ""; this.offsetWidth = 0; this.offsetHeight = 0;
+    this.dataset = {}; const self = this;
+    this.classList = { add: (...c) => c.forEach((x) => self._cls.add(x)), remove: (...c) => c.forEach((x) => self._cls.delete(x)),
+      contains: (c) => self._cls.has(c), toggle: (c, on) => (on ? self._cls.add(c) : self._cls.delete(c)) }; }
+  get className() { return Array.from(this._cls).join(" "); }
+  set className(v) { this._cls = new Set(String(v).split(/\\s+/).filter(Boolean)); }
+  get textContent() { return this._text; } set textContent(v) { this._text = String(v); }
+  appendChild(c) { c.parentNode = this; this.children.push(c); return c; }
+  remove() {} setAttribute(k, v) { this.attrs[k] = String(v); }
+  getContext() { return noop; }
+  all() { return this.children.reduce((a, c) => a.concat([c], c.all()), []); }
+  querySelectorAll(sel) { const c = sel.replace(/^[a-z]*\\./, ""); return this.all().filter((e) => e._cls.has(c)); }
+  querySelector(sel) { return this.querySelectorAll(sel)[0] || null; }
+}
+global.document = { createElement: (t) => new El(t), createElementNS: (n, t) => new El(t), documentElement: new El("html") };
+global.getComputedStyle = () => ({ getPropertyValue: () => "", color: "" });
+const updates = [];
+const tl = { to(target, vars) { if (vars && vars.onUpdate) updates.push([target, vars]); return tl; }, set() { return tl; },
+             fromTo() { return tl; } };
+const root = new El("div");
+const mk = %(markup)s.match(/class="([^"]+)"/);
+if (mk) root.appendChild(new El("div")).className = mk[1];
+const P = %(params)s;
+const U = Object.assign(window.CutmateFX.make(tl, root, "c1", P), {
+  el(tag, cls, text, parent) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; (parent || root).appendChild(e); return e; },
+});
+U.fonts = () => Promise.resolve();
+%(script)s
+const seek = (t) => updates.forEach(([c, v]) => { c.t = t; v.onUpdate(); });
+const W = window.CutmateFX.wow;
+const out = { scaleY: [], sparks: [], hidden: [] };
+for (const t of %(times)s) {
+  seek(t);
+  const card = root.querySelector(".hc-card");
+  const mm = String(card.style.transform || "").match(/scaleY\\(([-\\d.e]+)\\)/);
+  out.scaleY.push(mm ? Number(mm[1]) : null);
+  out.hidden.push(String(card.style.visibility));
+  out.sparks.push(W.tipSparks(P, t));
+}
+console.log(JSON.stringify(out));
+"""
+
+
+def _hand_control(params: dict, times: list) -> dict:
+    from cutmate.build import _sections
+    sec = _sections(plugin_root() / "themes" / "clean" / "components" / "custom" / "hand-control.html")
+    js = HAND % {"fx": json.dumps(str(web_dir() / "effects.js")), "markup": json.dumps(sec.get("markup", "")),
+                 "params": json.dumps(params), "script": sec["script"], "times": json.dumps(times)}
+    r = subprocess.run(["node", "-e", js], capture_output=True, text=True, encoding="utf-8")
+    assert r.returncode == 0, r.stderr[-3000:]
+    return json.loads(r.stdout.strip().splitlines()[-1])
+
+
+def _hc_params(open_from=None, open_to=None, ext=(1, 1, 1, 1, 1), **kw):
+    """A 1080x1920 overlay 0.2–3.8 s: the right palm at (540, 1100), five tips fanned 160 px above it (step 0.1 s)."""
+    ts = [round(0.1 * i, 2) for i in range(40)]
+    tips = [[[t, 380 + 80 * k, 940 - (40 if k in (1, 2, 3) else 0), float(ext[k])] for t in ts] for k in range(5)]
+    po = [[t, 1 if open_from is not None and open_from <= t < open_to else 0] for t in ts]
+    P = {"at": 0.2, "end": 3.8, "dur": 3.8, "w": 1080, "h": 1920, "lang": "pl", "lift": 96.0,
+         "card": {"title": "Karta", "lines": ["jeden", "dwa"]}, "tips": {"right": tips}, "palm_open": {"right": po},
+         "palms": {"right": [[t, 540, 1100] for t in ts]}}
+    P.update(kw)
+    return P
+
+
+def test_card_stays_folded_without_open_palm():
+    """Review Focus 4: no open palm -> the card stays folded (scaleY <= 0.01) all the time; an open palm from 1.0 s
+    unfolds it (folded at 1.0, fully open and settled at 1.35) and it folds back within 0.25 s of the palm closing; no
+    palm track at all -> hidden."""
+    probes = [round(0.1 * i, 2) for i in range(39)]
+    d = _hand_control(_hc_params(), probes)
+    assert all(s is not None and s <= 0.01 for s in d["scaleY"]), d["scaleY"]
+    d = _hand_control(_hc_params(1.0, 2.0), [1.0, 1.35, 1.6, 1.99, 2.25, 2.6])
+    assert d["scaleY"][0] <= 0.01
+    assert abs(d["scaleY"][1] - 1) <= 0.001 and abs(d["scaleY"][2] - 1) <= 0.001 and abs(d["scaleY"][3] - 1) <= 0.001
+    assert d["scaleY"][4] <= 0.01 and d["scaleY"][5] <= 0.01
+    d = _hand_control(_hc_params(1.0, 3.0, palms={}, tips={}, palm_open={}), [1.5, 2.0])
+    assert all(v == "hidden" for v in d["hidden"])
+
+
+def test_sparks_only_from_extended_tips():
+    """The pure tipSparks(P, t) on window.CutmateFX.wow: particles come only from tips flagged extended (index, middle
+    here), stay near them, at most 120 per tip; none with sparks "off", none before P.at, none once a finger is gone."""
+    P = _hc_params(ext=(0, 1, 1, 0, 0))
+    d = _hand_control(P, [0.1, 1.0, 2.0])
+    assert d["sparks"][0] == []
+    for sp in d["sparks"][1:]:
+        assert sp and {p["tip"] for p in sp} == {1, 2}
+        assert len(sp) <= 2 * 120
+        for p in sp:
+            ex, ey = P["tips"]["right"][p["tip"]][0][1:3]
+            assert (p["ex"], p["ey"]) == (ex, ey)
+            assert ((p["x"] - ex) ** 2 + (p["y"] - ey) ** 2) ** 0.5 < 0.25 * 1920
+    assert _hand_control(dict(P, sparks="off"), [1.0, 2.0])["sparks"] == [[], []]
+    gone = _hc_params(ext=(0, 1, 1, 0, 0))
+    gone["tips"]["right"] = [[s for s in tip if s[0] <= 1.0] for tip in gone["tips"]["right"]]
+    assert _hand_control(gone, [2.0])["sparks"] == [[]]                 # last seen at 1.0 s: no sparks a second later
+
+
+def test_card_keeps_off_the_face():
+    """A palm just under the face (hands up at the chest): the open card slides sideways off the tracked face (toward the
+    hand's side) instead of covering it; it stays inside the SAFE box. Without a face track it sits on the hinge."""
+    js = HAND.split("const seek = ")[0] + """
+const W = window.CutmateFX.wow, out = {};
+const near = Array.from({ length: 40 }, (_, i) => [i / 10, 900, 260]);
+for (const [k, faces] of [["face", near], ["none", []]]) {
+  const p = Object.assign({}, P, { faces }), o = W.cardPose(p, 2.0, 300);
+  out[k] = { cx: o.cx, by: o.by, w: o.cw * o.s, h: o.ch * o.s, open: o.open };
+}
+console.log(JSON.stringify(out));
+"""
+    from cutmate.build import _sections
+    sec = _sections(plugin_root() / "themes" / "clean" / "components" / "custom" / "hand-control.html")
+    ts = [round(0.1 * i, 2) for i in range(40)]
+    P = {"at": 0.2, "end": 3.8, "dur": 3.8, "w": 1920, "h": 1080, "lang": "pl", "lift": 54.0, "safe": [60, 60, 1800, 800],
+         "card": {"title": "Karta"}, "tips": {"right": [[[t, 960, 500, 1.0] for t in ts]] * 5},
+         "palm_open": {"right": [[t, 1] for t in ts]}, "palms": {"right": [[t, 960, 600] for t in ts]}}
+    r = subprocess.run(["node", "-e", js % {"fx": json.dumps(str(web_dir() / "effects.js")), "markup": json.dumps(sec["markup"]),
+                                            "params": json.dumps(P), "script": sec["script"], "times": "[]"}],
+                       capture_output=True, text=True, encoding="utf-8")
+    assert r.returncode == 0, r.stderr[-3000:]
+    d = json.loads(r.stdout.strip().splitlines()[-1])
+    none, face = d["none"], d["face"]
+    assert none["open"] == 1 and none["cx"] == 960 and none["by"] == 546          # bottom-centre on the hinge
+    fr, fy = 0.17 * 1080, 260 - 0.02 * 1080
+    x0, x1, y0, y1 = face["cx"] - face["w"] / 2, face["cx"] + face["w"] / 2, face["by"] - face["h"], face["by"]
+    nx, ny = min(max(900, x0), x1), min(max(fy, y0), y1)
+    assert ((nx - 900) ** 2 + (ny - fy) ** 2) ** 0.5 >= fr - 1e-6, face           # clear of the face
+    assert face["cx"] > 900 and x0 >= 60 and x1 <= 1860 and y0 >= 60               # the hand's side, inside SAFE

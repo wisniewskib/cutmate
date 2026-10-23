@@ -210,5 +210,23 @@
     },
     "follow": false,
     "place": false
+  },
+  {
+    "name": "hand-control",
+    "kind": "wow",
+    "modes": [
+      "overlay"
+    ],
+    "tips": true,
+    "description": "Hand magic on the speaker's real hand (needs fingertip tracks): hot streak sparks stream from every extended fingertip, and while the palm is open toward the camera a card unfolds upward from it (hinge just above the palm), follows the hand and folds back when the palm closes (no open palm: it stays folded). Use as {\"type\": \"custom\", \"name\": \"hand-control\", \"from\", \"to\", \"params\": {\"card\": {\"title\", \"lines\"}}} over the clearest open-palm moment (a raised, spread hand, a \"conjuring\" gesture), 2–6 s. Needs `cutmate track --force \"<out>\"` once when the build says so.",
+    "params": {
+      "card": "{\"title\": the point being made (short), \"lines\": up to 3 short lines, \"media\"?: image} — the card that unfolds from the open palm",
+      "sparks": "\"tips\" (default: sparks from the extended fingertips) or \"off\"",
+      "hand": "\"auto\" (default: the hand with the most open-palm time), \"left\" or \"right\" (the speaker's own hand)",
+      "colors": "optional spark colours [hot core, glow] (default: white and the theme's --accent)",
+      "media": "optional card image (a file next to the recording; same as card.media)"
+    },
+    "follow": false,
+    "place": false
   }
 ]

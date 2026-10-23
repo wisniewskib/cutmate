@@ -340,3 +340,84 @@ def test_analyze_keeps_hand_shape_tracks(tmp_path):
     clip = make_clip(tmp_path / "a.mp4", dur=1.0, size="1920x1080", gaps=())
     d = analyze(clip, Det())
     assert d["tracks"]["palm_left"][0][1:] == [0.6, 0.7, 1.0] and d["tracks"]["finger_left"]
+
+
+# ---- fingertip tracks (WOW hand-control) ----
+
+def _hand21(fingers, thumb, wrist=(0.5, 0.8)):
+    """21 landmarks of an upright hand: fingers = [index, middle, ring, pinky] out?, thumb out (spread away from the
+    palm) or tucked against the index knuckle."""
+    pts = list(_hand(fingers, wrist))
+    w = wrist
+    if thumb:
+        pts[2], pts[3], pts[4] = (w[0] - 0.05, w[1] - 0.05), (w[0] - 0.08, w[1] - 0.07), (w[0] - 0.11, w[1] - 0.09)
+    else:
+        pts[2], pts[3], pts[4] = (w[0] - 0.04, w[1] - 0.05), (w[0] - 0.05, w[1] - 0.07), (w[0] - 0.035, w[1] - 0.085)
+    return pts
+
+
+def test_finger_tips():
+    from cutmate.tracks import FINGERS, finger_tips
+    assert FINGERS == ("thumb", "index", "middle", "ring", "pinky")
+    open_ = _hand21([1, 1, 1, 1], 1)
+    tips = finger_tips(open_, 16 / 9)
+    assert len(tips) == 5 and [t[2] for t in tips] == [1.0] * 5
+    assert [tuple(t[:2]) for t in tips] == [open_[i] for i in (4, 8, 12, 16, 20)]     # the tip landmarks
+    assert [t[2] for t in finger_tips(_hand21([0, 0, 0, 0], 0), 16 / 9)] == [0.0] * 5   # a fist, thumb included
+    assert [t[2] for t in finger_tips(_hand21([1, 0, 0, 0], 0), 16 / 9)] == [0.0, 1.0, 0.0, 0.0, 0.0]   # a point
+
+
+def test_tracks_include_fingertips(tmp_path):
+    from cutmate.tracks import FINGERS, TRACKS, _complete, analyze
+
+    class Det(FakeDetector):
+        def __call__(self, rgb, t):
+            d = super().__call__(rgb, t)
+            d.update({f"{f}_left": (0.4 + 0.02 * k, 0.3, 1.0 if f == "index" else 0.0) for k, f in enumerate(FINGERS)})
+            return d
+    assert {f"{f}_{s}" for s in ("left", "right") for f in FINGERS} <= set(TRACKS)
+    clip = make_clip(tmp_path / "a.mp4", dur=1.0, size="1920x1080", gaps=())
+    d = analyze(clip, Det())
+    il = d["tracks"]["index_left"]
+    assert il and all(len(s) == 4 for s in il) and il[0][1:] == pytest.approx([0.42, 0.3, 1.0])
+    assert d["tracks"]["thumb_left"][0][3] == 0.0 and d["tracks"]["index_right"] == []
+    p = tmp_path / "tracks.json"
+    p.write_text(json.dumps(d), encoding="utf-8")
+    assert _complete(p)
+    old = {k: v for k, v in d["tracks"].items() if k.split("_")[0] not in FINGERS}
+    p.write_text(json.dumps({**d, "tracks": old}), encoding="utf-8")
+    # Ruling R1: a tracks.json from before fingertips stays complete for every existing effect (no forced re-track);
+    # only an effect that needs tips asks for `cutmate track --force` (test_build::test_old_tracks_need_force)
+    assert _complete(p)
+    del old["palm_left"]
+    p.write_text(json.dumps({**d, "tracks": old}), encoding="utf-8")
+    assert not _complete(p)
+
+
+def test_track_keeps_old_files_without_tips(tmp_path):
+    """Ruling R1: `cutmate track` (no --force) does not redo a fresh tracks.json that only lacks the fingertip tracks;
+    --force adds them."""
+    from cutmate.tracks import FINGERS, track
+    out = tmp_path / "out"
+    make_clip(out / "aroll.mp4", dur=1.0, size="1920x1080", gaps=())
+    det = FakeDetector()
+    p = track(out, detector=det)
+    n = len(det.calls)
+    d = json.loads(p.read_text(encoding="utf-8"))
+    d["tracks"] = {k: v for k, v in d["tracks"].items() if k.split("_")[0] not in FINGERS}
+    p.write_text(json.dumps(d), encoding="utf-8")
+    import os
+    import time
+    later = time.time() + 5
+    os.utime(p, (later, later))
+    track(out, detector=det)
+    assert len(det.calls) == n
+    track(out, detector=det, force=True)
+    assert len(det.calls) == 2 * n and "index_left" in json.loads(p.read_text(encoding="utf-8"))["tracks"]
+
+
+def test_fill_gaps_can_keep_the_state():
+    """Fingertips keep their extended state across a short detection gap (sparks do not stutter); palms drop to 0."""
+    s = [[0.0, 0.0, 0.0, 1.0], [0.4, 0.4, 0.8, 1.0]]
+    assert [p[3] for p in fill_gaps(s, max_gap=0.5, step=0.1, keep_conf=True)] == [1.0] * 5
+    assert [p[3] for p in fill_gaps(s, max_gap=0.5, step=0.1)][1:4] == [0.0] * 3

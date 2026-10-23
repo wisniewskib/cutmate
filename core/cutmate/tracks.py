@@ -15,10 +15,15 @@ from .config import home
 from .errors import CutmateError
 from .media import probe_video, require_ffmpeg
 
-TRACKS = ("face", "hand_left", "hand_right", "point_left", "point_right",
-          "palm_left", "palm_right", "finger_left", "finger_right")
+BASE_TRACKS = ("face", "hand_left", "hand_right", "point_left", "point_right",
+               "palm_left", "palm_right", "finger_left", "finger_right")
+FINGERS = ("thumb", "index", "middle", "ring", "pinky")
+TIP_TRACKS = tuple(f"{f}_{s}" for s in ("left", "right") for f in FINGERS)
+TRACKS = BASE_TRACKS + TIP_TRACKS
 # palm_*: palm centre of each hand (hand landmarks), conf 1.0 = open / presenting palm (>= 3 fingers out), else 0.0
 # finger_*: where an index finger points (just past the tip), conf 1.0 = a clear index point (only the index out)
+# <finger>_* (thumb, index, middle, ring, pinky): that fingertip, conf 1.0 = the finger is extended. Only effects that
+# need them (index.json "tips") ask for them; a tracks.json from before them stays complete for everything else
 POINT_REACH = 0.08     # a pose-based point lands at most this far (frame fractions) past the index tip
 FINGER_REACH = 0.06    # a hand-landmark index point lands at most this far past the fingertip
 
@@ -51,6 +56,17 @@ def hand_shape(pts: list, aspect: float) -> tuple[str, tuple, tuple]:
     ids = (0, 5, 9, 13, 17)
     palm = (sum(pts[i][0] for i in ids) / 5, sum(pts[i][1] for i in ids) / 5)
     return kind, palm, finger_target(pts[5], pts[8])
+
+
+def finger_tips(pts: list, aspect: float) -> list[tuple[float, float, float]]:
+    """21 hand landmarks -> the 5 fingertips thumb … pinky as (x, y, 1.0 extended | 0.0). Index … pinky: the tip is
+    farther from the wrist than the middle joint (x 1.1, as hand_shape); thumb: the tip (4) is farther from the index
+    knuckle (5) than the thumb's IP joint (3) is, x 1.15. Distances in pixels."""
+    P = lambda i: (pts[i][0] * aspect, pts[i][1])  # noqa: E731
+    dist = lambda a, b: float(np.hypot(P(a)[0] - P(b)[0], P(a)[1] - P(b)[1]))  # noqa: E731
+    ext = [dist(4, 5) > 1.15 * dist(3, 5)] + [dist(tip, 0) > 1.1 * dist(pip, 0)
+                                              for tip, pip in ((8, 6), (12, 10), (16, 14), (20, 18))]
+    return [(float(pts[i][0]), float(pts[i][1]), 1.0 if e else 0.0) for i, e in zip((4, 8, 12, 16, 20), ext)]
 
 
 def assign_hands(hands: list, left, right) -> dict:
@@ -159,7 +175,10 @@ def smooth(samples: list[list[float]], k: int = 5, conf: bool = False) -> list[l
     return out
 
 
-def fill_gaps(samples: list[list[float]], max_gap: float = 0.5, step: float = 1 / 15) -> list[list[float]]:
+def fill_gaps(samples: list[list[float]], max_gap: float = 0.5, step: float = 1 / 15,
+              keep_conf: bool = False) -> list[list[float]]:
+    """Interpolates gaps up to max_gap; filled samples get conf 0.0, or with keep_conf the lower conf of the two ends
+    (a fingertip seen extended on both sides of a short drop-out stays extended)."""
     out = []
     for a, b in zip(samples, samples[1:]):
         out.append(a)
@@ -168,7 +187,8 @@ def fill_gaps(samples: list[list[float]], max_gap: float = 0.5, step: float = 1 
             n = round(gap / step)
             for j in range(1, n):
                 f = j / n
-                out.append([round(a[0] + gap * f, 4), a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f, 0.0])
+                out.append([round(a[0] + gap * f, 4), a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f,
+                            min(a[3], b[3]) if keep_conf else 0.0])
     if samples:
         out.append(samples[-1])
     return out
@@ -278,11 +298,14 @@ class PoseDetector:
         shapes = [hand_shape([(p.x, p.y) for p in L], aspect) for L in res.hand_landmarks]
         labels = [h[0].category_name if h else "" for h in res.handedness]
         got = assign_hands([(s[1][0], s[1][1], lab) for s, lab in zip(shapes, labels)], left, right)
-        out = {f"{k}_{side}": None for k in ("palm", "finger") for side in ("left", "right")}
+        out = {f"{k}_{side}": None for k in ("palm", "finger") + FINGERS for side in ("left", "right")}
         for side, i in got.items():
             kind, palm, target = shapes[i]
             out[f"palm_{side}"] = (palm[0], palm[1], 1.0 if kind == "open" else 0.0)
             out[f"finger_{side}"] = (target[0], target[1], 1.0 if kind == "point" else 0.0)
+            pts = [(p.x, p.y) for p in res.hand_landmarks[i]]
+            for f, tip in zip(FINGERS, finger_tips(pts, aspect)):
+                out[f"{f}_{side}"] = tip
         return out
 
     def __call__(self, rgb: np.ndarray, t: float) -> dict:
@@ -340,16 +363,18 @@ def analyze(video: Path, detector, every: int = 2, width: int = 640) -> dict:
         raise CutmateError(f"cannot read frames from {video} (ffmpeg exit {proc.returncode}): {msg or 'no frames'}")
     step = every / 30
     return {"fps": round(30 / every), "w": W, "h": H,
-            "tracks": {n: fill_gaps(smooth(s, conf=n.startswith(("palm_", "finger_"))), 0.5, step) for n, s in raw.items()}}
+            "tracks": {n: fill_gaps(smooth(s, conf=n.startswith(("palm_", "finger_")) or n in TIP_TRACKS), 0.5, step,
+                                    keep_conf=n in TIP_TRACKS) for n, s in raw.items()}}
 
 
 def _complete(p: Path) -> bool:
-    """tracks.json has every track this version writes (a file from before the pointing tracks does not)."""
+    """tracks.json has every base track (a file from before the pointing tracks does not). The fingertip tracks are not
+    required: an old file stays valid for every effect that does not need them (only those ask for --force)."""
     try:
         data = json.loads(p.read_text(encoding="utf-8"))
     except (ValueError, OSError):
         return False
-    return isinstance(data, dict) and isinstance(data.get("tracks"), dict) and all(n in data["tracks"] for n in TRACKS)
+    return isinstance(data, dict) and isinstance(data.get("tracks"), dict) and all(n in data["tracks"] for n in BASE_TRACKS)
 
 
 def track(out_dir: Path, detector=None, force: bool = False) -> Path:

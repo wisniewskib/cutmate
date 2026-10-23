@@ -443,3 +443,58 @@ def test_burst_out_renders(tmp_path, home, monkeypatch):
     assert worst <= 1.0
     print("strip hit:", wowkit.strip(proj, hit - 0.3, hit + 0.5, 0.1))
     print("strip:", wowkit.strip(proj, 0.1, 3.6, 0.25))
+
+
+def _hand_tracks(dur: float = 4.4) -> dict:
+    """Synthetic 9:16 tracks: the right palm moves left -> right (x 0.35 -> 0.65 over 4 s) at y 0.62, open 1.0–3.0 s;
+    five fingertips fanned above it, all extended."""
+    from cutmate.tracks import FINGERS, TRACKS
+    fan = [(-0.10, -0.03), (-0.05, -0.10), (0.0, -0.115), (0.05, -0.10), (0.09, -0.07)]
+    ts = [round(i / 15, 4) for i in range(int(dur * 15))]
+    px = lambda t: 0.35 + 0.3 * min(1.0, t / 4)  # noqa: E731
+    tr = {n: [] for n in TRACKS}
+    tr["palm_right"] = [[t, px(t), 0.62, 1.0 if 1.0 <= t < 3.0 else 0.0] for t in ts]
+    for (dx, dy), f in zip(fan, FINGERS):
+        tr[f"{f}_right"] = [[t, px(t) + dx, 0.62 + dy, 1.0] for t in ts]
+    return tr
+
+
+def test_hand_control_renders(tmp_path, home):
+    """9:16 hand-control over a synthetic right hand: at 0.8 s sparks stream from the five fingertips and the card is
+    folded; at 1.6 s the card is open above the palm (a big --card block, title readable); at 3.4 s it has folded away.
+    Seek-safe at 1.6. READ the snapshots and the 0.25 s strip."""
+    from cutmate.media import run
+    plan = {"graphics": [{"type": "custom", "name": "hand-control", "from": 0.3, "to": 3.8,
+                          "params": {"card": {"title": "Kontrola gestem", "lines": ["iskry z palców", "karta z dłoni"]}}}]}
+    proj = wowkit.project(tmp_path, plan, dur=6.0, tracks=_hand_tracks())
+    _check_ok(proj)
+    P = _P(proj, "hand-control")
+    host = 0.3 - P["at"]
+    s08, s16, s34 = wowkit.snap(proj, 0.8), wowkit.snap(proj, 1.6), wowkit.snap(proj, 3.4)
+    print(f"snapshot 0.8: {s08}\nsnapshot 1.6: {s16}\nsnapshot 3.4: {s34}")
+    raw = tmp_path / "raw08.png"
+    r = run(["ffmpeg", "-nostdin", "-v", "error", "-y", "-ss", "0.8", "-i", Path(proj).parent / "aroll.mp4", "-frames:v", "1", raw])
+    assert r.returncode == 0, r.stderr
+    a, base = _img(s08), _img(raw)
+    yy, xx = np.mgrid[0:1920, 0:1080]
+    for k, tip in enumerate(P["tips"]["right"]):
+        x, y = next(s[1:3] for s in tip if s[0] >= 0.8 - host - 1e-6)
+        near = ((xx - x) ** 2 + (yy - y) ** 2) <= 70 ** 2
+        lift = np.abs(a[near] - base[near]).mean()
+        print(f"0.8 tip {k} at ({x:.0f}, {y:.0f}): mean change {lift:.1f}")
+        assert lift > 20, f"no sparks at tip {k} at 0.8 s"
+    far = (yy < 300) | (yy > 1500)
+    assert np.abs(a[far] - base[far]).mean() < 2, "the effect paints away from the hand"
+
+    def card_white(png, t):
+        x, y = next(s[1:3] for s in P["palms"]["right"] if s[0] >= t - host - 1e-6)
+        hinge = y - P["lift"]
+        box = _img(png)[int(hinge - 160):int(hinge - 40), int(x - 120):int(x + 120)]
+        return float(((box.min(axis=2) > 215) & (box.max(axis=2) - box.min(axis=2) < 30)).mean())
+    w08, w16, w34 = card_white(s08, 0.8), card_white(s16, 1.6), card_white(s34, 3.4)
+    print(f"card white share: 0.8 {w08:.2f}, 1.6 {w16:.2f}, 3.4 {w34:.2f}")
+    assert w16 >= 0.6 and w08 <= 0.25 and w34 <= 0.25
+    worst = wowkit.seek_safe(proj, 1.6)
+    print(f"seek_safe(1.6) = {worst}")
+    assert worst <= 1.0
+    print("strip:", wowkit.strip(proj, 0.3, 3.8, 0.25))

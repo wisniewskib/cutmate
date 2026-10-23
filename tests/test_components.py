@@ -404,3 +404,19 @@ def test_wow_index_entries():
         bare = _FALLBACK.sub("", text)
         stray = [h for h in re.findall(r"#[0-9a-fA-F]{6}\b", bare) if h.lower() not in ("#000000", "#ffffff")]
         assert not stray, (name, stray)
+
+
+def test_hand_control_index_entry():
+    """hand-control: a canvas-2D WOW overlay that needs fingertip tracks (meta tips), documented params, lint, no WebGL,
+    colour only through theme tokens."""
+    import json
+    e = {e["name"]: e for e in json.loads((_custom_dir() / "index.json").read_text(encoding="utf-8"))}["hand-control"]
+    assert e["kind"] == "wow" and e["tips"] is True and e["modes"] == ["overlay"] and not e.get("webgl")
+    assert {"card", "sparks", "hand", "colors"} <= set(e["params"]) and all(isinstance(v, str) and v for v in e["params"].values())
+    path = _custom_dir() / "hand-control.html"
+    effects.lint_effect(path)
+    assert effects.effect_meta(path)["tips"] is True
+    text = path.read_text(encoding="utf-8")
+    assert "U.three(" not in text
+    stray = [h for h in re.findall(r"#[0-9a-fA-F]{6}\b", _FALLBACK.sub("", text)) if h.lower() not in ("#000000", "#ffffff")]
+    assert not stray, stray

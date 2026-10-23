@@ -147,6 +147,30 @@ def held_slice(samples, a: float, b: float, host_start: float, W: int, H: int, t
     return [[round(t - host_start, 3), *to_px(x, y, t)] for t, x, y in pts]
 
 
+TIP_HOLD = 0.25    # a fingertip that is not seen any more is held this long, then marked not extended
+
+
+def tip_slice(samples, a: float, b: float, host_start: float, W: int, H: int, to_px=None) -> list[list[float]]:
+    """Fingertip samples in [a, b] as [local t, x px, y px, ext] (ext 1.0 extended / 0.0). Like held_slice it starts at a
+    (with the nearest sample, its ext kept only when that sample is <= TIP_HOLD s away), but a finger is never held
+    longer than TIP_HOLD s: TIP_HOLD s after the last sight before a longer gap (or the end of the track) a sample with
+    ext 0.0 marks it gone, so no sparks come from a missing finger."""
+    if not samples:
+        return []
+    to_px = to_px or (lambda x, y, t: (round(x * W, 1), round(y * H, 1)))
+    on = lambda e: 1.0 if e >= 0.5 else 0.0  # noqa: E731
+    inside = [[s[0], s[1], s[2], on(s[3])] for s in samples if a <= s[0] <= b]
+    if not inside or inside[0][0] > a:
+        near = min(samples, key=lambda s: (abs(s[0] - a), s[0] > a))
+        inside.insert(0, [a, near[1], near[2], on(near[3]) if abs(near[0] - a) <= TIP_HOLD + 1e-9 else 0.0])
+    pts = []
+    for p, q in zip(inside, inside[1:] + [[b + TIP_HOLD + 1, *inside[-1][1:]]]):
+        pts.append(p)
+        if q[0] - p[0] > TIP_HOLD + 1e-9 and p[0] + TIP_HOLD <= b + 1e-9:
+            pts.append([p[0] + TIP_HOLD, p[1], p[2], 0.0])
+    return [[round(t - host_start, 3), *to_px(x, y, t), e] for t, x, y, e in pts]
+
+
 THEME_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 
 

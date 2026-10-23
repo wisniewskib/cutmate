@@ -326,3 +326,23 @@ def test_every_repo_effect_passes_the_extended_lint():
     hits = [(p.relative_to(root).as_posix(), api) for p in files for api in E.FORBIDDEN
             if api in dict(E._SECTION.findall(p.read_text(encoding="utf-8"))).get("script", "")]
     assert hits == []
+
+
+def test_tip_slice_keeps_ext_and_drops_long_gaps():
+    """Fingertips: like held_slice (starts at a, px, local t) but each sample keeps its extended flag, and a finger that
+    is not seen any more is held at most 0.25 s, then marked not extended (no sparks from a missing finger)."""
+    from cutmate.effects import tip_slice
+    s = [[1.0, 0.5, 0.5, 1.0], [1.1, 0.52, 0.5, 1.0], [1.2, 0.54, 0.5, 0.0], [2.0, 0.6, 0.4, 1.0]]
+    out = tip_slice(s, 0.9, 2.5, 0.5, 1000, 1000)
+    assert out[0] == [0.4, 500.0, 500.0, 1.0]                            # starts at a with the nearest sample (0.1 s away)
+    assert [0.6, 520.0, 500.0, 1.0] in out and [0.7, 540.0, 500.0, 0.0] in out
+    assert [0.95, 540.0, 500.0, 0.0] in out                              # 0.25 s after the last sight: off
+    assert [1.5, 600.0, 400.0, 1.0] in out
+    assert out[-1] == [1.75, 600.0, 400.0, 0.0]                          # gone 0.25 s after the track ends (b = 2.5)
+    assert all(b[0] >= a[0] for a, b in zip(out, out[1:]))
+    s2 = [[1.0, 0.5, 0.5, 1.0], [1.1, 0.52, 0.5, 1.0]]
+    far = tip_slice(s2, 0.2, 1.15, 0.0, 100, 100)
+    assert far[0] == [0.2, 50.0, 50.0, 0.0]                              # nearest sample 0.8 s away: not held, off
+    assert tip_slice([], 0, 1, 0, 100, 100) == []
+    px = tip_slice(s2, 1.0, 1.1, 1.0, 100, 100, lambda x, y, t: (x * 10, y * 20))
+    assert px[0] == [0.0, 5.0, 10.0, 1.0]

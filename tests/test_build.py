@@ -1630,3 +1630,72 @@ def test_hit_true_lands_on_effect_impact(out, theme, monkeypatch):
     P = json.loads(re.search(r"const P = (\{.*?\});?\n", (proj / "compositions" / "gx-01-custom.html")
                              .read_text(encoding="utf-8")).group(1))
     assert hits[0][0] == P["hit_at"] == round(3.5 - 0.45, 3)
+
+
+# ---- hand-control: fingertip tracks (meta "tips") ----
+
+def _tip_tracks(o, tips=True):
+    """9:16 tracks: the right palm open 2.2–3.4 s (closed before), five fingertips fanned above it (index / middle
+    extended, the rest folded); no left hand. tips=False: a tracks.json from before fingertip tracks."""
+    from cutmate.tracks import FINGERS
+    ts = [round(2.0 + i / 15, 3) for i in range(24)]
+    tr = {"face": [], "hand_left": [], "hand_right": [], "point_left": [], "point_right": [], "finger_left": [],
+          "finger_right": [], "palm_left": [], "palm_right": [[t, 0.5, 0.6, 1.0 if t >= 2.2 else 0.0] for t in ts]}
+    if tips:
+        for side in ("left", "right"):
+            for k, f in enumerate(FINGERS):
+                tr[f"{f}_{side}"] = [] if side == "left" else [[t, 0.42 + 0.04 * k, 0.5, 1.0 if f in ("index", "middle") else 0.0]
+                                                               for t in ts]
+    (o / "work" / "tracks.json").write_text(json.dumps({"fps": 15, "w": 1080, "h": 1920, "tracks": tr}), encoding="utf-8")
+
+
+HC_PLAN = {"graphics": [{"type": "custom", "name": "hand-control", "from": "S2:minus", "to": "S2:</script>",
+                         "params": {"card": {"title": "Karta", "lines": ["jeden"]}}}]}
+
+
+def test_hand_control_gets_tips(out, theme):
+    _tip_tracks(out)
+    write_plan(out, HC_PLAN)
+    sub = (B.build(out, theme=theme)["project"] / "compositions" / "gx-01-custom.html").read_text(encoding="utf-8")
+    P = _P(sub)
+    assert set(P["tips"]) == {"right"} and len(P["tips"]["right"]) == 5
+    for k, tip in enumerate(P["tips"]["right"]):
+        assert tip and all(len(s) == 4 for s in tip)
+        assert {s[3] for s in tip} == ({1.0} if k in (1, 2) else {0.0})
+        assert all(0 <= s[1] <= 1080 and 0 <= s[2] <= 1920 for s in tip)
+    xs = [tip[0][1] for tip in P["tips"]["right"]]
+    assert xs == sorted(xs) and xs[0] < xs[-1]                                # thumb … pinky, in frame px
+    hs = 2.1 - B.LEAD
+    assert P["tips"]["right"][0][0][0] == round(2.1 - hs, 3) == P["at"]       # local time, from the graphic's start
+    po = P["palm_open"]["right"]
+    assert po and all(len(s) == 2 and s[1] in (0, 1) for s in po)
+    assert po[0][1] == 0 and any(s[1] == 1 for s in po)                       # closed at 2.1, open from 2.2
+    assert P["palms"]["right"] and P["lift"] > 0 and P["faces"] == []            # no face samples in this fixture
+    # in a region: the same points offset by the region's origin
+    plan = json.loads(json.dumps(HC_PLAN))
+    plan["graphics"][0]["region"] = [100, 200, 800, 1200]
+    write_plan(out, plan)
+    P2 = _P((B.build(out, theme=theme)["project"] / "compositions" / "gx-01-custom.html").read_text(encoding="utf-8"))
+    a, b = P["tips"]["right"][1][3], P2["tips"]["right"][1][3]
+    assert b == [a[0], round(a[1] - 100, 1), round(a[2] - 200, 1), a[3]]
+    assert P2["palms"]["right"][0][1:] == [round(P["palms"]["right"][0][1] - 100, 1), round(P["palms"]["right"][0][2] - 200, 1)]
+
+
+def test_old_tracks_need_force(out, theme):
+    """Review Focus 4 / Ruling R1: an effect that needs fingertips with a tracks.json from before them is a one-line
+    PlanError with the fix (`cutmate track --force "<out>"`); with no tracks at all, `cutmate track "<out>"`. Every
+    other effect still builds from the old file."""
+    from cutmate.errors import PlanError
+    _tip_tracks(out, tips=False)
+    write_plan(out, HC_PLAN)
+    with pytest.raises(PlanError, match=r'graphic #1 \(custom hand-control\): needs fingertip tracks — run cutmate track '
+                                        r'--force ".*out"') as e:
+        B.build(out, theme=theme)
+    assert "\n" not in str(e.value)
+    write_plan(out, {"graphics": [{"type": "custom", "name": "hand-sparks", "at": "S2:minus", "until": 3.9,
+                                   "place": "gesture"}]})
+    B.build(out, theme=theme)                                                  # old tracks: fine for other effects
+    (out / "work" / "tracks.json").unlink()
+    write_plan(out, HC_PLAN)
+    with pytest.raises(PlanError, match=r'graphic #1 \(custom hand-control\): needs hand tracks — run cutmate track ".*out"'):
+        B.build(out, theme=theme)
