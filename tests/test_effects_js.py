@@ -1258,3 +1258,37 @@ def test_kinetic_word_numbers_take_the_number_font():
                none: f("+300%", "Inter", ""), unset: f("+300%", "Inter", null) };
     """)
     assert d == {"num": "Press Start 2P", "word": "Pixelify Sans", "none": "Inter", "unset": "Inter"}
+
+
+def test_kinetic_word_box_keeps_off_the_edges():
+    """kineticBox(P): the larger free area beside the burned captions (U.safeBox), inset >= 6 % from every frame edge it
+    touches — below the seam band in a 3b split-panel scene (caption_band [688, 848]: 1049 px below vs 665 above), above
+    a band low in the frame, the whole frame inset without one. kineticDeco(box, W, word): the ring and the starburst
+    stay inside that box even at the camera push (x KW_PUSH) — they never touch the frame edges; the word is centred
+    in the box."""
+    d = _node(KINETIC, json.dumps(str(web_dir() / "effects.js")), """
+      const P = { w: 1080, h: 1920 };
+      const seam = W.kineticBox(Object.assign({ caption_band: [688, 848] }, P)),
+            low = W.kineticBox(Object.assign({ caption_band: [1500, 1660] }, P)), none = W.kineticBox(P),
+            wide = W.kineticBox({ w: 1920, h: 1080 });
+      const deco = (b, bw, bh) => W.kineticDeco(b, 1080, { cx: b.x + b.w / 2, cy: b.y + b.h / 2, bw, bh });
+      return { seam, low, none, wide, push: W.KW_PUSH,
+               decos: [[seam, deco(seam, 760, 190)], [seam, deco(seam, 300, 380)], [low, deco(low, 900, 300)],
+                       [none, deco(none, 500, 200)]] };
+    """)
+    s = d["seam"]
+    assert s["y"] >= 848 and s["y"] + s["h"] <= 1920 - 0.06 * 1920 + 1e-6               # below the band, off the bottom
+    assert s["x"] >= 0.06 * 1080 - 1e-6 and s["x"] + s["w"] <= 1080 - 0.06 * 1080 + 1e-6
+    lo = d["low"]
+    assert lo["y"] >= 0.06 * 1920 - 1e-6 and lo["y"] + lo["h"] <= 1500                    # the bigger side: above
+    n = d["none"]
+    assert n == pytest.approx({"x": 64.8, "y": 115.2, "w": 1080 - 2 * 64.8, "h": 1920 - 2 * 115.2})
+    assert d["wide"] == pytest.approx({"x": 115.2, "y": 64.8, "w": 1920 - 2 * 115.2, "h": 1080 - 2 * 64.8})
+    k = d["push"]
+    assert 1.08 <= k <= 1.2
+    for b, o in d["decos"]:
+        cx, cy = b["x"] + b["w"] / 2, b["y"] + b["h"] / 2
+        for r_x, r_y in ((o["rx"], o["ry"]), (o["sr"], o["sr"])):
+            assert r_x > 0 and r_y > 0
+            assert cx - r_x * k >= b["x"] - 1e-6 and cx + r_x * k <= b["x"] + b["w"] + 1e-6, (b, o)
+            assert cy - r_y * k >= b["y"] - 1e-6 and cy + r_y * k <= b["y"] + b["h"] + 1e-6, (b, o)

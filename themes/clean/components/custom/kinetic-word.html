@@ -53,9 +53,10 @@ kwStage.appendChild(kwBack); kwStage.appendChild(kwCanvas); kwStage.appendChild(
 let K = null;                                          // the built scene (after the font is in)
 
 // the word: one line, or two at the space nearest the middle when that makes it clearly bigger ("ZA / DARMO"); as big
-// as 0.86·W allows and 40 % of the free height (above / below the burned captions)
+// as the stage box allows (its width at the camera push) and 40 % of its height. The stage box (KW.kineticBox) is the
+// larger free area above / below the burned captions, >= 6 % off every frame edge
 function kwLayout(fam) {
-  const sb = U.safeBox();
+  const sb = KW.kineticBox(P);
   const g = document.createElement("canvas").getContext("2d");
   g.font = `900 100px ${fam}`;
   const fit = (lines) => {
@@ -63,7 +64,7 @@ function kwLayout(fam) {
     const w100 = Math.max(1, ...ms.map((m) => m.width));
     const asc = Math.max(1, ...ms.map((m) => m.actualBoundingBoxAscent || 72)), desc = Math.max(0, ...ms.map((m) => m.actualBoundingBoxDescent || 0));
     const lh100 = asc + desc, gap100 = 0.22 * lh100, bh100 = lines.length * lh100 + (lines.length - 1) * gap100;
-    return { lines, w100, asc, lh100, gap100, bh100, size: 100 * Math.min((0.86 * kwW) / w100, (0.4 * sb.h) / bh100) };
+    return { lines, w100, asc, lh100, gap100, bh100, size: 100 * Math.min(sb.w / (KW.KW_PUSH * 1.02 * w100), (0.4 * sb.h) / bh100) };
   };
   let F = fit([kwText]);
   const sp = [...kwText].map((c, i) => (c === " " ? i : -1)).filter((i) => i > 0);
@@ -73,7 +74,7 @@ function kwLayout(fam) {
     if (two.size > 1.25 * F.size) F = two;
   }
   const k = F.size / 100, bw = F.w100 * k, bh = F.bh100 * k;
-  const cx = kwW / 2, cy = sb.y + sb.h / 2 + (P.kicker ? 0.03 * sb.h : 0);
+  const cx = sb.x + sb.w / 2, cy = sb.y + sb.h / 2 + (P.kicker ? 0.03 * sb.h : 0);
   return { sb, lines: F.lines, size: F.size, fam, cx, cy, bw, bh, x0: cx - bw / 2, y0: cy - bh / 2, asc: F.asc * k,
            lh: F.lh100 * k, gap: F.gap100 * k };
 }
@@ -155,7 +156,7 @@ function kwBuild() {
     .add(objs, { a: 0, duration: 150 * k, ease: "linear", delay: dShat - 170 * k }, tShat);
 
   // SVG: starburst behind the shapes (grows, turns, morphs), ring and underline in front (drawn on, then off)
-  const sr = Math.min(0.5 * Math.max(L.bw, L.bh * 2), 0.56 * kwW);
+  const D = KW.kineticDeco(L.sb, kwW, L), sr = D.sr;      // ring + starburst inside the stage box, push included
   const starA = document.createElementNS(NS, "path"), starB = document.createElementNS(NS, "path");
   starA.setAttribute("d", KW.star(L.cx, L.cy, 12, sr, sr * 0.56, -Math.PI / 2));
   starB.setAttribute("d", KW.star(L.cx, L.cy, 12, sr * 1.06, sr * 0.84, -Math.PI / 2 + Math.PI / 12));
@@ -171,9 +172,9 @@ function kwBuild() {
   // it crosses them) and passes under the kicker
   const kfs = Math.round(Math.max(34, Math.min(0.05 * kwW, 0.3 * L.size)));
   const ktop = Math.max(L.sb.y + 6, L.y0 - kfs * 2.1 - 0.05 * L.lh);
-  const rx = Math.min(kwW * 0.48, L.bw / 2 + 0.07 * kwW);
-  let ry = Math.min(L.bh / 2 + 0.45 * L.bh + 30, 0.5 * L.sb.h - 10);
-  if (P.kicker) ry = Math.max(L.bh / 2 + 8, Math.min(ry, L.cy - (ktop + kfs * 1.35) - 6));
+  const rx = D.rx;
+  let ry = D.ry;
+  if (P.kicker) ry = Math.min(D.ry, Math.max(L.bh / 2 + 8, Math.min(ry, L.cy - (ktop + kfs * 1.35) - 6)));
   const ring = document.createElementNS(NS, "path");
   ring.setAttribute("class", "kw-ring");
   ring.setAttribute("d", `M ${L.cx - rx} ${L.cy} A ${rx} ${ry} 0 1 1 ${L.cx + rx} ${L.cy} A ${rx} ${ry} 0 1 1 ${L.cx - rx * 0.96} ${L.cy - ry * 0.12}`);

@@ -446,8 +446,29 @@
     const pre = Math.min(k, land - at);
     return { at, end, k, land, pre, t0: land - pre, shatter: end - 0.48 * k, dShat: 0.46 * k };
   }
+  // kinetic-word's stage: the larger free area beside the burned captions (safeBox), inset KW_EDGE of the frame from
+  // every frame edge it touches (the caption side keeps safeBox's own pad), so nothing it draws meets the frame edge
+  const KW_EDGE = 0.06, KW_PUSH = 1.1;                 // KW_PUSH: the most the camera push scales the stage
+  function kineticBox(p) {
+    const w = p.w || 1080, h = p.h || 1920, b = safeBox({ w, h, caption_band: p.caption_band });
+    const mx = KW_EDGE * w, my = KW_EDGE * h;
+    const top = b.y <= 0 ? my : b.y, bot = b.y + b.h >= h ? h - my : b.y + b.h;
+    return { x: mx, y: top, w: w - 2 * mx, h: Math.max(0, bot - top) };
+  }
+  // the ring (rx, ry) and the starburst (sr; its morph grows it x1.06) around a word {cx, cy, bw, bh} sized so they
+  // stay inside the box even at the camera push (and half the ring's stroke)
+  function kineticDeco(box, W, word) {
+    const stroke = Math.max(4, 0.006 * W) / 2;
+    const hx = Math.min(word.cx - box.x, box.x + box.w - word.cx) / KW_PUSH;
+    const hy = Math.min(word.cy - box.y, box.y + box.h - word.cy) / KW_PUSH;
+    const rx = Math.max(1, Math.min(0.48 * W, word.bw / 2 + 0.07 * W, hx - stroke));
+    const ry = Math.max(1, Math.min(word.bh / 2 + 0.45 * word.bh + 30, hy - stroke));
+    const sr = Math.max(1, Math.min(0.5 * Math.max(word.bw, word.bh * 2), 0.56 * W, hx / 1.06, hy / 1.06));
+    return { rx, ry, sr };
+  }
 
   window.CutmateFX = { make, pure: { seed, trackAt, particleState, scrambleAt, openAmount, safeBox },
-                       wow: { gridSize, gridStart, assignTargets, star, kineticBeats, kineticFamily } };
+                       wow: { gridSize, gridStart, assignTargets, star, kineticBeats, kineticFamily, kineticBox, kineticDeco,
+                              KW_PUSH } };
   if (typeof module !== "undefined") module.exports = window.CutmateFX;
 })();
