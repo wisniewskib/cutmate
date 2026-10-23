@@ -85,7 +85,34 @@ Film-wide request "chcę explainery" → `- [czat] explainery → explainers` (a
 **Map:** a built-in component when one fits; `bg` for "inne tło / przenieś mnie gdzie indziej"; `side` for "na połowie
 ekranu" (16:9 only); otherwise `custom`. Check saved effects first: `${CUTMATE_HOME:-$HOME/.cutmate}/themes/<theme>/components/custom/index.json`
 and the bundled ones in `${CLAUDE_PLUGIN_ROOT}/themes/<theme>/components/custom/index.json` — read BOTH `index.json` files; their formats differ (bundled: `params` = {name: description}, `follow`/`place` booleans, `kind`; user file from `save-effect`: `params` = list, `follow` = string|null).
-Bundled: `energy-ball` (params `radius`, `colors`; `"follow": "hand"`; hidden without hand samples), explainers `stat-card`, `flow`, `ui-mock`, `iso-machine`, `checklist`, `headline`, VFX/3D `showcase-3d`, `burst`, `hand-sparks`.
+Bundled: `energy-ball` (params radius, colors; `"follow": "hand"`; hidden without hand samples), explainers `stat-card`, `flow`, `ui-mock`, `iso-machine`, `checklist`, `headline`, VFX/3D `showcase-3d`, `burst`, `hand-sparks`, and the WOW pack below.
+
+**WOW pack** — six stock show-stoppers (`kind` wow in the bundled index.json): `exploded-view`, `globe`, `burst-out`, `hand-control`, `topic-change`, `kinetic-word`.
+They are tested, seek-safe, offline (vendored libraries; a build error `vendored library … not found` → run `"$CM" vendor`) and take the theme's tokens, so a cloned style restyles them. READ their `index.json` entries (`params`, `modes`, `impact`) before the first use. They keep their own text out of the burned captions (`P.caption_band`, `U.safeBox(P)`) and burst-out holds beside the face — do not move captions or the speaker for them.
+- **When:** WOW effects replace writing a new effect whenever an effect, a surprise or an explainer fits a moment below — never write an `out/custom/` effect for such a moment. In a classic theme (9:16 or 16:9) they need the same opt-in as effects today: a request (chat or spoken), or surprises on (`[niespodzianka]`, Zaskocz mnie below); requested explainers may be `exploded-view` / `globe`. In a split-panel theme `exploded-view` / `globe` are ordinary panel items (`"panel"`, no request needed, §5b) and `kinetic-word` / `topic-change` are scenes (`"scenes"`, §5b); `hand-control` stays a `custom` over the speaker's half; `burst-out` is never used there (it is a `bg`, and a `bg` next to a panel is a build error).
+
+| What is said / shown | Effect | Setup |
+|---|---|---|
+| "rozłożę to na części", "z czego to się składa", "w środku jest", "warstwy", a device / engine / system being explained | `exploded-view` | `parts` from what is said, else a `preset` |
+| "na całym świecie", "globalnie", countries / cities / "w USA i w Chinach", a worldwide number | `globe` | `from` = the speaker's country (PL) unless said; `to` = the named countries |
+| the hero reveal: "to zmienia wszystko", "poznajcie", "przedstawiam", the product's name said with emphasis | `burst-out` | as `"type": "bg"`, `"effect": "burst-out"`, `"hit": "<impact word>"`; classic 9:16 / 16:9 only (never with a panel) |
+| an open palm held toward the camera, fingers spread, a "conjuring" gesture, "patrzcie" with the hand up | `hand-control` | `card` = the point being made, ≤ 3 lines; run `$CM track --force "<folder>/out"` when the build says so |
+| a chapter change (long-form: every chapter 2+ via `"chapter_fx": "topic-change"`) or "a teraz…", "przejdźmy do", "druga sprawa" in a short | `topic-change` | `title` = the next topic, ≤ 40 chars |
+| "wystartowało", "start", "odpalamy", a growth / launch / take-off moment, THE number or key phrase of the video ("+300%", "ZA DARMO") | `kinetic-word` | `text` ≤ 14 chars from the sentence; scene in split-panel, `custom` full-frame in classic |
+
+- **Plan entries** (anchors as in §5; params are the index.json ones — only the listed keys):
+  - `exploded-view` — 9:16 classic `{"type": "split", "from", "to", "effect": "exploded-view", "params": {…}}`, 16:9 the same as `side`, split-panel a panel item `{"at", "until", "effect": "exploded-view", "params": {…}}` (or a scene). Params: `parts` 2–7 `{"label", "shape": "block"|"cylinder"|"disc"|"ring"|"gear"|"board"|"screen"|"shell", "color"?}` from bottom to top, the labels the speaker's words (≤ 2 words each); no parts said → `preset` `"engine"` | `"phone"` | `"layers"`; `axis` `"y"` (default) | `"x"`; `title?`; `bg` `"panel"` | `"none"`. 3–4.5 s (it turns in, explodes with labels, orbits, slams back).
+  - `globe` — the same placements as exploded-view. Params: `from` ISO-2 (`"PL"`), `to` 1–6 ISO-2 codes, `labels` `"auto"` (country names in the video language) or a list, `style` `"dots"` | `"solid"`, `title?`. 3–5 s (arcs draw one by one, labels decode at the end).
+  - `burst-out` — `{"type": "bg", "from", "to", "effect": "burst-out", "hit": "S4:Claude", "params": {"shape": "gem"|"cube"|"knot"|"sphere"|"logo", "label"?, "media"?, "rays"?}}`: `hit` on the impact word (the object lands there with the shake, flash and hit sound; `"hit": true` lands 1 s after `from`), `from` ≥ 1 s before that word, `to` ≥ 1.5 s after it (3–5 s in all). `"logo"` needs `"media": "broll/<logo>.png"`. It needs the face position of its segment (plan `"face"`, or run `$CM track "<folder>/out"` — face is filled from tracks.json). The `bg` cut-out costs ~17× its duration on CPU.
+  - `hand-control` — `{"type": "custom", "name": "hand-control", "from", "to", "params": {"card": {"title": "Kontrola gestem", "lines": ["…"]}}}`, 3–6 s over the clearest open-palm moment (READ the sheets and the palm tracks; a still, raised, spread hand — never a fast swing, its sparks trail across the chin). Needs fingertip tracks: `$CM track "<folder>/out"` first; a project tracked before the pack gets the build error `needs fingertip tracks` → `$CM track --force "<folder>/out"` once. 9:16 classic, split-panel (the speaker's half; the panel item stays) and 16:9 (also beside a `side`); never a panel item or a scene. `hand` `"auto"` | `"left"` | `"right"`, `sparks` `"tips"` | `"off"`.
+  - `topic-change` — long-form: top-level `"chapter_fx": "topic-change"` in plan.json (every chapter 2+ plate becomes it: title = the chapter title, kicker `ROZDZIAŁ 02`); do not add topic-change graphics there as well. Short: `{"type": "custom", "name": "topic-change", "from", "to", "params": {"title": "Druga sprawa: koszty"}}` 1.2–2.0 s starting on the transition word ("a teraz", "przejdźmy do"); split-panel: a scene `{"from", "to", "effect": "topic-change", "params": {"title"}}`. `kicker?`, `style` `"glitch"` | `"wave"`.
+  - `kinetic-word` — split-panel: a scene `{"from", "to", "effect": "kinetic-word", "params": {"text": "+300%"}}`; classic: `{"type": "custom", "name": "kinetic-word", "from", "to", "params": {"text": "ZA DARMO"}}` full frame (`"bg": "none"` keeps the video under it; the default `"panel"` covers the speaker). 3–4 s (2.5–6). The word lands 1.0 s after `from`: start it about 1 s before the spoken word, or (custom only — scenes take no `hit`) anchor `"hit": "S3:wystartowało"` (≥ 0.6 s after `from`) and it lands exactly there with the shake and hit sound. `kicker?`, `count` 300–900, `shapes` `"mixed"` | `"squares"` | `"dots"` | `"dashes"`.
+- **Caps:** shorts ≤ 2 WOW effects, ≥ 12 s apart (start to start), `burst-out` and `kinetic-word` once each. Long-form ≤ 1 per minute and ≤ 8 in total, chapter plates (`"chapter_fx"`) not counted. Panel items and scenes count. Never two WOW effects in a row without plain footage between them; never over the face (burst-out holds beside it). A build `WARN wow …` must be fixed before the checkpoint:
+  - `WARN wow effects: <n> in <s> s (cap <k>)` → drop the weakest; keep the hero reveal and THE number, make the rest plain components (`stamp`, `headline`, `stat-card`);
+  - `WARN wow <name>: <n> in <s> s (cap 1)` → keep that effect on its strongest moment only;
+  - `WARN wow <a> and <b> are <x> s apart (min 12)` → move one to another matching moment ≥ 12 s away, or drop it.
+- **Facts:** globe countries, kinetic-word numbers and exploded-view part names come only from what is said (card and title text too); numbers need a ✅ line in `factcheck.md` (§3) — the build does not check them.
+- **Snapshot loop:** every WOW effect gets a strip every 0.25 s over its span — the §6 snapshot command with `--at a,a+0.25,…,b` (its times in the cut video) — READ before the checkpoint: it reads on a phone, lands on its word, keeps off the face and the captions. "zrozumiałem tak" lists them as `- [wow] <effect> → <what> @ <anchor>` (shown to the user; in `requests.md` a requested or surprise WOW keeps its own source with the target `custom:<effect>`, e.g. `- [niespodzianka] klejnot na „poznajcie” → custom:burst-out @ S4:poznajcie`). No checkpoint → those lines go into EDIT_NOTES.md.
 
 **Plan types** (in `plan.json` graphics):
 - `{"type": "custom", "name": "<lowercase-dashes>", "from": …, "to": …}` or `"at"` (+ `until`); `"follow": "face"|"hand_left"|"hand_right"|"hand"`
@@ -98,7 +125,7 @@ Bundled: `energy-ball` (params `radius`, `colors`; `"follow": "hand"`; hidden wi
 
 **Explainers** (animated explanations in the `split` panel; classic themes — a split-panel theme puts them in the panel without a request, §5b): only after an explicit request — chat or spoken ("explainer(y)", "wyjaśnij to animacją"), never on your own. Pick moments:
 2–4 per 60 s of video, each ≥ 2 s, ≥ 2 s of plain face between two explainers, never on a sentence that already has a requested effect or a `split` with `media`.
-Choose from `index.json` by sentence type: a number → `stat-card`, steps / a process → `flow`, a check / comparison → `checklist`, a tool / a chat / a command → `ui-mock`, a mechanism / "how it works" → `iso-machine`. Nothing fits → write a new effect in `out/custom/` starting from the closest template.
+Choose from `index.json` by sentence type: a number → `stat-card`, steps / a process → `flow`, a check / comparison → `checklist`, a tool / a chat / a command → `ui-mock`, a mechanism / "how it works" → `iso-machine`, a thing taken apart / its parts → `exploded-view`, countries / worldwide → `globe` (WOW: caps above). Nothing fits → write a new effect in `out/custom/` starting from the closest template.
 Text and numbers come ONLY from the sentence. The build does NOT check explainer numbers beyond stat-card `value` and checklist `summary.value` (a WARN when `steps.factcheck` is on; iso-machine `counter.to`, ui-mock counts and checklist row labels are not checked): verify every number against a ✅ line in `factcheck.md` yourself (§3) before you write it.
 9:16: `{"type": "split", "from": …, "to": …, "effect": "<name>", "params": {…}}` (panel 1000×820, params go to the effect); 16:9: the same as `{"type": "side", …, "effect", "params", "speaker": "right"|"left"|"gesture"}`.
 Templates (params; `?` = optional):
@@ -112,12 +139,12 @@ VFX/3D (all support `"place": "gesture"`): `showcase-3d` (shape `torus-knot`|`ic
 
 **Gesture placement:** when a spoken command says "tutaj / tu / tam / w tym miejscu" without naming a place, write `"place": "gesture"` (custom / chip) or `"speaker": "gesture"` (side: the panel goes to the screen side the speaker points to). A named place ("w prawym dolnym rogu", "po lewej") always wins — then do NOT write gesture. `place` is only for `custom` / `chip` and `"speaker": "gesture"` only for `side` (anything else → plan error). What the hand does decides the spot (from the hand-shape tracks): an **open / presenting palm** → the effect sits just above that palm and follows the hand for its whole span (held at the last seen spot when the hand drops out; the effect also gets both palms as `P.hands`); a **clear index-finger point** → the pointed spot, just past the fingertip (never thrown to the frame edge); neither → the higher visible hand. The effect starts at its anchor and takes its position from the nearest hand sample, so anchor it on the GESTURE, not on the word: when the hand comes up before "tutaj", use the time the hand is up (seconds, read from the sheet / tracks) — it still matches the request within ±1 s. A chip centres on the spot (kept inside the safe zone); positions follow punch-ins and the split / side moves. Run `$CM track "<folder>/out"` first (fresh tracks needed; stale → build error; no hand near the anchor → build WARN and the default position; WARN "no pointing data" or "no hand-shape data" → run `$CM track --force "<folder>/out"`).
 
-**Every gesture gets an effect.** Read the sheets (and `work/tracks.json` palm tracks) for EVERY moment the speaker shows with the hands where something should appear — palms framing a spot, a palm held out, both hands spread, a push toward the camera — even without the word "tutaj", and put a visible effect ON the hands there (`"place": "gesture"`): `burst` for a framed spot or a punch, `showcase-3d` resting on a presenting palm, `energy-ball` on a cupped hand, `hand-sparks` `stream` for spread hands, `sparks` + `link` for a trick or an object held in both hands. Clear physical actions (tricks, stunts, a jump at the camera) get one too, as surprises. Size them to read on a phone (an effect smaller than the hand is invisible). Then make a strip of snapshots every 0.25 s over each effect's span and READ it: the effect must sit on / at the hands as they move, be clearly visible, and never cover the face (shrink it or move the anchor if it does).
+**Every gesture gets an effect.** Read the sheets (and `work/tracks.json` palm tracks) for EVERY moment the speaker shows with the hands where something should appear — palms framing a spot, a palm held out, both hands spread, a push toward the camera — even without the word "tutaj", and put a visible effect ON the hands there (`"place": "gesture"`): `burst` for a framed spot or a punch, `showcase-3d` resting on a presenting palm, `energy-ball` on a cupped hand, `hand-sparks` `stream` for spread hands, `sparks` + `link` for a trick or an object held in both hands; the clearest open palm with a point to make → `hand-control` (WOW pack, its caps). Clear physical actions (tricks, stunts, a jump at the camera) get one too, as surprises. Size them to read on a phone (an effect smaller than the hand is invisible). Then make a strip of snapshots every 0.25 s over each effect's span and READ it: the effect must sit on / at the hands as they move, be clearly visible, and never cover the face (shrink it or move the anchor if it does).
 
 **Zaskocz mnie (surprises):** on by default whenever effects or explainers are requested; "bez niespodzianek" turns it off (never add surprises to a plain cut).
-1–3 per video, ≤ 1 per 15 s, never over the face, never on a sentence with a requested effect — except effects on gestures and physical actions (above): those go on every such moment, logged as surprises, ≥ 1.5 s apart. Use `burst`, `showcase-3d`, a `chip` / `stamp` or a small custom effect on a punchline or key word. Log each as `- [niespodzianka] <what> → <target> @ <anchor>` and flag them in the "zrozumiałem tak" list as surprises so the user can strike any.
+1–3 per video, ≤ 1 per 15 s, never over the face, never on a sentence with a requested effect — except effects on gestures and physical actions (above): those go on every such moment, logged as surprises, ≥ 1.5 s apart. Use a WOW effect when its moment is there (WOW pack table, within its caps), else `burst`, `showcase-3d`, a `chip` / `stamp` or a small custom effect on a punchline or key word. Log each as `- [niespodzianka] <what> → <target> @ <anchor>` and flag them in the "zrozumiałem tak" list as surprises so the user can strike any.
 
-**Snapshot loop:** every explainer gets at least two snapshots (start and middle, §6), every gesture-placed / hand effect a strip every 0.25 s over its span, and you READ them before the checkpoint; fix `plan.json` / the effect and rebuild BEFORE showing the "zrozumiałem tak" list.
+**Snapshot loop:** every explainer gets at least two snapshots (start and middle, §6), every gesture-placed / hand effect and every WOW effect a strip every 0.25 s over its span, and you READ them before the checkpoint; fix `plan.json` / the effect and rebuild BEFORE showing the "zrozumiałem tak" list.
 
 **Tracking:** if any graphic uses `"follow"`, or you want face-centred punch-ins without reading sheets, run
 `$CM track "<folder>/out"` after `cut` (it skips the work when tracks.json is newer than aroll.mp4; `--force` redoes it). After every re-cut run it again: plan/build ignore a tracks.json older than aroll.mp4, and `follow` then fails. Needs mediapipe; otherwise tell the user to run `/cutmate:setup`.
@@ -131,7 +158,9 @@ components; `ROOT` in style is the effect root. Rules:
   dark pixels transparent. For solid 3D objects (logos, cubes) use `alpha: "keep"` or no bloom;
   `U.glowOrb(S, {radius, colors, swirl})` → `{group, update(t)}`; `U.particles(target, {count, seed, life, speed, spin, size, colors, emitter})`
   → `{update(t), points?}` (canvas: px; inside `U.three`: world units: frame height ÷ 6.3 px per unit, ≈171 at 1080 px tall, ≈305 at 1920); `U.draw(sel, {from, dur, stagger})`;
-  `U.rough(svg, shapes, {seed})` (shape = `{kind: "rectangle"|"circle"|"line"|"path"…, args: [...], opts: {...}}`); `U.tex(el, latex)`; `U.anime(timeline)`; `U.lottie(anim)`.
+  `U.rough(svg, shapes, {seed})` (shape = `{kind: "rectangle"|"circle"|"line"|"path"…, args: [...], opts: {...}}`); `U.tex(el, latex)`; `U.anime(tl)` (an anime.js timeline, `autoplay: false`) or, with async setup, a promise resolving to
+  `{ timeline: tl }` — build `tl` inside the `then`: `U.anime(U.fonts().then(() => ({ timeline: tl })))` (never resolve to the
+  bare timeline: anime timelines are thenable and the build errors); `U.lottie(anim)`.
 - Measuring text (`offsetWidth`, fit loops): do it after `U.fonts([500, 800, 900])` (Promise: the theme font loaded) and
   register the work with `U.ready(promise)` — the first frame waits for every promise passed to `U.ready` (`U.three` registers itself).
 - `P.w`, `P.h`, `P.dur`, `P.at`, `P.end`, `P.track`, plus your own params at the top level of `P` (they cannot override these keys).
@@ -143,10 +172,14 @@ components; `ROOT` in style is the effect root. Rules:
 - Hand-placed `custom` effects get no automatic fade: draw nothing before `P.at` and be gone by `P.end` —
   gate everything with a visibility factor, as energy-ball does:
   `const vis = Math.min(1, Math.max(0, (t - P.at) / 0.25)) * Math.min(1, Math.max(0, (P.end - t) / 0.25));`
-- Forbidden (build rejects the file, even in comments or strings): Date.now, new Date, Math.random, crypto.getRandomValues,
-  performance.now, requestAnimationFrame, setTimeout, setInterval, onUpdate, setAnimationLoop, THREE.Clock, gsap.ticker,
-  `.play(`, anime.utils.random, d3.transition, AfterimagePass. Create Anime.js / Lottie objects with `autoplay: false` and
-  hand them to `U.anime` / `U.lottie` (the clock seeks them). Libraries (GSAP plugins, Three.js, Anime.js, Lottie, KaTeX, Rough.js, D3) load automatically when used.
+- Forbidden (build rejects the file, even in comments or strings): `Date.now`, `new Date`, `Math.random`,
+  `crypto.getRandomValues`, `performance.now`, `requestAnimationFrame`, `setTimeout`, `setInterval`, `onUpdate`,
+  `setAnimationLoop`, `THREE.Clock`, `gsap.ticker`, `.play(`, `anime.utils.random`, `d3.transition`, `AfterimagePass`,
+  `GlitchEffect`, `ScrambleTextPlugin` (random inside the library: use `U.scramble`), and the callbacks that fire only when
+  playback crosses a point (a render worker seeking straight to a frame skips them): `onComplete`, `onRepeat`, `onRender`,
+  `onBegin`, `onLoop`, `onStart`, `onReverseComplete`, `onBeforeUpdate`, `.restart(`. Create Anime.js / Lottie objects with
+  `autoplay: false` and hand them to `U.anime` / `U.lottie` (the clock seeks them; never push them on `window.__hfAnime`).
+  Libraries (GSAP plugins, Three.js, Anime.js, Lottie, KaTeX, Rough.js, D3) are vendored and load automatically when used.
 
 Pattern (the energy-ball effect, abridged):
 ```html
@@ -244,7 +277,8 @@ Follow `frame.md`. Write `out/plan.json`:
 - Components: `title` (at, text, kicker?, logo?), `counter` (at, to, prefix?, suffix?, label), `list` (items[{text, at}],
   head?), `chip` (at, text, logo?/icon?), `stamp` (at, one-word text), `bars` (at, head, rows[{label, value}],
   illustrative), `point` (at, image, corner tl/tr/bl/br), `split` (from, to, media | effect + params).
-- Effects on request (`custom`, `bg`, `side`, `"follow"`): §1c.
+- Effects on request (`custom`, `bg`, `side`, `"follow"`): §1c. A moment from the WOW pack table (§1c) gets that stock
+  effect — a graphic, a panel item or a `"scenes"` entry as its plan entry says — within the WOW caps (`WARN wow …`).
 - Limits enforced by the planner: a `list` has at most 4 items, `bars` at most 3 rows, `stamp` is exactly one word,
   `counter.to` is a number. Budgets (warnings): at most 2 graphics with `hit`, 1 `title`, no overlapping graphics.
 - **Gęstość (density) — never a "pusty" video.** Follow the density rule of `frame.md` (9:16: a visual on screen ≥ 50 %
@@ -294,6 +328,8 @@ Only when the theme's `layout.mode` is `split-panel` and the video is 9:16 (Layo
   - steps / a process → `flow` or `checklist`; a check / comparison (works / broken, before / after) → `checklist`;
   - a chat / an AI answer / a command → `ui-mock` `chat` / `terminal`;
   - a mechanism / "how it works" → `iso-machine` with `"theme": "panel"`;
+  - a device / system taken apart, "z czego to się składa" → `exploded-view`; countries / "na całym świecie" → `globe`
+    (WOW pack, §1c: 3–4.5 s items, within the WOW caps — a panel item counts);
   - anything else → `headline` with the sentence's key phrase (1–6 words, the speaker's words).
   Vary the kinds — never the same template three items in a row. Every number in the panel (stat-card `value`,
   checklist `summary.value` and number labels, iso-machine `counter.to`) is verified against a ✅ line of
@@ -305,6 +341,8 @@ Only when the theme's `layout.mode` is `split-panel` and the video is 9:16 (Layo
   already says signed in: `npx --yes hyperframes@0.8.157 media-use resolve --type image --intent "<scene, in the theme's style, e.g. pixel-art globe at night, 9:16>" --project "<folder>/out/composition"`
   → copy the file to `<folder>/broll/`; (3) a full-frame stock explainer as the scene (`stat-card` `"layout": "hero"`
   or `headline`), which takes the theme's tokens; (4) no scene. Log the source used per scene in EDIT_NOTES.md.
+  A moment from the WOW pack table (§1c) takes its WOW scene before these sources — `kinetic-word` on THE number or
+  the launch word, `topic-change` on "przejdźmy do" — within the WOW caps (a scene counts).
 - **Band graphics** (title / counter / stamp / chip …) ≤ 2, only on punch moments — each hides the panel item under it
   for its span. The `captions` / `hit` / `sfx` rules stay as in §5.
 - **Example:**

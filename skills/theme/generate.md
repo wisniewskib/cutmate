@@ -35,6 +35,7 @@ Put the palette into the colour tokens below the `cutmate:font` blocks: `--accen
 `--muted`, `--shadow` (fits the shapes: a hard offset `8px 8px 0 var(--ink)` for brutal, `none` for sharp, a soft blur
 for pill). Add `--on-accent: <on_accent>;` for text on accent fills. Keep every required token (`--accent`, `--text`,
 `--ink`, `--muted`, `--card`, `--shadow`, `--font`, `--font-display`).
+The stock WOW effects (`exploded-view`, `globe`, `burst-out`, `hand-control`, `topic-change`, `kinetic-word`) take the theme only through tokens (`--accent`, `--on-accent`, `--text`, `--ink`, `--muted`, `--card`, `--panel-bg`, `--radius`, `--shadow`, `--font`, `--font-display`, `--font-num`; optional `--spark` / `--spark-glow` for hand-control's sparks, `--glitch-a` / `--glitch-b` for topic-change's RGB ghosts) — keep the tokens complete and never restyle those files.
 Contrast (lint): `--ink` on `--card` ≥ 4.5; `on_accent` on `--accent` ≥ 4.5.
 `theme.json` `accent` = the `--accent` value, exactly.
 
@@ -140,7 +141,9 @@ Also keep:
 **Script rules:**
 - FORBIDDEN (lint): `Date.now`, `Math.random`, `performance.now`, `requestAnimationFrame`, `setTimeout`,
   `setInterval`, `onUpdate`, `setAnimationLoop`, `anime.utils.random`, `d3.transition`, `AfterimagePass`,
-  `THREE.Clock`, `new Date`, `crypto.getRandomValues`, `gsap.ticker`, `.play(`.
+  `THREE.Clock`, `new Date`, `crypto.getRandomValues`, `gsap.ticker`, `.play(`, `GlitchEffect`, `ScrambleTextPlugin`,
+  and the crossing callbacks `onComplete`, `onRepeat`, `onRender`, `onBegin`, `onLoop`, `onStart`, `onReverseComplete`,
+  `onBeforeUpdate`, `.restart(` (a render worker seeking straight to a frame skips them).
 - Randomness only `U.seed(n)`: `const rnd = U.seed(7); … rnd()` (fixed n, e.g. `direction.seed`).
 - No fetchable `http(s)` refs anywhere (themes work offline; lint rejects them).
 - Measure text (`offsetWidth`, fitting, per-character splits that need widths) only after

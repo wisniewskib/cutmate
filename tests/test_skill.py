@@ -365,3 +365,48 @@ def test_setup_skill_fixes_missing_vendor():
     assert '`"$CM" vendor`' in t and "`$CM doctor` → `vendor`" in t
     step0 = t[t.index("## 0. Re-run"):t.index("## 1. Detect")]
     assert '"$CM" vendor' in step0 and step0.index('"$CM" vendor') < step0.index("**Finished?**")
+
+
+def _bundled_index():
+    path = paths.plugin_root() / "themes" / "clean" / "components" / "custom" / "index.json"
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def test_edit_skill_wow_mapping():
+    from cutmate.plan import WOW
+    md = _skill("edit")
+    for s in (*WOW, "rozłożę to na części", "na całym świecie", "wystartowało", "przejdźmy do", '"chapter_fx"', '"hit": "',
+              "≤ 2 WOW", "12 s", "WARN wow", "- [wow] <effect> → <what> @ <anchor>", "factcheck.md"):
+        assert s in md, s
+    wow = _section(md, "**WOW pack**", "\n\n**")
+    for s in ('"type": "bg"', '"effect": "burst-out"', "every 0.25 s", '"scenes"', '"panel"', "U.safeBox"):
+        assert s in wow, s
+    check_cli_calls(md)
+
+
+def test_edit_skill_wow_needs_tracks_hint():
+    md = _skill("edit")
+    rows = [line for line in md.splitlines() if line.startswith("|") and "`hand-control`" in line]
+    assert len(rows) == 1, rows
+    assert '$CM track --force "<folder>/out"' in rows[0]
+
+
+def test_bundled_list_matches_index():
+    md = _skill("edit")
+    entries = _bundled_index()
+    name = r"`([a-z0-9]+(?:-[a-z0-9]+)*)`"
+    bundled = next(line for line in md.splitlines() if line.startswith("Bundled:"))
+    wow_names = _section(md, "**WOW pack**", "\n").split(":", 1)[1]
+    assert set(re.findall(name, bundled)) == {e["name"] for e in entries if e.get("kind") != "wow"}
+    assert set(re.findall(name, wow_names)) == {e["name"] for e in entries if e.get("kind") == "wow"}
+
+
+def test_skills_list_every_forbidden_api():
+    from cutmate.effects import FORBIDDEN
+    edit = _section(_skill("edit"), "- Forbidden (build rejects", "Pattern (")
+    gen = _section(_theme_file("generate.md"), "- FORBIDDEN (lint)", "- Randomness")
+    for api in FORBIDDEN:
+        assert f"`{api}`" in edit, api
+        assert f"`{api}`" in gen, api
+    assert "U.anime(U.fonts().then(() => ({ timeline: tl })))" in _skill("edit")
+    assert "WOW" in _section(_theme_file("generate.md"), "## 2. tokens.css", "## 2b.")
