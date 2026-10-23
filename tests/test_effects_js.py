@@ -973,7 +973,7 @@ def test_sparks_only_from_extended_tips():
         for p in sp:
             ex, ey = P["tips"]["right"][p["tip"]][0][1:3]
             assert (p["ex"], p["ey"]) == (ex, ey)
-            assert ((p["x"] - ex) ** 2 + (p["y"] - ey) ** 2) ** 0.5 < 0.25 * 1920
+            assert ((p["x"] - ex) ** 2 + (p["y"] - ey) ** 2) ** 0.5 < 0.3 * 1920
     assert _hand_control(dict(P, sparks="off"), [1.0, 2.0])["sparks"] == [[], []]
     gone = _hc_params(ext=(0, 1, 1, 0, 0))
     gone["tips"]["right"] = [[s for s in tip if s[0] <= 1.0] for tip in gone["tips"]["right"]]
@@ -982,7 +982,8 @@ def test_sparks_only_from_extended_tips():
 
 def test_card_keeps_off_the_face():
     """A palm just under the face (hands up at the chest): the open card slides sideways off the tracked face (toward the
-    hand's side) instead of covering it; it stays inside the SAFE box. Without a face track it sits on the hinge."""
+    hand's side) instead of covering it; it stays inside the SAFE box. Without a face track it sits on the hinge, which is
+    above the highest fingertip (the fingers and their sparks stay visible under the card)."""
     js = HAND.split("const seek = ")[0] + """
 const W = window.CutmateFX.wow, out = {};
 const near = Array.from({ length: 40 }, (_, i) => [i / 10, 900, 260]);
@@ -1004,9 +1005,41 @@ console.log(JSON.stringify(out));
     assert r.returncode == 0, r.stderr[-3000:]
     d = json.loads(r.stdout.strip().splitlines()[-1])
     none, face = d["none"], d["face"]
-    assert none["open"] == 1 and none["cx"] == 960 and none["by"] == 546          # bottom-centre on the hinge
+    # bottom-centre on the hinge: above the highest fingertip (y 500 - 0.035·1080), not P.lift above the palm (546)
+    assert none["open"] == 1 and none["cx"] == 960 and none["by"] == pytest.approx(500 - 0.035 * 1080)
+    assert none["w"] == 760                                                        # 16:9: clamp(0.5·W, 420, 760)
+    assert face["w"] >= 0.6 * 760                                                  # smaller beside the face, not over it
     fr, fy = 0.17 * 1080, 260 - 0.02 * 1080
     x0, x1, y0, y1 = face["cx"] - face["w"] / 2, face["cx"] + face["w"] / 2, face["by"] - face["h"], face["by"]
     nx, ny = min(max(900, x0), x1), min(max(fy, y0), y1)
     assert ((nx - 900) ** 2 + (ny - fy) ** 2) ** 0.5 >= fr - 1e-6, face           # clear of the face
     assert face["cx"] > 900 and x0 >= 60 and x1 <= 1860 and y0 >= 60               # the hand's side, inside SAFE
+
+
+def test_flick_burst_and_edge_sparks():
+    """A finger flicking out (ext 0 -> 1 at 1.0 s) fires a radial burst from that tip only, gone after 0.45 s; the sparks
+    are bold (core 4–8 px, glow 12–20 px at 1080) with 90–140 ms tails; an open card spills sparks from its bottom edge
+    (layer above the card), none while it is folded."""
+    P = _hc_params(1.0, 3.0, ext=(0, 0, 0, 0, 0))
+    P["tips"]["right"][1] = [[s[0], s[1], s[2], 1.0 if s[0] >= 1.0 else 0.0] for s in P["tips"]["right"][1]]
+    js = HAND.split("const seek = ")[0] + """
+const W = window.CutmateFX.wow, out = {};
+for (const t of [0.9, 1.1, 1.6]) out[t] = { tips: W.tipSparks(P, t), edge: W.edgeSparks(P, t, W.cardPose(P, t, 400)) };
+console.log(JSON.stringify(out));
+"""
+    from cutmate.build import _sections
+    sec = _sections(plugin_root() / "themes" / "clean" / "components" / "custom" / "hand-control.html")
+    r = subprocess.run(["node", "-e", js % {"fx": json.dumps(str(web_dir() / "effects.js")), "markup": json.dumps(sec["markup"]),
+                                            "params": json.dumps(P), "script": sec["script"], "times": "[]"}],
+                       capture_output=True, text=True, encoding="utf-8")
+    assert r.returncode == 0, r.stderr[-3000:]
+    d = json.loads(r.stdout.strip().splitlines()[-1])
+    assert d["0.9"]["tips"] == [] and d["0.9"]["edge"] == []
+    burst = [p for p in d["1.1"]["tips"] if p["burst"]]
+    assert len(burst) == 24 and {p["tip"] for p in d["1.1"]["tips"]} == {1}
+    assert not any(p["burst"] for p in d["1.6"]["tips"]) and d["1.6"]["tips"]
+    for p in d["1.6"]["tips"]:
+        assert 4 <= p["size"] <= 8 and 12 <= p["glow"] <= 20
+        if 0.09 <= p["age"] <= 0.15:                                             # young streaks: 60+ px long
+            assert ((p["x"] - p["tx"]) ** 2 + (p["y"] - p["ty"]) ** 2) ** 0.5 > 60, p
+    assert d["1.6"]["edge"] and d["1.1"]["edge"]

@@ -423,12 +423,13 @@ def _media_tag(cid: str, g: Graphic, P: dict) -> str:
     return f'<div class="img" style="background-image:url(\'{P["media"]}\')"></div>'
 
 
-def _hand_params(tr: dict, g: Graphic, host_start: float, size: tuple, origin: tuple, screen) -> dict:
+def _hand_params(tr: dict, g: Graphic, host_start: float, size: tuple, origin: tuple, screen, face_half: int = 0) -> dict:
     """For an effect whose index.json has "tips": per hand side with any sample in [start - 0.75, end], in region px and
     local s: P.tips[side] = 5 fingertip series [[t, x, y, ext], …] (thumb … pinky, tip_slice), P.palm_open[side] =
     [[t, 0|1], …] (the palm's open flag, off when the hand is gone), P.palms[side] = the palm centre (held_slice);
     P.faces = the face track (held_slice; the card keeps off it); P.lift = how far above the palm a palm-placed thing
-    sits (px), P.safe = the SAFE box in region px."""
+    sits (px), P.safe = the SAFE box in region px — below the panel seam (face_half px) while a split panel is up, so
+    the card stays in the speaker's half."""
     (W, H), (rx, ry) = size, origin
     tips, opened, palms = {}, {}, {}
     for side in ("left", "right"):
@@ -445,6 +446,8 @@ def _hand_params(tr: dict, g: Graphic, host_start: float, size: tuple, origin: t
     faces = [[t, round(x - rx, 1), round(y - ry, 1)]
              for t, x, y in held_slice(tr.get("face", []), g.start, g.end, host_start, W, H, screen)]
     sx, sy, sw, sh = SAFE.get((W, H), [0, 0, W, H])
+    if face_half > sy:
+        sy, sh = face_half, max(0, sy + sh - face_half)
     return {"tips": tips, "palm_open": opened, "palms": palms, "faces": faces, "lift": round(PALM_LIFT * H, 1),
             "safe": [sx - rx, sy - ry, sw, sh]}
 
@@ -452,7 +455,7 @@ def _hand_params(tr: dict, g: Graphic, host_start: float, size: tuple, origin: t
 def subcomp(cid: str, g: Graphic, host_start: float, theme: Path, assets: Path, media_map: dict, lang: str,
             size: tuple = (1080, 1920), extra_tags: dict | None = None, comp_path: Path | None = None,
             tracks: dict | None = None, assets_url: str | None = None, screen=None, caption_band: list | None = None,
-            face: list | None = None, tips: bool = False) -> str:
+            face: list | None = None, tips: bool = False, face_half: int = 0) -> str:
     sec = _sections(comp_path or theme / "components" / f"{g.type}.html")
     W, H = size
     screen = screen or (lambda x, y, t: (round(x * W, 1), round(y * H, 1)))  # noqa: E731  tracked point -> screen px
@@ -524,7 +527,7 @@ def subcomp(cid: str, g: Graphic, host_start: float, theme: Path, assets: Path, 
                 P["track"] = mine
                 P["place"] = list(mine[0][1:])
         if tips and tracks:                              # meta "tips" (hand-control): fingertips, palms, open palm
-            P.update(_hand_params(tracks["tracks"], g, host_start, (W, H), (rx, ry), screen))
+            P.update(_hand_params(tracks["tracks"], g, host_start, (W, H), (rx, ry), screen, face_half))
         if "media" in g.params:
             P["media"] = _copy_media(g.params["media"], assets, media_map)
         u_open, u_close = FX_OPEN.format(cid=cid), ")"
@@ -686,6 +689,8 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
         one whose region starts below the panel box."""
         if x.params.get("place_xy") or x.params.get("place_track") or x.params.get("follow"):
             return False
+        if x.type == "custom" and effect_meta(find_effect(x.params["name"], out, theme)).get("tips"):
+            return False                               # on the speaker's hand, in the face half
         r = x.params.get("region")
         return not (x.type == "custom" and r and r[1] >= panel_h)
     bands = [(x.start, x.end) for x in items if x.type != "panel" and not x.params.get("_panel")
@@ -777,7 +782,9 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
         (proj / "compositions" / f"{cid}.html").write_text(
             subcomp(cid, g, hs, th, A, media_map, language, size=(W, H), extra_tags=extra, comp_path=comp_path,
                     tracks=tr, assets_url=assets_url, screen=screen, caption_band=band, face=face,
-                    tips=g.type == "custom" and bool(effect_meta(comp_path).get("tips"))), encoding="utf-8")
+                    tips=g.type == "custom" and bool(effect_meta(comp_path).get("tips")),
+                    face_half=panel_h if pn and pn["start"] - 1e-6 <= g.start <= (end if pn["stays"] else pn["end"]) else 0),
+            encoding="utf-8")
         scene = bool(g.params.get("_scene"))
         if g.type == "panel":
             track = 1                                  # under every graphic, over the A-roll

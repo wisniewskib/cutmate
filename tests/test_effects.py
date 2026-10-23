@@ -344,5 +344,7 @@ def test_tip_slice_keeps_ext_and_drops_long_gaps():
     far = tip_slice(s2, 0.2, 1.15, 0.0, 100, 100)
     assert far[0] == [0.2, 50.0, 50.0, 0.0]                              # nearest sample 0.8 s away: not held, off
     assert tip_slice([], 0, 1, 0, 100, 100) == []
+    early = tip_slice([[0.8, 0.5, 0.5, 1.0], [2.0, 0.5, 0.5, 1.0]], 1.0, 2.5, 0.0, 100, 100)
+    assert early[:2] == [[1.0, 50.0, 50.0, 1.0], [1.05, 50.0, 50.0, 0.0]]  # held 0.25 s from the real sight (0.8), not from a
     px = tip_slice(s2, 1.0, 1.1, 1.0, 100, 100, lambda x, y, t: (x * 10, y * 20))
     assert px[0] == [0.0, 5.0, 10.0, 1.0]

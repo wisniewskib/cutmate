@@ -159,15 +159,17 @@ def tip_slice(samples, a: float, b: float, host_start: float, W: int, H: int, to
         return []
     to_px = to_px or (lambda x, y, t: (round(x * W, 1), round(y * H, 1)))
     on = lambda e: 1.0 if e >= 0.5 else 0.0  # noqa: E731
-    inside = [[s[0], s[1], s[2], on(s[3])] for s in samples if a <= s[0] <= b]
+    inside = [[s[0], s[1], s[2], on(s[3]), s[0]] for s in samples if a <= s[0] <= b]    # [t, x, y, ext, last sight]
     if not inside or inside[0][0] > a:
         near = min(samples, key=lambda s: (abs(s[0] - a), s[0] > a))
-        inside.insert(0, [a, near[1], near[2], on(near[3]) if abs(near[0] - a) <= TIP_HOLD + 1e-9 else 0.0])
+        held = abs(near[0] - a) <= TIP_HOLD + 1e-9
+        inside.insert(0, [a, near[1], near[2], on(near[3]) if held else 0.0, near[0] if held else a])
     pts = []
     for p, q in zip(inside, inside[1:] + [[b + TIP_HOLD + 1, *inside[-1][1:]]]):
-        pts.append(p)
-        if q[0] - p[0] > TIP_HOLD + 1e-9 and p[0] + TIP_HOLD <= b + 1e-9:
-            pts.append([p[0] + TIP_HOLD, p[1], p[2], 0.0])
+        pts.append(p[:4])
+        off = max(p[0], p[4] + TIP_HOLD)                 # TIP_HOLD after the real last sight (not after a)
+        if q[0] - off > 1e-9 and off <= b + 1e-9:
+            pts.append([off, p[1], p[2], 0.0])
     return [[round(t - host_start, 3), *to_px(x, y, t), e] for t, x, y, e in pts]
 
 

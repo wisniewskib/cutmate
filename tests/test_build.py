@@ -1699,3 +1699,40 @@ def test_old_tracks_need_force(out, theme):
     write_plan(out, HC_PLAN)
     with pytest.raises(PlanError, match=r'graphic #1 \(custom hand-control\): needs hand tracks — run cutmate track ".*out"'):
         B.build(out, theme=theme)
+
+
+def test_hand_control_in_split_panel_and_169(tmp_path, monkeypatch):
+    """Placement: hand-control is an overlay on the A-roll hand wherever the hand is visible. In a 9:16 split-panel the
+    speaker sits in the bottom (face) half: the card's SAFE box starts at the panel seam and the panel item over it is
+    not hidden (it is a hand effect, not a band graphic). In 16:9 the tips are in 1920x1080 px with the 16:9 SAFE box."""
+    import sys
+    sys.path.insert(0, str(Path(__file__).parent))
+    import wowkit
+    from cutmate.tracks import FINGERS, TRACKS
+    home = tmp_path / "home"
+    monkeypatch.setenv("CUTMATE_HOME", str(home))
+    dst = home / "themes" / "split"
+    shutil.copytree(paths.theme_dir("clean"), dst)
+    meta = json.loads((dst / "theme.json").read_text(encoding="utf-8"))
+    meta["layout"] = {"mode": "split-panel"}
+    (dst / "theme.json").write_text(json.dumps(meta), encoding="utf-8")
+    ts = [round(i / 15, 3) for i in range(70)]
+    tr = {n: [] for n in TRACKS}
+    tr["face"] = [[t, 0.5, 0.35, 1.0] for t in ts]
+    tr["palm_right"] = [[t, 0.35, 0.6, 1.0] for t in ts]
+    for k, f in enumerate(FINGERS):
+        tr[f"{f}_right"] = [[t, 0.3 + 0.03 * k, 0.5, 1.0] for t in ts]
+    hc = {"type": "custom", "name": "hand-control", "from": "S2:minus", "to": "S2:</script>", "params": {"card": {"title": "x"}}}
+    panel = {"panel": [{"at": 0.1, "effect": "headline", "params": {"text": "y"}}]}
+    proj = wowkit.project(tmp_path / "a", {**panel, "graphics": [hc]}, dur=5.0, theme="split", tracks=tr)
+    P = _built_P(proj)["hand-control"][0]
+    seam = round(B.SPLIT_DEFAULTS.ratio * 1920)
+    html = (proj / "index.html").read_text(encoding="utf-8")
+    alone = wowkit.project(tmp_path / "b", panel, dur=5.0, theme="split", tracks=tr)
+    assert cfg_of(html).get("hide") == cfg_of((alone / "index.html").read_text(encoding="utf-8")).get("hide")
+    assert P["safe"][1] >= seam and P["safe"][1] + P["safe"][3] <= 192 + 1344
+    tip = P["tips"]["right"][1][0]
+    assert tip[2] > seam                                       # the hand is drawn in the face half (panel offset applied)
+    proj = wowkit.project(tmp_path / "c", {"graphics": [hc]}, fmt="16:9", dur=5.0, tracks=tr)
+    P = _built_P(proj)["hand-control"][0]
+    assert (P["w"], P["h"]) == (1920, 1080) and P["safe"] == [60, 60, 1800, 800] and len(P["tips"]["right"]) == 5

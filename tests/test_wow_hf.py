@@ -460,9 +460,10 @@ def _hand_tracks(dur: float = 4.4) -> dict:
 
 
 def test_hand_control_renders(tmp_path, home):
-    """9:16 hand-control over a synthetic right hand: at 0.8 s sparks stream from the five fingertips and the card is
-    folded; at 1.6 s the card is open above the palm (a big --card block, title readable); at 3.4 s it has folded away.
-    Seek-safe at 1.6. READ the snapshots and the 0.25 s strip."""
+    """9:16 hand-control over a synthetic right hand: at 0.8 s bold warm sparks stream from the five fingertips (a big
+    share of bright changed pixels at each tip) and the card is folded; at 1.6 s the card is open ABOVE the fingertips
+    (a big --card block, title readable) and the fingertip sparks are still visible under it; at 3.4 s it has folded away
+    with nothing left behind. Seek-safe at 1.6. READ the snapshots and the 0.25 s strip."""
     from cutmate.media import run
     plan = {"graphics": [{"type": "custom", "name": "hand-control", "from": 0.3, "to": 3.8,
                           "params": {"card": {"title": "Kontrola gestem", "lines": ["iskry z palców", "karta z dłoni"]}}}]}
@@ -472,28 +473,43 @@ def test_hand_control_renders(tmp_path, home):
     host = 0.3 - P["at"]
     s08, s16, s34 = wowkit.snap(proj, 0.8), wowkit.snap(proj, 1.6), wowkit.snap(proj, 3.4)
     print(f"snapshot 0.8: {s08}\nsnapshot 1.6: {s16}\nsnapshot 3.4: {s34}")
-    raw = tmp_path / "raw08.png"
-    r = run(["ffmpeg", "-nostdin", "-v", "error", "-y", "-ss", "0.8", "-i", Path(proj).parent / "aroll.mp4", "-frames:v", "1", raw])
-    assert r.returncode == 0, r.stderr
-    a, base = _img(s08), _img(raw)
     yy, xx = np.mgrid[0:1920, 0:1080]
-    for k, tip in enumerate(P["tips"]["right"]):
-        x, y = next(s[1:3] for s in tip if s[0] >= 0.8 - host - 1e-6)
-        near = ((xx - x) ** 2 + (yy - y) ** 2) <= 70 ** 2
-        lift = np.abs(a[near] - base[near]).mean()
-        print(f"0.8 tip {k} at ({x:.0f}, {y:.0f}): mean change {lift:.1f}")
-        assert lift > 20, f"no sparks at tip {k} at 0.8 s"
+
+    def raw(t):
+        png = tmp_path / f"raw{t}.png"
+        r = run(["ffmpeg", "-nostdin", "-v", "error", "-y", "-ss", str(t), "-i", Path(proj).parent / "aroll.mp4", "-frames:v", "1", png])
+        assert r.returncode == 0, r.stderr
+        return _img(png)
+
+    def at(series, t):
+        return next(s[1:3] for s in series if s[0] >= t - host - 1e-6)
+
+    def sparks(png, t, label):
+        a, base = _img(png), raw(t)
+        bright = (a.min(axis=2) > 150) & (np.abs(a - base).sum(axis=2) > 150)
+        shares = []
+        for k, tip in enumerate(P["tips"]["right"]):
+            x, y = at(tip, t)
+            near = ((xx - x) ** 2 + (yy - y) ** 2) <= 90 ** 2
+            shares.append(float(bright[near].mean()))
+        print(f"{label}: bright changed share near tips {[round(v, 2) for v in shares]}")
+        return shares, a, base
+    sh08, a, base = sparks(s08, 0.8, "0.8")
+    assert min(sh08) >= 0.10, "fingertip sparks too faint at 0.8 s"
     far = (yy < 300) | (yy > 1500)
     assert np.abs(a[far] - base[far]).mean() < 2, "the effect paints away from the hand"
+    sh16, _, _ = sparks(s16, 1.6, "1.6")
+    assert min(sh16) >= 0.10, "the open card hides the fingertip sparks"
 
     def card_white(png, t):
-        x, y = next(s[1:3] for s in P["palms"]["right"] if s[0] >= t - host - 1e-6)
-        hinge = y - P["lift"]
-        box = _img(png)[int(hinge - 160):int(hinge - 40), int(x - 120):int(x + 120)]
+        x, y = at(P["palms"]["right"], t)
+        top = min(at(tip, t)[1] for tip in P["tips"]["right"])
+        hinge = min(y - P["lift"], top - 0.035 * 1080)
+        box = _img(png)[int(hinge - 200):int(hinge - 60), int(x - 150):int(x + 150)]
         return float(((box.min(axis=2) > 215) & (box.max(axis=2) - box.min(axis=2) < 30)).mean())
     w08, w16, w34 = card_white(s08, 0.8), card_white(s16, 1.6), card_white(s34, 3.4)
     print(f"card white share: 0.8 {w08:.2f}, 1.6 {w16:.2f}, 3.4 {w34:.2f}")
-    assert w16 >= 0.6 and w08 <= 0.25 and w34 <= 0.25
+    assert w16 >= 0.5 and w08 <= 0.25 and w34 <= 0.25
     worst = wowkit.seek_safe(proj, 1.6)
     print(f"seek_safe(1.6) = {worst}")
     assert worst <= 1.0

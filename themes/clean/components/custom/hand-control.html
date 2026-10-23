@@ -2,29 +2,34 @@
 ROOT .hc { position: absolute; inset: 0; overflow: hidden; }
 ROOT .hc canvas { position: absolute; left: 0; top: 0; }
 ROOT .hc-card { position: absolute; left: 0; top: 0; box-sizing: border-box; visibility: hidden; overflow: hidden;
-  background: var(--card, rgba(255, 255, 255, 0.94)); border-radius: var(--radius, 28px);
-  box-shadow: var(--shadow, 0 10px 30px rgba(0, 0, 0, 0.35)), 0 0 0 2px var(--accent, #7dd3fc), 0 0 46px var(--accent, #7dd3fc);
+  background: var(--card, rgba(255, 255, 255, 0.94)); border-radius: var(--radius, 28px); border-style: solid;
+  border-color: var(--accent, #7dd3fc);
+  box-shadow: var(--shadow, 0 10px 30px rgba(0, 0, 0, 0.35)), 0 0 60px var(--accent, #7dd3fc), 0 0 18px var(--accent, #7dd3fc);
   color: var(--ink, #0f172a); font-family: var(--font, sans-serif); transform-origin: 50% 100%; will-change: transform, opacity; }
 ROOT .hc-card > * { position: relative; }
-ROOT .hc-bar { display: block; border-radius: 99px; background: var(--accent, #7dd3fc); }
+ROOT .hc-band { position: absolute; left: 0; top: 0; right: 0; background: var(--accent, #7dd3fc); }
+ROOT .hc-sweep { position: absolute; left: 4%; right: 4%; top: 0; opacity: 0; mix-blend-mode: screen;
+  background: linear-gradient(to bottom, transparent, var(--accent, #7dd3fc) 45%, #ffffff 50%, var(--accent, #7dd3fc) 55%, transparent); }
 ROOT .hc-media { display: block; width: 100%; background-size: cover; background-position: center; }
 ROOT .hc-title { font-family: var(--font-display, var(--font, sans-serif)); font-weight: 900; font-synthesis: none;
-  letter-spacing: -0.02em; line-height: 1.08; color: var(--ink, #0f172a); }
-ROOT .hc-line { display: flex; align-items: baseline; font-weight: 600; line-height: 1.3; color: var(--ink, #0f172a); }
+  letter-spacing: -0.02em; line-height: 1.04; color: var(--ink, #0f172a); }
+ROOT .hc-line { display: flex; align-items: baseline; font-weight: 700; line-height: 1.22; color: var(--ink, #0f172a); }
 ROOT .hc-line i { flex: none; border-radius: 50%; background: var(--accent, #7dd3fc); }
 </style>
 <markup><div class="hc"></div></markup>
 <script>
-// hand-control (WOW overlay, index.json "tips": needs fingertip tracks): hot streak sparks stream from every extended
-// fingertip of the chosen hand, and while that palm is open a card unfolds from it (hinge at the card's bottom edge,
-// P.lift px above the palm) and follows the hand; it folds back when the palm closes. No open palm: the card stays
-// folded. No track at all: hidden. Sparks are pure functions of t (birth slot + seeded randomness), the card a pure
-// function of the palm series — any frame renders the same alone. Inputs (build, region px, local s): P.tips[side] =
-// 5 × [[t, x, y, ext]] (thumb … pinky), P.palm_open[side] = [[t, 0|1]], P.palms[side] = [[t, x, y]], P.faces =
-// [[t, x, y]] (the face, the card keeps off it), P.lift, P.safe.
+// hand-control (WOW overlay, index.json "tips": needs fingertip tracks). Bold, warm streak sparks stream from every
+// extended fingertip of the chosen hand (a burst when a finger flicks out); while that palm is open a themed card
+// unfolds upward from a hinge just above the highest fingertip (so the fingers and their sparks stay in view) with a
+// flash along the hinge, a glow sweeping up its face and sparks spilling from its bottom edge (a layer above the card);
+// it follows the hand and dissolves back into it when the palm closes. With no room above the hand (a raised hand) the
+// card sits beside it for the whole effect. Never over the face. No open palm: the card stays folded. No track: hidden.
+// Everything is a pure function of t (birth slots + seeded randomness; the card from the palm series), so any frame
+// renders the same alone. Inputs (build, region px, local s): P.tips[side] = 5 × [[t, x, y, ext]] (thumb … pinky),
+// P.palm_open[side] = [[t, 0|1]], P.palms[side] = [[t, x, y]], P.faces = [[t, x, y]], P.lift, P.safe.
 
 // ---- pure helpers (window.CutmateFX.wow, registered once) ----
-const HC_N = 90, HC_LIFE = 0.5, HC_HOLD = 0.25;
+const HC_N = 55, HC_LIFE = 0.42, HC_HOLD = 0.25, HC_BURST = 24, HC_BURST_LIFE = 0.45, HC_EDGE = 60, HC_EDGE_LIFE = 0.6;
 const hcClamp = (v, a, b) => Math.min(b, Math.max(a, v));
 // the hand the effect uses: params.hand "left" / "right" when tracked, else the side with the most open-palm samples
 // (then the most samples; ties: right). null when no hand was tracked at all
@@ -52,16 +57,33 @@ function hcTipAt(tr, t) {
   }
   return [last[1], last[2], last[3]];
 }
-// every live spark at t: born every HC_LIFE / HC_N s per tip, only from a tip that is tracked and extended at its birth,
-// flying out along palm → tip with drag and gravity. {tip, ex, ey (the tip at birth), x, y (head), tx, ty (tail), age,
-// life (0–1), size, hot (0–1)}
+// the times (>= at) a fingertip flicks out: ext 0 -> 1, or its first extended sample from the start
+function hcFlips(tr, at) {
+  const out = [];
+  for (let i = 0; i < (tr || []).length; i++) {
+    const s = tr[i], prev = i ? tr[i - 1][3] : 0;
+    if (s[3] >= 0.5 && !(prev >= 0.5)) out.push(Math.max(at, s[0]));
+  }
+  return out;
+}
+// one streak spark: head (x, y) and a 90–140 ms tail (tx, ty) along a drag + gravity path from (ex, ey)
+function hcStreak(ex, ey, ang, v, age, tail, drag, grav) {
+  const pos = (a) => { const d = (v / drag) * (1 - Math.exp(-drag * a));
+    return [ex + Math.cos(ang) * d, ey + Math.sin(ang) * d + 0.5 * grav * a * a]; };
+  const h = pos(age), tl0 = pos(Math.max(0, age - tail));
+  return { x: h[0], y: h[1], tx: tl0[0], ty: tl0[1] };
+}
+// every live fingertip spark at t: born every HC_LIFE / HC_N s per tip, only from a tip that is tracked and extended at
+// its birth, flying out along palm → tip (up and away when the fingers point at the face); plus a radial burst of HC_BURST sparks when a finger flicks out.
+// {tip, ex, ey (the tip at birth), x, y (head), tx, ty (tail), age, life (0–1), size (core px), glow (px), burst}
 function tipSparks(P, t) {
   if (P.sparks === "off") return [];
   const side = hcSide(P);
   if (!side) return [];
-  const FX = window.CutmateFX.pure, m = Math.min(P.w, P.h), K = Math.max(0.3, Number(P.size) || 1);
+  const FX = window.CutmateFX.pure, m = Math.min(P.w, P.h), K = Math.max(0.3, Number(P.size) || 1), k1 = m / 1080 * K;
   const at = Number(P.at) || 0, end = Number(P.end) || at + 4;
   const palm = (P.palms || {})[side], tips = ((P.tips || {})[side]) || [], out = [];
+  const faces = Array.isArray(P.faces) && P.faces.length ? P.faces : null;
   tips.forEach((tr, k) => {
     if (!tr || !tr.length) return;
     for (let i = 0; i < HC_N; i++) {
@@ -72,20 +94,49 @@ function tipSparks(P, t) {
       if (!e || !(e[2] >= 0.5)) continue;
       const r = FX.seed(11 + k * 7919 + i * 104729 + (cyc + 1000) * 15485863);
       const pp = palm ? FX.trackAt(palm, born) : null;
-      const dir = pp && Math.hypot(e[0] - pp[0], e[1] - pp[1]) > 4 ? Math.atan2(e[1] - pp[1], e[0] - pp[0]) : -Math.PI / 2;
-      const ang = dir + (r() - 0.5) * 1.15, v = m * K * (0.45 + r() * 0.75), drag = 3.2, grav = m * 1.2;
-      const pos = (a) => { const d = (v / drag) * (1 - Math.exp(-drag * a));
-        return [e[0] + Math.cos(ang) * d, e[1] + Math.sin(ang) * d + 0.5 * grav * a * a]; };
-      const h = pos(age), tl0 = pos(Math.max(0, age - 0.045));
-      out.push({ tip: k, ex: e[0], ey: e[1], x: h[0], y: h[1], tx: tl0[0], ty: tl0[1], age, life: age / HC_LIFE,
-                 size: (1.6 + r() * 1.8) * K * m / 1080, hot: r() });
+      let dir = pp && Math.hypot(e[0] - pp[0], e[1] - pp[1]) > 4 ? Math.atan2(e[1] - pp[1], e[0] - pp[0]) : -Math.PI / 2;
+      const fc = faces ? FX.trackAt(faces, born) : null;
+      if (fc) {                                          // fingers pointing at the face: spray up and away from it instead
+        const toF = Math.atan2(fc[1] - e[1], fc[0] - e[0]);
+        if (Math.cos(dir - toF) > 0.2) dir = -Math.PI / 2 + (e[0] >= fc[0] ? 0.55 : -0.55);
+      }
+      const ang = dir + (r() - 0.5) * 1.1, v = m * K * (0.8 + r() * 0.7), tail = 0.09 + r() * 0.05;
+      const st = hcStreak(e[0], e[1], ang, v, age, tail, 2.5, m * 1.2);
+      out.push({ tip: k, ex: e[0], ey: e[1], ...st, age, life: age / HC_LIFE, size: (4 + r() * 4) * k1,
+                 glow: (12 + r() * 8) * k1, burst: false });
+    }
+    for (const tf of hcFlips(tr, at)) {
+      const age = t - tf;
+      if (age < 0 || age >= HC_BURST_LIFE || tf > end - 0.2) continue;
+      const e = hcTipAt(tr, tf);
+      if (!e) continue;
+      for (let j = 0; j < HC_BURST; j++) {
+        const r = FX.seed(977 + k * 31337 + j * 7919 + Math.round(tf * 1000) * 104729);
+        const ang = (j / HC_BURST) * Math.PI * 2 + (r() - 0.5) * 0.5, v = m * K * (1.0 + r() * 0.9);
+        const st = hcStreak(e[0], e[1], ang, v, age, 0.1 + r() * 0.04, 4.5, m * 1.0);
+        out.push({ tip: k, ex: e[0], ey: e[1], ...st, age, life: age / HC_BURST_LIFE, size: (4.5 + r() * 3.5) * k1,
+                   glow: (14 + r() * 6) * k1, burst: true });
+      }
     }
   });
   return out;
 }
+// the hinge at t: palm x, just above the highest tracked fingertip (or P.lift above the palm with no tip) — region px
+function hcHinge(P, side, t, pp) {
+  const m = Math.min(P.w, P.h);
+  let top = Infinity, xs = [];
+  for (const tr of ((P.tips || {})[side]) || []) {
+    const e = hcTipAt(tr, t);
+    if (e) { top = Math.min(top, e[1]); xs.push(e[0]); }
+  }
+  const hy = Math.min(pp[1] - (Number(P.lift) || 0), top - 0.035 * m);
+  const half = xs.length ? Math.max(...xs.map((x) => Math.abs(x - pp[0]))) + 0.05 * m : 0.1 * m;
+  return { hx: pp[0], hy, top: isFinite(top) ? top : pp[1], half };
+}
 // the card at t (ch = its unscaled height): open (0–1, openAmount of the palm series, closed by P.end), e (eased:
-// scaleY), the bottom-centre (cx, by) and scale s that keep it inside the SAFE box, off the burned captions and off the
-// face, with its hinge P.lift above the palm; null with no palm track
+// scaleY), its bottom-centre (cx, by), scale s and mode "above" (hinge over the fingers) or "side" (beside a raised
+// hand, chosen once per effect when the median hinge leaves less than 0.75 of the card above it), inside the SAFE box,
+// off the burned captions and off the face; null with no palm track
 function cardPose(P, t, ch) {
   const FX = window.CutmateFX.pure, side = hcSide(P);
   const palm = side && (P.palms || {})[side];
@@ -95,50 +146,101 @@ function cardPose(P, t, ch) {
   let open = t < at ? 0 : FX.openAmount(((P.palm_open || {})[side]) || [], t) * hcClamp((end - t) / 0.25, 0, 1);
   open = open < 1e-4 ? 0 : open;
   const c = 1.70158 * 1.15, u = open - 1, e = open <= 0 ? 0 : open >= 1 ? 1 : 1 + (c + 1) * u * u * u + c * u * u;
-  const cw = hcClamp(0.42 * P.w, 360, 620), m = Math.min(P.w, P.h), pad = 0.02 * m;
+  const cw = hcCardW(P), m = Math.min(P.w, P.h), pad = 0.02 * m;
   const sb = FX.safeBox(P), sf = Array.isArray(P.safe) && P.safe.length === 4 ? P.safe : [0, 0, P.w, P.h];
   const bx0 = Math.max(sb.x, sf[0]) + pad, by0 = Math.max(sb.y, sf[1]) + pad;
   const bx1 = Math.min(sb.x + sb.w, sf[0] + sf[2]) - pad, by1 = Math.min(sb.y + sb.h, sf[1] + sf[3]) - pad;
-  const hx = pp[0], hy = pp[1] - (Number(P.lift) || 0);
-  const s = hcClamp(Math.min((hy - by0) / Math.max(1, ch), (bx1 - bx0) / cw, (by1 - by0) / Math.max(1, ch)), 0.75, 1);
-  const w = cw * s, h = ch * s;
+  const H0 = Math.max(1, ch), hg = hcHinge(P, side, t, pp);
+  // mode, once per effect: the median room above the hinge over the open-palm samples (all samples if never open)
+  const po = (((P.palm_open || {})[side]) || []).filter((q) => q[1] >= 0.5).map((q) => q[0]);
+  const ts = (po.length ? po : palm.map((q) => q[0])).filter((q) => q >= at - 1e-6 && q <= end);
+  const rooms = ts.map((q) => { const p2 = FX.trackAt(palm, q); return p2 ? hcHinge(P, side, q, p2).hy - by0 : Infinity; })
+    .sort((a, b) => a - b);
+  const room = rooms.length ? rooms[Math.floor(rooms.length / 2)] : hg.hy - by0;
+  const mode = room >= 0.75 * H0 ? "above" : "side";
+  const faces = Array.isArray(P.faces) && P.faces.length ? P.faces : null;
+  const avg = (a) => a.reduce((v, q) => v + q[1], 0) / a.length;
+  let s, cx, by, w, h;
   const fitX = (x) => (bx1 - bx0 >= w ? hcClamp(x, bx0 + w / 2, bx1 - w / 2) : (bx0 + bx1) / 2);
-  let cx = fitX(hx);
-  const by = by1 - by0 >= h ? hcClamp(hy, by0 + h, by1) : by1;
-  // never over the face (P.faces: the tracked face, region px): pushed sideways off it, always to the same side for the
-  // whole effect (the side the hand is on, on average) and by how much the card overlaps the face's height, so it
-  // glides instead of jumping when the hand passes in front of the face
-  const f = Array.isArray(P.faces) && P.faces.length ? FX.trackAt(P.faces, t) : null;
+  const fitB = (y) => (by1 - by0 >= h ? hcClamp(y, by0 + h, by1) : by1);
+  if (mode === "above") {
+    s = hcClamp(Math.min((hg.hy - by0) / H0, (bx1 - bx0) / cw, (by1 - by0) / H0), 0.6, 1);
+    w = cw * s; h = H0 * s;
+    cx = fitX(hg.hx); by = fitB(hg.hy);
+  } else {
+    // beside the hand, away from the face (or toward the wider side), centred on the fingers' height
+    const dir = faces ? (avg(palm) >= avg(faces) ? 1 : -1) : (hg.hx < (bx0 + bx1) / 2 ? 1 : -1);
+    const roomX = dir > 0 ? bx1 - (hg.hx + hg.half) : (hg.hx - hg.half) - bx0;
+    s = hcClamp(Math.min(roomX / cw, (by1 - by0) / H0), 0.6, 1);
+    w = cw * s; h = H0 * s;
+    cx = fitX(hg.hx + dir * (hg.half + w / 2));
+    by = fitB((hg.top + pp[1]) / 2 + h / 2);
+  }
+  // never over the face (P.faces): pushed sideways off it, always to the same side for the whole effect (the side the
+  // hand is on, on average) and by how much the card overlaps the face's height, so it glides instead of jumping
+  const f = faces ? FX.trackAt(faces, t) : null;
   if (f) {
-    const fr = 0.17 * m, fy = f[1] - 0.02 * m, avg = (a) => a.reduce((v, q) => v + q[1], 0) / a.length;
-    const dir = avg(palm) >= avg(P.faces) ? 1 : -1, need = f[0] + dir * (fr + w / 2 + 0.01 * m);
+    const fr = 0.17 * m, fy = f[1] - 0.02 * m;
+    const dir = avg(palm) >= avg(faces) ? 1 : -1;
     const k = hcClamp((Math.min(by, fy + fr) - Math.max(by - h, fy - fr)) / (0.25 * fr), 0, 1);
+    const avail = dir > 0 ? bx1 - (f[0] + fr + 0.01 * m) : (f[0] - fr - 0.01 * m) - bx0;
+    if (k > 0 && avail < w) {                            // no room beside the face at full size: smaller (down to 0.6)
+      const s2 = s + (Math.max(0.6, Math.min(s, avail / cw)) - s) * k;
+      s = s2; w = cw * s; h = H0 * s;
+    }
+    const need = f[0] + dir * (fr + w / 2 + 0.01 * m);
     const target = dir > 0 ? Math.max(cx, need) : Math.min(cx, need);
     cx = fitX(cx + (target - cx) * k);
   }
-  return { open, e, cx, by, s, cw, ch, palm: pp, hinge: [hx, hy] };
+  return { open, e, cx, by, s, w, h, cw, ch: H0, mode, palm: pp, hinge: [hg.hx, hg.hy] };
+}
+// the card's width: 16:9 clamp(0.5·W, 420, 760), 9:16 clamp(0.62·W, 420, 700)
+function hcCardW(P) { return P.w >= P.h ? hcClamp(0.5 * P.w, 420, 760) : hcClamp(0.62 * P.w, 420, 700); }
+// sparks spilling from the open card's bottom edge (drawn above the card): the corners spray up and out, the middle
+// drips down toward the hand. Positions relative to the current pose; null-safe
+function edgeSparks(P, t, pose) {
+  if (P.sparks === "off" || !pose || pose.open <= 0) return [];
+  const FX = window.CutmateFX.pure, m = Math.min(P.w, P.h), k1 = m / 1080 * Math.max(0.3, Number(P.size) || 1);
+  const at = Number(P.at) || 0, out = [], w = pose.w * (0.62 + 0.38 * Math.min(1, pose.e)), by = pose.by;
+  for (let i = 0; i < HC_EDGE; i++) {
+    const slot = (t - at) / HC_EDGE_LIFE - i / HC_EDGE;
+    const cyc = Math.floor(slot), age = (slot - cyc) * HC_EDGE_LIFE;
+    if (t - age < at) continue;
+    const r = FX.seed(5 + i * 104729 + (cyc + 1000) * 15485863);
+    const side = r() < 0.5 ? -1 : 1, q = r(), u = side * (0.5 - 0.5 * q * q);   // biased to the corners
+    const corner = Math.abs(u) > 0.36;
+    const ang = corner ? -Math.PI / 2 + side * (0.5 + r() * 0.9) : Math.PI / 2 + (r() - 0.5) * 1.3;
+    const v = m * (corner ? 0.6 + r() * 0.5 : 0.35 + r() * 0.35);
+    const st = hcStreak(pose.cx + u * w, by, ang, v, age, 0.09 + r() * 0.04, 3.5, m * (corner ? 0.9 : 1.1));
+    const big = corner ? 1 : 0.6;                           // the drips under the card are finer than the corner sprays
+    out.push({ ...st, age, life: age / HC_EDGE_LIFE, size: (3.5 + r() * 3) * k1 * big, glow: (11 + r() * 6) * k1 * big });
+  }
+  return out;
 }
 const WOW = (window.CutmateFX.wow = window.CutmateFX.wow || {});
-Object.assign(WOW, { hcSide, hcTipAt, tipSparks, cardPose });
+Object.assign(WOW, { hcSide, hcTipAt, hcFlips, tipSparks, edgeSparks, cardPose, hcCardW });
 
 // ---- the effect ----
 const box = root.querySelector(".hc");
 const side = hcSide(P);
-const cv = document.createElement("canvas"); cv.width = P.w; cv.height = P.h; box.appendChild(cv);
+const mkCanvas = () => { const c = document.createElement("canvas"); c.width = P.w; c.height = P.h; return c; };
+const cv = mkCanvas(); box.appendChild(cv);                  // under the card: fingertips, sparks, palm light
 const g = cv.getContext("2d");
-const m = Math.min(P.w, P.h);
+const m = Math.min(P.w, P.h), k1 = m / 1080;
 const accent = U.token("--accent", "#7dd3fc");
-const cols = Array.isArray(P.colors) && P.colors.length ? P.colors : ["#ffffff", accent];
-const hot = cols[0], glow = cols[cols.length - 1];
-// the card (DOM): accent bar, optional image, title, up to 3 lines with accent dots; sizes from its width
+const cols = Array.isArray(P.colors) && P.colors.length ? P.colors : ["#ffffff", U.token("--spark", "#ffb347"), U.token("--spark-glow", "#ff7a18")];
+const hot = cols[0], warm = cols[Math.min(1, cols.length - 1)], glow = cols[cols.length - 1];
+// the card (DOM): accent band + edge, optional image, display-font title, up to 3 lines with accent dots
 const cardP = P.card && typeof P.card === "object" ? P.card : { title: String(P.card || P.title || "") };
-const cw = hcClamp(0.42 * P.w, 360, 620), padX = 0.07 * cw;
+const cw = hcCardW(P), padX = 0.075 * cw;
 const card = U.el("div", "hc-card", null, box);
-Object.assign(card.style, { width: cw + "px", padding: `${0.06 * cw}px ${padX}px ${0.07 * cw}px` });
+Object.assign(card.style, { width: cw + "px", borderWidth: Math.max(3, 0.007 * cw) + "px",
+                            padding: `${0.085 * cw}px ${padX}px ${0.07 * cw}px` });
+const band = U.el("i", "hc-band", null, card);
+band.style.height = 0.032 * cw + "px";
+const sweep = U.el("i", "hc-sweep", null, card);           // a glow line sweeping up the face as it unfolds (DOM, < 0.6
+sweep.style.height = 0.07 * cw + "px";                     // opacity: never an occluder of the card's own text)
 const parts = [];
-const bar = U.el("i", "hc-bar", null, card);
-Object.assign(bar.style, { width: 0.16 * cw + "px", height: 0.022 * cw + "px", marginBottom: 0.045 * cw + "px" });
-parts.push(bar);
 const media = P.media || cardP.media;
 if (media) {
   const im = U.el("div", "hc-media", null, card);
@@ -147,23 +249,28 @@ if (media) {
   parts.push(im);
 }
 const title = U.el("div", "hc-title", String(cardP.title || ""), card);
-title.style.fontSize = 0.098 * cw + "px";
+title.style.fontSize = 0.12 * cw + "px";
 parts.push(title);
 const lines = (Array.isArray(cardP.lines) ? cardP.lines : []).slice(0, 3);
 lines.forEach((txt, k) => {
   const ln = U.el("div", "hc-line", null, card);
-  Object.assign(ln.style, { fontSize: 0.064 * cw + "px", marginTop: (k ? 0.012 : 0.04) * cw + "px" });
+  Object.assign(ln.style, { fontSize: 0.078 * cw + "px", marginTop: (k ? 0.016 : 0.045) * cw + "px" });
   const dot = U.el("i", null, null, ln);
-  Object.assign(dot.style, { width: 0.022 * cw + "px", height: 0.022 * cw + "px", marginRight: 0.03 * cw + "px",
-                             transform: `translateY(${-0.006 * cw}px)` });
+  Object.assign(dot.style, { width: 0.026 * cw + "px", height: 0.026 * cw + "px", marginRight: 0.032 * cw + "px",
+                             transform: `translateY(${-0.008 * cw}px)` });
   U.el("span", null, String(txt), ln);
   parts.push(ln);
 });
+const cv2 = mkCanvas(); box.appendChild(cv2);                // above the card: hinge flash, edge sparks — clipped off the
+                                                            // card's text area every frame (the text is never covered)
+const g2 = cv2.getContext("2d");
 // height: an estimate now, the real one once the fonts are in (text is measured only after U.fonts)
-let ch = 0.13 * cw + 0.067 * cw + (media ? 0.5 * (cw - 2 * padX) + 0.05 * cw : 0)
-  + Math.max(1, Math.ceil(String(cardP.title || "").length * 0.55 * 0.098 * cw / (cw - 2 * padX))) * 0.098 * cw * 1.08
-  + lines.reduce((a, l) => a + Math.ceil(String(l).length * 0.52 * 0.064 * cw / (cw - 2 * padX - 0.05 * cw)) * 0.064 * cw * 1.3 + 0.012 * cw, lines.length ? 0.028 * cw : 0);
-U.ready(U.fonts([600, 900]).then(() => { if (card.offsetHeight > 0) ch = card.offsetHeight; }));
+const inner = cw - 2 * padX;
+let ch = 0.155 * cw + (media ? 0.5 * inner + 0.05 * cw : 0)
+  + Math.max(1, Math.ceil(String(cardP.title || "").length * 0.56 * 0.12 * cw / inner)) * 0.12 * cw * 1.04
+  + lines.reduce((a, l) => a + Math.ceil(String(l).length * 0.54 * 0.078 * cw / (inner - 0.06 * cw)) * 0.078 * cw * 1.22 + 0.016 * cw,
+                 lines.length ? 0.03 * cw : 0);
+U.ready(U.fonts([700, 900]).then(() => { if (card.offsetHeight > 0) ch = card.offsetHeight; }));
 if (!side) { box.style.visibility = "hidden"; }
 
 const rgba = (c, a) => {
@@ -172,22 +279,42 @@ const rgba = (c, a) => {
   const v = s.match(/[\d.]+/g);
   return v && v.length >= 3 ? `rgba(${v[0]},${v[1]},${v[2]},${hcClamp(a, 0, 1)})` : `rgba(255,255,255,${hcClamp(a, 0, 1)})`;
 };
+// one streak: a wide warm glow, a hot coloured body, a white-hot core that cools with age
+function streak(ctx, s, fade) {
+  ctx.strokeStyle = rgba(glow, 0.75 * fade); ctx.lineWidth = s.glow;
+  ctx.beginPath(); ctx.moveTo(s.tx, s.ty); ctx.lineTo(s.x, s.y); ctx.stroke();
+  ctx.strokeStyle = rgba(warm, 0.95 * fade); ctx.lineWidth = s.size * 1.7;
+  ctx.beginPath(); ctx.moveTo(s.tx, s.ty); ctx.lineTo(s.x, s.y); ctx.stroke();
+  ctx.strokeStyle = rgba(s.life < 0.6 ? hot : warm, fade); ctx.lineWidth = s.size;
+  ctx.beginPath(); ctx.moveTo(s.tx, s.ty); ctx.lineTo(s.x, s.y); ctx.stroke();
+}
 
 U.clock((t) => {
   g.clearRect(0, 0, P.w, P.h);
+  g2.clearRect(0, 0, P.w, P.h);
   const vis = hcClamp((t - P.at) / 0.2, 0, 1) * hcClamp((P.end - t) / 0.3, 0, 1);
   const pose = side ? cardPose(P, t, ch) : null;
-  // ---- the card ----
+  // ---- the card: unfolds (scaleY, rotateX) from the hinge, shrinks toward it and dissolves as it folds ----
   const open = pose ? pose.open : 0;
   if (!pose || open <= 0) {
     card.style.visibility = "hidden";
     card.style.opacity = "0";
     card.style.transform = "translate(0px, 0px) scaleY(0)";
+    cv2.style.clipPath = "none";
   } else {
+    const sc = pose.s * (0.62 + 0.38 * Math.min(1, pose.e));
     card.style.visibility = "visible";
-    card.style.opacity = String(hcClamp(open * 3, 0, 1));
-    card.style.transform = `translate(${(pose.cx - cw / 2).toFixed(2)}px, ${(pose.by - ch).toFixed(2)}px) perspective(1400px) `
-      + `rotateX(${((1 - open) * 72).toFixed(2)}deg) scale(${pose.s.toFixed(4)}) scaleY(${pose.e.toFixed(4)})`;
+    card.style.opacity = String(Math.pow(hcClamp(pose.e, 0, 1), 1.3));
+    card.style.transform = `translate(${(pose.cx - cw / 2).toFixed(2)}px, ${(pose.by - pose.ch).toFixed(2)}px) perspective(1400px) `
+      + `rotateX(${((1 - open) * 72).toFixed(2)}deg) scale(${sc.toFixed(4)}) scaleY(${pose.e.toFixed(4)})`;
+    const ee = hcClamp(pose.e, 0, 1);
+    sweep.style.opacity = String(ee < 0.995 ? 0.55 * Math.sin(Math.PI * ee) : 0);
+    sweep.style.transform = `translateY(${((1 - ee) * (pose.ch - 0.07 * cw)).toFixed(2)}px)`;
+    const vw = pose.w * (0.62 + 0.38 * Math.min(1, pose.e)), vh = pose.h * (0.62 + 0.38 * Math.min(1, pose.e)) * ee;
+    const hx0 = pose.cx - vw / 2, hx1 = pose.cx + vw / 2, hy0 = pose.by - vh, hy1 = pose.by - 0.065 * cw * pose.s;
+    cv2.style.clipPath = hy1 > hy0 ? `polygon(evenodd, 0px 0px, ${P.w}px 0px, ${P.w}px ${P.h}px, 0px ${P.h}px, 0px 0px, `
+      + `${hx0.toFixed(1)}px ${hy0.toFixed(1)}px, ${hx0.toFixed(1)}px ${hy1.toFixed(1)}px, ${hx1.toFixed(1)}px ${hy1.toFixed(1)}px, `
+      + `${hx1.toFixed(1)}px ${hy0.toFixed(1)}px, ${hx0.toFixed(1)}px ${hy0.toFixed(1)}px)` : "none";
     parts.forEach((el, k) => {
       const c = hcClamp((open - 0.3 - 0.1 * k) / 0.3, 0, 1);
       el.style.opacity = String(c);
@@ -195,44 +322,56 @@ U.clock((t) => {
     });
   }
   if (vis <= 0 || !side) return;
-  g.globalCompositeOperation = "lighter";
-  // ---- light from the palm into the unfolding card ----
-  if (pose && open > 0) {
-    const [px, py] = pose.palm, w = cw * pose.s, top = pose.by;
-    const gr = g.createLinearGradient(px, py, pose.cx, top);
-    gr.addColorStop(0, rgba(glow, 0.55 * open * vis)); gr.addColorStop(1, rgba(glow, 0.06 * open * vis));
-    g.fillStyle = gr;
-    g.beginPath(); g.moveTo(px - 0.03 * m, py); g.lineTo(pose.cx - w * 0.42, top); g.lineTo(pose.cx + w * 0.42, top);
-    g.lineTo(px + 0.03 * m, py); g.closePath(); g.fill();
-    const pg = g.createRadialGradient(px, py, 0, px, py, 0.12 * m);
-    pg.addColorStop(0, rgba(hot, 0.7 * open * vis)); pg.addColorStop(0.3, rgba(glow, 0.4 * open * vis)); pg.addColorStop(1, rgba(glow, 0));
-    g.fillStyle = pg; g.beginPath(); g.arc(px, py, 0.12 * m, 0, Math.PI * 2); g.fill();
-  }
-  if (P.sparks === "off") { g.globalCompositeOperation = "source-over"; return; }
-  // sparks and glows fade out over the face (a hand raised by the face must not spray across it)
   const fc = Array.isArray(P.faces) && P.faces.length ? U.trackAt(P.faces, t) : null, fr = 0.17 * m;
-  const offFace = (x, y) => (fc ? hcClamp((Math.hypot(x - fc[0], y - (fc[1] - 0.02 * m)) - 0.55 * fr) / (0.45 * fr), 0, 1) : 1);
-  // ---- lit fingertips ----
-  (((P.tips || {})[side]) || []).forEach((tr, k) => {
-    const e = hcTipAt(tr, t);
-    if (!e || !(e[2] >= 0.5)) return;
-    const pulse = 1 + 0.15 * Math.sin(t * 13 + k * 1.7), R = 0.05 * m * pulse, a = vis * offFace(e[0], e[1]);
-    if (a <= 0) return;
-    const tg = g.createRadialGradient(e[0], e[1], 0, e[0], e[1], R);
-    tg.addColorStop(0, rgba(hot, 0.95 * a)); tg.addColorStop(0.18, rgba(hot, 0.6 * a));
-    tg.addColorStop(0.45, rgba(glow, 0.35 * a)); tg.addColorStop(1, rgba(glow, 0));
-    g.fillStyle = tg; g.beginPath(); g.arc(e[0], e[1], R, 0, Math.PI * 2); g.fill();
-  });
-  // ---- spark streaks: a glow stroke in the accent, a white-hot core that cools as the spark ages ----
+  const offFace = (x, y) => (fc ? hcClamp((Math.hypot(x - fc[0], y - (fc[1] - 0.02 * m)) - 0.85 * fr) / (0.45 * fr), 0, 1) : 1);
+  g.globalCompositeOperation = "lighter";
   g.lineCap = "round";
-  for (const s of tipSparks(P, t)) {
-    const fade = Math.pow(1 - s.life, 0.7) * vis * offFace(s.x, s.y);
-    if (fade <= 0) continue;
-    g.strokeStyle = rgba(glow, 0.5 * fade); g.lineWidth = s.size * 3.4;
-    g.beginPath(); g.moveTo(s.tx, s.ty); g.lineTo(s.x, s.y); g.stroke();
-    g.strokeStyle = rgba(s.life < 0.55 || s.hot > 0.6 ? hot : glow, 0.95 * fade); g.lineWidth = s.size;
-    g.beginPath(); g.moveTo(s.tx, s.ty); g.lineTo(s.x, s.y); g.stroke();
+  // ---- light from the hand into the unfolding card ----
+  if (pose && open > 0) {
+    const [px, py] = pose.palm, w = pose.w * (0.62 + 0.38 * Math.min(1, pose.e)), top = pose.by;
+    const gr = g.createLinearGradient(px, py, pose.cx, top);
+    gr.addColorStop(0, rgba(accent, 0.5 * open * vis)); gr.addColorStop(1, rgba(accent, 0.12 * open * vis));
+    g.fillStyle = gr;
+    g.beginPath(); g.moveTo(px - 0.04 * m, py); g.lineTo(pose.cx - w * 0.45, top); g.lineTo(pose.cx + w * 0.45, top);
+    g.lineTo(px + 0.04 * m, py); g.closePath(); g.fill();
+    const pg = g.createRadialGradient(px, py, 0, px, py, 0.13 * m);
+    pg.addColorStop(0, rgba(hot, 0.75 * open * vis)); pg.addColorStop(0.3, rgba(accent, 0.45 * open * vis)); pg.addColorStop(1, rgba(accent, 0));
+    g.fillStyle = pg; g.beginPath(); g.arc(px, py, 0.13 * m, 0, Math.PI * 2); g.fill();
+  }
+  if (P.sparks !== "off") {
+    // ---- lit fingertips ----
+    (((P.tips || {})[side]) || []).forEach((tr, k) => {
+      const e = hcTipAt(tr, t);
+      if (!e || !(e[2] >= 0.5)) return;
+      const pulse = 1 + 0.15 * Math.sin(t * 13 + k * 1.7), R = 0.06 * m * pulse, a = vis * offFace(e[0], e[1]);
+      if (a <= 0) return;
+      const tg = g.createRadialGradient(e[0], e[1], 0, e[0], e[1], R);
+      tg.addColorStop(0, rgba(hot, a)); tg.addColorStop(0.16, rgba(hot, 0.85 * a));
+      tg.addColorStop(0.4, rgba(warm, 0.55 * a)); tg.addColorStop(1, rgba(glow, 0));
+      g.fillStyle = tg; g.beginPath(); g.arc(e[0], e[1], R, 0, Math.PI * 2); g.fill();
+    });
+    // ---- fingertip streaks (and the flick-out bursts) ----
+    for (const s of tipSparks(P, t)) {
+      const fade = Math.pow(1 - s.life, 0.6) * vis * offFace(s.x, s.y);
+      if (fade > 0) streak(g, s, fade);
+    }
   }
   g.globalCompositeOperation = "source-over";
+  // ---- above the card (outside its text area): hinge flash, sparks spilling from the bottom edge ----
+  if (pose && open > 0) {
+    g2.globalCompositeOperation = "lighter";
+    g2.lineCap = "round";
+    const w = pose.w * (0.62 + 0.38 * Math.min(1, pose.e)), x0 = pose.cx - w / 2, x1 = pose.cx + w / 2;
+    const flash = open < 1 ? Math.sin(Math.PI * open) : 0, seam = (0.35 + 0.65 * flash) * vis;
+    [[22, 0.35, glow], [9, 0.7, warm], [3.5, 1, hot]].forEach(([lw, al, col]) => {
+      g2.strokeStyle = rgba(col, al * seam); g2.lineWidth = lw * k1 * (1 + flash);
+      g2.beginPath(); g2.moveTo(x0, pose.by); g2.lineTo(x1, pose.by); g2.stroke();
+    });
+    for (const s of edgeSparks(P, t, pose)) {
+      const fade = Math.pow(1 - s.life, 0.7) * vis * Math.min(1, open * 1.5) * offFace(s.x, s.y);
+      if (fade > 0) streak(g2, s, fade);
+    }
+    g2.globalCompositeOperation = "source-over";
+  }
 });
 </script>
