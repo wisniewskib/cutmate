@@ -791,6 +791,9 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
                 raise PlanError(f'{where}: needs hand tracks — run cutmate track "{out}"')
             if not all(n in tr["tracks"] for n in TIP_TRACKS):
                 raise PlanError(f'{where}: needs fingertip tracks — run cutmate track --force "{out}"')
+    # the vendored libraries this project loads (gsap always): found before any composition file is written, so an
+    # install still missing one (before `cutmate vendor`) fails with nothing half-written
+    vendored = {f: vendor_root(f) for f in vendor_files([p.read_text(encoding="utf-8") for p in found.values()])}
     # full-frame WOW scenes in a split-panel video: the captions drop from the seam to the bottom band meanwhile (media /
     # non-WOW scenes keep them on the seam); the panel row then leaves #captions to cfg.cap_moves
     drops = [(g.start, g.end) for g in items if g.params.get("_scene") and g.type == "custom"
@@ -911,11 +914,10 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
         shutil.copy2(web_dir() / "effects.js", A / "effects.js")
     else:
         (A / "effects.js").unlink(missing_ok=True)
-    needed = vendor_files(effect_texts)                  # offline renders: only the libraries this project loads
-    for folder in needed:
-        _sync_dir(vendor_root(folder), A / "vendor" / folder)
+    for folder, root in vendored.items():               # offline renders: only the libraries this project loads
+        _sync_dir(root, A / "vendor" / folder)
     for d in (A / "vendor").iterdir():
-        if d.name not in needed:
+        if d.name not in vendored:
             shutil.rmtree(d) if d.is_dir() else d.unlink()
     for f in (proj / "compositions").glob("gx-*.html"):
         if f.stem not in ids:

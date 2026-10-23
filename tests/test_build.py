@@ -1747,6 +1747,24 @@ def test_media_scene_keeps_captions_on_seam(out, theme):
     assert "cap_moves" not in cfg and cfg["splits"] == [[0.9, None, 672, -415, 0]]
 
 
+def test_missing_vendor_library_writes_no_composition(out, theme, monkeypatch):
+    """An install without gsap (an existing install before `cutmate vendor`): the build fails before it writes any
+    composition file — no half-written project (new compositions next to an old index.html)."""
+    from cutmate.errors import CutmateError
+
+    def gone(folder):
+        raise CutmateError(f"vendored library {folder} not found")
+    monkeypatch.setattr(B, "vendor_root", gone)
+    _fx(out, "orb")
+    write_plan(out, {"graphics": [{"type": "chip", "at": "S1:Mówić", "text": "X"},
+                                  {"type": "custom", "name": "orb", "from": "S2:minus", "to": "S2:</script>"}]})
+    with pytest.raises(CutmateError, match="gsap@"):
+        B.build(out, theme=theme)
+    proj = out / "composition"
+    assert not list((proj / "compositions").glob("*.html")) if (proj / "compositions").exists() else True
+    assert not (proj / "index.html").exists()
+
+
 def test_hit_true_lands_on_effect_impact(out, theme, monkeypatch):
     """"hit": true on an effect whose index.json declares an `impact` offset (burst-out: 1 s) shakes, flashes and plays the
     hit sound at the effect's real impact (start + impact), where the effect jumps in front (P.hit_at) — not at the start.
