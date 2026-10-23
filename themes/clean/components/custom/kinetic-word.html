@@ -105,7 +105,7 @@ function kwSample(L, count) {
 }
 
 function kwBuild() {
-  const A = window.anime, fam = U.token("--font-display", "Inter");
+  const A = window.anime, fam = kwFam;
   const L = kwLayout(fam), S = kwSample(L, kwN);
   const col = { a: U.token("--accent", "#7dd3fc"), t: kwLight ? U.token("--ink", "#0f172a") : U.token("--text", "#ffffff"),
                 m: U.token("--muted", "#475569") };
@@ -229,7 +229,8 @@ function kwBuild() {
 const kwG = kwCanvas.getContext("2d");
 // the shapes at t: each one (square / dot / dash, turned by r, size s, alpha a) with a motion streak back to where it was
 // one frame earlier (the timeline seeked there and back: still a pure function of t)
-U.anime(U.fonts([900], U.token("--font-display", "Inter")).then(() => ({ timeline: kwBuild() })));
+const kwFam = KW.kineticFamily(kwText, U.token("--font-display", "Inter"), U.token("--font-num", ""));
+U.anime(U.fonts([900], kwFam).then(() => ({ timeline: kwBuild() })));
 U.clock((t) => {
   if (!K) return;
   const { tl2, objs, meta, prev, L } = K;

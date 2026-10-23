@@ -434,6 +434,11 @@
   // kinetic-word's beats (local s): the word lands 1 s after its start (index.json "impact": 1.0; a shorter span than
   // 2.5 s compresses everything by k) or on P.hit_at (a "hit" anchor on the spoken word) — then the 1 s build-up (pre,
   // shorter when the anchor is close to the start) runs from t0 = land - pre; the shatter takes the last 0.48·k s
+  // kinetic-word's font: a word with a digit takes the theme's number font (--font-num, as stat-card / counter do),
+  // anything else (or a theme without one) the display font
+  function kineticFamily(text, display, num) {
+    return /[0-9]/.test(String(text)) && num && String(num).trim() ? String(num).trim() : display;
+  }
   function kineticBeats(o) {
     const at = o.at || 0, end = Math.max(at + 1.2, o.end || at + 3.5), k = Math.min(1, (end - at) / 2.5);
     let land = at + k;
@@ -443,6 +448,6 @@
   }
 
   window.CutmateFX = { make, pure: { seed, trackAt, particleState, scrambleAt, openAmount, safeBox },
-                       wow: { gridSize, gridStart, assignTargets, star, kineticBeats } };
+                       wow: { gridSize, gridStart, assignTargets, star, kineticBeats, kineticFamily } };
   if (typeof module !== "undefined") module.exports = window.CutmateFX;
 })();

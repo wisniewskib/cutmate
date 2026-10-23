@@ -1218,3 +1218,14 @@ def test_kinetic_word_lands_on_its_impact():
     assert d["early"]["land"] == pytest.approx(0.9) and d["early"]["pre"] == pytest.approx(0.6)
     assert d["late"]["land"] == pytest.approx(2.8)                                    # room for the hold + shatter
     assert d["short"]["k"] == pytest.approx(0.8) and d["short"]["land"] == pytest.approx(0.8)
+
+
+def test_kinetic_word_numbers_take_the_number_font():
+    """A word with a digit is drawn in the theme's --font-num (pixel-pill: Pixelify's 5 reads as S, -75% became -7S%),
+    other words (and themes without --font-num) in --font-display."""
+    d = _node(KINETIC, json.dumps(str(web_dir() / "effects.js")), """
+      const f = W.kineticFamily;
+      return { num: f("-75%", "Pixelify Sans", "Press Start 2P"), word: f("ZA DARMO", "Pixelify Sans", "Press Start 2P"),
+               none: f("+300%", "Inter", ""), unset: f("+300%", "Inter", null) };
+    """)
+    assert d == {"num": "Press Start 2P", "word": "Pixelify Sans", "none": "Inter", "unset": "Inter"}
