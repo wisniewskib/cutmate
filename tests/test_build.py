@@ -1671,6 +1671,82 @@ def test_no_wow_169_chapters_no_change(out169, theme):
     _same_as_golden(proj, FIXTURE_169_CHAPTERS)
 
 
+def test_caption_band_drops_under_wow_scene():
+    pn = {"start": 0.9, "end": 4.0}
+    assert B.caption_band("9:16", "burn", 1.5, pn, -415) == [880, 1040]                # on the seam
+    assert B.caption_band("9:16", "burn", 2.8, pn, -415, [(2.1, 3.5)]) == [1295, 1455]  # a WOW scene: the bottom band
+    assert B.caption_band("9:16", "burn", 3.8, pn, -415, [(2.1, 3.5)]) == [880, 1040]
+
+
+def test_caption_moves():
+    """#captions y over a split-panel video with WOW scenes: the panel row's move in / out and a 0.25 s drop to the
+    bottom band (y 0) over each scene's fade in, back over its fade out; one tween at a time, each from where the last
+    one left off (a scene over the panel's entrance: the captions wait at the bottom, then go to the seam once)."""
+    pn = {"start": 0.9, "end": 4.0, "stays": True, "open_at_zero": False}
+    assert B.caption_moves(pn, -415, None, [(2.1, 3.5)]) == (0, [[0.9, 0, -415, 0.45, "power3.out"],
+                                                                 [2.1, -415, 0, 0.25, "power2.inOut"],
+                                                                 [3.25, 0, -415, 0.25, "power2.inOut"]])
+    assert B.caption_moves(pn, -415, None, [(0.1, 1.2)]) == (0, [[0.95, 0, -415, 0.25, "power2.inOut"]])
+    assert B.caption_moves(pn, -415, None, [(1.0, 2.5)]) == (0, [[0.9, 0, -415, 0.45, "power3.out"],
+                                                                 [1.35, -415, 0, 0.25, "power2.inOut"],  # waits
+                                                                 [2.25, 0, -415, 0.25, "power2.inOut"]])
+    opened = dict(pn, open_at_zero=True, stays=False)
+    assert B.caption_moves(opened, -415, 3.0, [(0.0, 1.5)]) == (0, [[1.25, 0, -415, 0.25, "power2.inOut"],
+                                                                    [3.0, -415, 0, 0.4, "power3.inOut"]])
+    assert B.caption_moves(opened, -415, 3.0, [(1.0, 2.0)])[0] == -415                   # held from 0
+
+
+KW_SCENE = {"from": "S2:minus", "to": "S2:</script>", "effect": "kinetic-word", "params": {"text": "+300%"}}
+
+
+def _kw_panel_build(out, theme, scenes):
+    _png(out)
+    _with_layout_components(theme)
+    _layout_theme(theme, {"mode": "split-panel"})
+    write_plan(out, {"panel": [{"at": "S1:mniej", "media": "broll/p.png"}], "scenes": scenes})
+    return B.build(out, theme=theme)["project"]
+
+
+def test_wow_scene_drops_captions_to_bottom(out, theme):
+    """Ruling I1: under a full-frame WOW scene in a split-panel video the captions drop from the seam to the classic
+    bottom band (a fromTo over the scene's 0.25 s fade in, back over its fade out); the scene sizes itself from that
+    bottom band, so kinetic-word stages its word in the top area, clear of the captions."""
+    proj = _kw_panel_build(out, theme, [KW_SCENE])
+    html = (proj / "index.html").read_text(encoding="utf-8")
+    cfg = cfg_of(html)
+    assert cfg["splits"] == [[0.9, None, 672, 0, 0]]                    # captions: moved by cap_moves alone
+    assert cfg["cap_moves"] == [0, [[0.9, 0, -415, 0.45, "power3.out"], [2.1, -415, 0, 0.25, "power2.inOut"],
+                                    [3.25, 0, -415, 0.25, "power2.inOut"]]]
+    ys = [v[1] for v in _main_values(proj, [0.5, 1.5, 2.1, 2.4, 2.8, 3.24, 3.55, 3.9])]
+    assert ys[:2] == [0, -415] and ys[2] == -415 and ys[3] == ys[4] == ys[5] == 0 and ys[6] == ys[7] == -415
+    sub = next(p for p in (proj / "compositions").glob("gx-*-custom.html")).read_text(encoding="utf-8")
+    P = _P(sub)
+    assert P["name"] == "kinetic-word" and P["caption_band"] == [1295, 1455]
+    box = _node(f"global.window = {{}}; require({json.dumps(str(paths.web_dir() / 'effects.js'))});"
+                f"console.log(JSON.stringify(window.CutmateFX.wow.kineticBox({json.dumps(P)})));")
+    assert box["y"] + box["h"] <= 1295 and box["y"] < 300                # the top area, not below the seam
+
+
+def test_wow_scene_over_panel_entrance_never_fights(out, theme):
+    """A WOW scene over the panel's entrance: the panel row does not tween #captions; the captions stay at the bottom
+    until the scene fades out, then go to the seam once (continuous, no jump)."""
+    proj = _kw_panel_build(out, theme, [dict(KW_SCENE, **{"from": 0.1, "to": 1.2})])
+    cfg = cfg_of((proj / "index.html").read_text(encoding="utf-8"))
+    assert cfg["cap_moves"] == [0, [[0.95, 0, -415, 0.25, "power2.inOut"]]]
+    ys = [v[1] for v in _main_values(proj, [round(0.05 * i, 2) for i in range(40)])]
+    assert ys[:19] == [0] * 19 and ys[24:] == [-415] * 16
+    assert all(b <= a + 1e-6 for a, b in zip(ys, ys[1:]))               # monotonic: one move down to the seam
+
+
+def test_media_scene_keeps_captions_on_seam(out, theme):
+    """Only WOW scenes drop the captions: a media scene (and a non-WOW effect scene) in a split-panel video keeps them
+    on the seam (no cap_moves; the split-panel golden pins the bytes)."""
+    _png(out, "s.png", "red")
+    proj = _kw_panel_build(out, theme, [{"from": "S2:minus", "to": "S2:</script>", "media": "broll/s.png"}])
+    cfg = cfg_of((proj / "index.html").read_text(encoding="utf-8"))
+    assert "cap_moves" not in cfg and cfg["splits"] == [[0.9, None, 672, -415, 0]]
+
+
 def test_hit_true_lands_on_effect_impact(out, theme, monkeypatch):
     """"hit": true on an effect whose index.json declares an `impact` offset (burst-out: 1 s) shakes, flashes and plays the
     hit sound at the effect's real impact (start + impact), where the effect jumps in front (P.hit_at) — not at the start.

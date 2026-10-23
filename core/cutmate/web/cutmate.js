@@ -74,6 +74,20 @@
     });
   }
 
+  // full-frame WOW scenes in a split-panel video: #captions drops from the seam to the bottom band under each one (the
+  // build sets the panel row's capDy to 0 then, so these are the only #captions y tweens): cfg.cap_moves
+  // [y at 0, [[t, from, to, dur, ease], …]], one tween at a time, each from where the last one left off
+  function capMoves(tl, cfg) {
+    const cm = cfg.cap_moves;
+    if (!cm) return;
+    const [y0, moves] = cm;
+    // (a zero-length tl.set at 0 does not hold in the renderer: hold y0 with a fromTo)
+    if (y0) tl.fromTo("#captions", { y: y0 }, { y: y0, duration: 0.01, ease: "none", immediateRender: true }, 0);
+    moves.forEach(([t, a, b, d, ease]) => {
+      tl.fromTo("#captions", { y: a }, { y: b, duration: d, ease, immediateRender: false }, t);
+    });
+  }
+
   function sides(tl, cfg) {
     if (!(cfg.sides || []).length) return;
     tl.set("#split", { x: 0 }, 0);
@@ -130,6 +144,6 @@
   }
 
   window.Cutmate = {
-    build(tl, cfg) { captions(tl, cfg); camera(tl, cfg); hits(tl, cfg); glitch(tl, cfg); splits(tl, cfg); sides(tl, cfg); hides(tl, cfg); },
+    build(tl, cfg) { captions(tl, cfg); camera(tl, cfg); hits(tl, cfg); glitch(tl, cfg); splits(tl, cfg); capMoves(tl, cfg); sides(tl, cfg); hides(tl, cfg); },
   };
 })();

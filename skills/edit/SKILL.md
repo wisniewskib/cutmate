@@ -90,7 +90,7 @@ and the bundled ones in `${CLAUDE_PLUGIN_ROOT}/themes/<theme>/components/custom/
 Bundled: `energy-ball` (params radius, colors; `"follow": "hand"`; hidden without hand samples), explainers `stat-card`, `flow`, `ui-mock`, `iso-machine`, `checklist`, `headline`, VFX/3D `showcase-3d`, `burst`, `hand-sparks`, and the WOW pack below.
 
 **WOW pack** — six stock show-stoppers (`kind` wow in the bundled index.json): `exploded-view`, `globe`, `burst-out`, `hand-control`, `topic-change`, `kinetic-word`.
-They are tested, seek-safe, offline (vendored libraries; a build error `vendored library … not found` → run `"$CM" vendor`) and take the theme's tokens, so a cloned style restyles them. READ their `index.json` entries (`params`, `modes`, `impact`) before the first use. They keep their own text out of the burned captions (`P.caption_band`, `U.safeBox(P)`) and burst-out holds beside the face — do not move captions or the speaker for them.
+They are tested, seek-safe, offline (vendored libraries; a build error `vendored library … not found` → run `"$CM" vendor`) and take the theme's tokens, so a cloned style restyles them. READ their `index.json` entries (`params`, `modes`, `impact`) before the first use. They keep their own text out of the burned captions (`P.caption_band`, `U.safeBox(P)`) and burst-out holds beside the face. In a split-panel video the build itself drops the captions from the seam to the bottom band under a WOW scene (`kinetic-word` / `topic-change` / `globe` / `exploded-view` in `"scenes"`; media and other scenes keep them on the seam) and moves them back after it, so the scene's content takes the top area — never move captions or the speaker yourself.
 - **When:** WOW effects replace writing a new effect whenever an effect, a surprise or an explainer fits a moment below — never write an `out/custom/` effect for such a moment. In a classic theme (9:16 or 16:9) they need the same opt-in as effects today: a request (chat or spoken), or surprises on (`[niespodzianka]`, Zaskocz mnie below); requested explainers may be `exploded-view` / `globe`. In a split-panel theme `exploded-view` / `globe` are ordinary panel items (`"panel"`, no request needed, §5b) and `kinetic-word` / `topic-change` are scenes (`"scenes"`, §5b); `hand-control` stays a `custom` over the speaker's half; `burst-out` is never used there (it is a `bg`, and a `bg` next to a panel is a build error).
 
 | What is said / shown | Effect | Setup |
@@ -368,7 +368,7 @@ Only when the theme's `layout.mode` is `split-panel` and the video is 9:16 (Layo
 - **Snapshots:** add the middle of EVERY panel item (`(a + b) / 2` from its `panel:` line) and of every scene to the
   §6 snapshot checkpoints (the middle is enough for stock panel items; a new `out/custom/` effect used as a panel item
   keeps start + middle as §6 says) and READ them: the item in the theme's colours / fonts, whole inside the panel, the page
-  screenshot readable, the face in the bottom half, captions on the seam not covering the item's text or the mouth.
+  screenshot readable, the face in the bottom half, captions on the seam not covering the item's text or the mouth (under a WOW scene: captions in the bottom band, the scene's text above them).
 
 ## 6. Build and look
 

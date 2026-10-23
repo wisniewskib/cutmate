@@ -689,3 +689,49 @@ def test_kinetic_word_takes_light_panel(tmp_path, home):
     print(f"orange px {orange}, dark px {dark}")
     assert orange >= 20000 and dark >= 3000, (orange, dark, s)
     print("strip:", wowkit.strip(proj, at, end, 0.25))
+
+
+def _caption_rows(burn: np.ndarray, none: np.ndarray) -> tuple:
+    """(y0, y1) of the rows where the burned-captions frame differs from the same frame built with captions "none"."""
+    d = np.abs(burn - none).max(axis=2) > 60
+    rows = np.nonzero(d.sum(axis=1) >= 6)[0]
+    return (int(rows.min()), int(rows.max())) if len(rows) else (None, None)
+
+
+def test_wow_scene_drops_captions_in_split_panel(tmp_path, home):
+    """Ruling I1: a kinetic-word scene (0.6–2.0 s) in a split-panel video with the panel up from the start: the captions
+    sit on the seam before it (0.3 s), in the classic bottom band during it (1.3 s, the word landed) and back on the
+    seam after it (2.5 s); the word stays above the bottom band. The caption rows are where the burned frame differs
+    from the same project built with captions "none". Seek-safe at start + 0.1 and end - 0.1. READ the snapshots."""
+    from cutmate import build as B
+    theme = _theme(home, "wowsplit")
+    plan = {"panel": [{"at": 0.1, "effect": "headline", "params": {"text": "Co nowego?"}}],
+            "scenes": [{"from": 0.6, "to": 2.0, "effect": "kinetic-word", "params": {"text": "+300%"}}]}
+    proj = wowkit.project(tmp_path, plan, dur=5.0, theme=theme)
+    _check_ok(proj)
+    times = (0.3, 1.3, 2.5)
+    keep = tmp_path / "burn"
+    keep.mkdir()
+    shots = [shutil.copyfile(wowkit.snap(proj, t), keep / f"burn-{t}.png") for t in times]
+    print("snapshots (captions burned):", [str(p) for p in shots])
+    burn = [_img(p) for p in shots]
+    for t in (0.7, 1.9):
+        worst = wowkit.seek_safe(proj, t)
+        print(f"seek_safe({t}) = {worst}")
+        assert worst <= 1.0
+    B.build(proj.parent, theme=theme, captions={"9:16": "none"})
+    none = [_img(wowkit.snap(proj, t)) for t in times]
+    (b0, b1), (a0, a1) = _caption_rows(burn[0], none[0]), _caption_rows(burn[2], none[2])
+    # during the scene the word itself moves with the caption band (the "none" build has none), so the captions are
+    # the white rows below the word (its accent shapes and white dots end above the bottom band)
+    word = _hue_mask(burn[1], _hue_of("#7dd3fc") - 22, _hue_of("#7dd3fc") + 22, sat=0.3)
+    ys = np.nonzero(word.sum(axis=1) >= 3)[0]
+    white = np.nonzero((burn[1].min(axis=2) >= 230).sum(axis=1) >= 6)[0]
+    caps = white[white > ys.max()]
+    m0, m1 = (int(caps.min()), int(caps.max())) if len(caps) else (None, None)
+    print(f"caption rows: before {b0}–{b1}, during {m0}–{m1}, after {a0}–{a1}; word (accent) rows {ys.min()}–{ys.max()}, "
+          f"{int(word.sum())} px")
+    assert b0 is not None and 780 <= b0 and b1 <= 1140, (b0, b1)               # the seam (y 960)
+    assert m0 is not None and m0 >= 1180 and m1 <= 1560, (m0, m1)              # the bottom band (1295–1455)
+    assert a0 is not None and 780 <= a0 and a1 <= 1140, (a0, a1)
+    assert int(word.sum()) >= 5000 and ys.max() < 1295, (ys.min(), ys.max())   # the word above the bottom band

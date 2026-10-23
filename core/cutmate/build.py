@@ -243,16 +243,58 @@ PALM_LIFT = 0.05   # a palm-placed effect sits this far (frame fraction) above t
 SAFE = {(1080, 1920): [60, 192, 960, 1344], (1920, 1080): [60, 60, 1800, 800]}  # x, y, w, h a placed chip stays in
 
 
-def caption_band(fmt: str, mode: str, t: float, panel: dict | None = None, cap_dy: int = 0) -> list[int] | None:
+def caption_band(fmt: str, mode: str, t: float, panel: dict | None = None, cap_dy: int = 0,
+                 drops: list | tuple = ()) -> list[int] | None:
     """Where the burned captions are at time t, [y0, y1] in frame px: the caption text band of theme.css (9:16 bottom,
-    centred on CAPTION_MID; 16:9 lower third), moved onto the seam by cap_dy while the persistent panel is up. None when
-    nothing is burned in (srt / none)."""
+    centred on CAPTION_MID; 16:9 lower third), moved onto the seam by cap_dy while the persistent panel is up — except
+    under a full-frame WOW scene (`drops`: its [start, end]), where they stay in the bottom band. None when nothing is
+    burned in (srt / none)."""
     if mode not in ("burn", "both") or fmt not in CAPTION_TEXT:
         return None
     mid, half = CAPTION_TEXT[fmt]
-    if panel and panel["start"] - 1e-9 <= t <= panel["end"] + 1e-9:
+    if panel and panel["start"] - 1e-9 <= t <= panel["end"] + 1e-9 and \
+            not any(a - 1e-9 <= t <= b + 1e-9 for a, b in drops):
         mid += cap_dy
     return [mid - half, mid + half]
+
+
+PANEL_IN, PANEL_OUT = (0.45, "power3.out"), (0.4, "power3.inOut")   # cutmate.js splits(): the panel row's moves
+DROP_EASE = "power2.inOut"
+
+
+def caption_moves(pn: dict, cap_dy: int, t_out: float | None, drops: list | tuple,
+                  fade: float = SCENE_FADE) -> tuple[int, list[list]]:
+    """#captions y over a split-panel video with full-frame WOW scenes (cfg.cap_moves; the panel row then leaves
+    #captions alone): (y at 0, [[t, from, to, dur, ease], …]). On the seam (cap_dy) while the panel is up, at the bottom
+    (0) otherwise and under every drop [a, b] — down over the scene's fade in from a, back over its fade out ending at b.
+    One tween at a time: a move that starts while the previous one runs waits for it, so each starts where the last
+    one left off (never two tweens on the same y)."""
+    events = [] if pn["open_at_zero"] else [(pn["start"], "up", 1, *PANEL_IN)]
+    if t_out is not None:
+        events.append((t_out, "up", -1, *PANEL_OUT))
+    for a, b in drops:
+        events += [(a, "drop", 1, fade, DROP_EASE), (max(a, b - fade), "drop", -1, fade, DROP_EASE)]
+    state = {"up": 1 if pn["open_at_zero"] else 0, "drop": 0}
+    for t, k, d, *_ in events:                         # a drop already on at 0 counts from the start
+        if k == "drop" and d > 0 and t <= 1e-9:
+            state["drop"] += 1
+    events = [e for e in events if not (e[1] == "drop" and e[2] > 0 and e[0] <= 1e-9)]
+
+    def target():
+        return cap_dy if state["up"] > 0 and state["drop"] <= 0 else 0
+    y0 = cur = target()
+    moves, busy = [], 0.0
+    for t in sorted({round(e[0], 3) for e in events}):
+        group = [e for e in events if round(e[0], 3) == t]
+        for _, k, d, *_ in group:
+            state[k] += d
+        new = target()
+        if new != cur:
+            dur, ease = max((e[3], e[4]) for e in group)
+            start = round(max(t, busy), 3)
+            moves.append([start, cur, new, dur, ease])
+            busy, cur = start + dur, new
+    return y0, moves
 
 
 def panel_offsets(ratio: float, face_y: float, H: int = 1920) -> tuple[int, int]:
@@ -711,8 +753,9 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
         dy, cap_dy = panel_offsets(pn["ratio"], statistics.median(ys) if ys else FACE_Y, H)
         if lay.captions == "bottom":
             cap_dy = 0
-        splits.append([pn["start"], None if pn["stays"] else round(max(pn["start"] + 0.45, pn["end"] - 0.4), 3),
-                       dy, cap_dy, 1 if pn["open_at_zero"] else 0])
+        pn_split = [pn["start"], None if pn["stays"] else round(max(pn["start"] + 0.45, pn["end"] - 0.4), 3),
+                    dy, cap_dy, 1 if pn["open_at_zero"] else 0]
+        splits.append(pn_split)
     panel_items = [g for g in items if g.params.get("_panel")]
     # the handoff only where an item runs up to the next one; an item with an earlier `until` ends there (a panel gap)
     item_end = {id(a): round(min(b.start + HANDOFF, end), 3) for a, b in zip(panel_items, panel_items[1:])
@@ -748,6 +791,16 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
                 raise PlanError(f'{where}: needs hand tracks — run cutmate track "{out}"')
             if not all(n in tr["tracks"] for n in TIP_TRACKS):
                 raise PlanError(f'{where}: needs fingertip tracks — run cutmate track --force "{out}"')
+    # full-frame WOW scenes in a split-panel video: the captions drop from the seam to the bottom band meanwhile (media /
+    # non-WOW scenes keep them on the seam); the panel row then leaves #captions to cfg.cap_moves
+    drops = [(g.start, g.end) for g in items if g.params.get("_scene") and g.type == "custom"
+             and effect_meta(found[g.params["name"]]).get("kind") == "wow"]
+    pn_to = (end if pn["stays"] else pn["end"]) if pn else 0
+    drops = [(a, b) for a, b in drops if pn and cap_dy and mode in ("burn", "both") and a < pn_to and b > pn["start"]]
+    cap_moves = None
+    if drops:
+        cap_moves = list(caption_moves(pn, cap_dy, pn_split[1], drops))
+        pn_split[3] = 0
     # bg pre-pass: each bg range is cut once; a bg effect whose markup has {{cut_tag}} draws the cut-out itself (so it
     # can put things behind the speaker) and its bg host gets none. A hit in such a pair shakes both hosts with #shake
     bg_of = {id(c): b for c in items for b in items if c.type == "custom" and b.type == "bg" and _expanded_pair(c, b)}
@@ -804,7 +857,7 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
             comp_path = found[g.params["name"]]
             wow = effect_meta(comp_path).get("kind") == "wow"
             # WOW effects only (other effects keep their output byte-identical): where the burned captions are
-            band = caption_band(fmt, mode, (g.start + g.end) / 2, pn, cap_dy) if wow else None
+            band = caption_band(fmt, mode, (g.start + g.end) / 2, pn, cap_dy, drops) if wow else None
             if wow and id(items[i]) in bg_of:            # a WOW bg effect: where the speaker's face is (P.face)
                 face = plan.face.get(_seg_at(timed, g.start), FACE_DEFAULT)
             effect_texts.append(comp_path.read_text(encoding="utf-8"))
@@ -885,6 +938,8 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
                            round(GLITCH_AMP * W)])
     if glitch:
         cfg["glitch"] = glitch
+    if cap_moves:
+        cfg["cap_moves"] = cap_moves
     if shake:
         cfg["shake_hosts"] = True                      # hits shake "#shake, .cm-shake" (the bg pair with the cut-out)
     if sides:
