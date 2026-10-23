@@ -1,0 +1,519 @@
+<style>
+ROOT .xv { position: absolute; inset: 0; overflow: hidden; font-family: var(--font); --pi: #ffffff; }
+ROOT .xv-bg { position: absolute; inset: 0; background: var(--panel-bg, #0b0b0f); }
+ROOT .xv-glow { position: absolute; inset: 0;
+  background: radial-gradient(ellipse 46% 42% at 50% 56%, color-mix(in srgb, var(--accent, #7dd3fc) 16%, transparent) 0%, transparent 100%); }
+ROOT .xv-grid { position: absolute; inset: 0; opacity: 0.55;
+  background-image: radial-gradient(circle, color-mix(in srgb, var(--muted, #475569) 55%, transparent) 1.3px, transparent 1.7px);
+  background-size: calc(var(--s) * 30px) calc(var(--s) * 30px); background-position: 50% 50%;
+  -webkit-mask-image: radial-gradient(ellipse 44% 40% at 50% 56%, #000000 0%, transparent 100%);
+  mask-image: radial-gradient(ellipse 44% 40% at 50% 56%, #000000 0%, transparent 100%); }
+ROOT .xv.bare .xv-bg, ROOT .xv.bare .xv-glow, ROOT .xv.bare .xv-grid { display: none; }
+ROOT .xv-stage { position: absolute; inset: 0; }
+ROOT svg.xv-lines { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
+ROOT .xv-labels { position: absolute; inset: 0; }
+ROOT .xv-title { position: absolute; left: 0; right: 0; text-align: center; color: var(--pi); font-family: var(--font-display);
+  font-weight: 900; font-synthesis: none; letter-spacing: -0.03em; line-height: 1.02; white-space: nowrap; }
+ROOT .xv-title .bar { display: block; margin: calc(var(--s) * 14px) auto 0; width: calc(var(--s) * 96px);
+  height: calc(var(--s) * 8px); border-radius: calc(var(--s) * 4px); background: var(--accent, #7dd3fc); transform-origin: center; }
+ROOT .wow-label { position: absolute; left: 0; top: 0; display: flex; align-items: center; box-sizing: border-box; white-space: nowrap;
+  gap: calc(var(--s) * 12px); padding: calc(var(--s) * 9px) calc(var(--s) * 20px) calc(var(--s) * 9px) calc(var(--s) * 9px);
+  background: var(--card, #ffffff); color: var(--ink, #0f172a); border-radius: 999px; font-family: var(--font);
+  font-weight: 600; font-size: calc(var(--s) * 31px); line-height: 1.1; letter-spacing: -0.01em;
+  box-shadow: var(--shadow, 0 10px 30px rgba(0, 0, 0, 0.35)); will-change: transform, opacity; }
+ROOT .wow-label .n { flex: none; width: calc(var(--s) * 42px); height: calc(var(--s) * 42px); border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; background: var(--accent, #7dd3fc); color: var(--on-accent, #0f172a);
+  font-family: var(--font-num, var(--font-display)); font-weight: 900; font-size: calc(var(--s) * 22px); font-synthesis: none; }
+</style>
+<markup><div class="xv"><div class="xv-bg"></div><div class="xv-glow"></div><div class="xv-grid"></div><div class="xv-stage"></div><svg class="xv-lines"></svg><div class="xv-labels"></div><div class="xv-title"></div></div></markup>
+<script>
+// exploded-view: a 3D object (parts bottom→top, or a preset) that turns in assembled, comes apart along its axis with a
+// slight fan while numbered leader-line labels pop per part, holds and orbits, then slams back together with a click
+// flash. Beats (fractions of [P.at, P.end]): 0–0.18 turn in (a panel item: assembled by U.fullAt), 0.18–0.55 explode +
+// labels, 0.55–0.78 hold + orbit, 0.78–0.97 reassemble + flash; gone by P.end. MeshStandard + RoomEnvironment in the
+// theme's --accent / --muted / --card, bloom "keep"; the panel / scene background is --panel-bg (params.bg "none":
+// transparent overlay).
+
+// ---- pure helpers (window.CutmateFX.wow, registered once) ----
+const SLAB = 0.5, GAP = 0.55, FAN = 0.06;
+// centres of `parts` slabs stacked along `axis` ("y" bottom→top, "x" left→right) at explode amount k (0 assembled:
+// every slab touches the next, 1 exploded: GAP between slabs) plus a slight linear fan across the axis; symmetric about
+// the centre. `parts`: a count (slabs SLAB thick) or the list of slab thicknesses
+function explodeLayout(parts, axis, k) {
+  const hs = Array.isArray(parts) ? parts.map((h) => Math.max(0.01, Number(h) || SLAB))
+    : Array.from({ length: Math.max(0, Math.floor(Number(parts) || 0)) }, () => SLAB);
+  const n = hs.length, q = Math.min(1, Math.max(0, Number(k) || 0));
+  const gap = GAP * q, mid = (n - 1) / 2;
+  let c = -(hs.reduce((a, b) => a + b, 0) + gap * Math.max(0, n - 1)) / 2;
+  return hs.map((h, i) => {
+    const along = c + h / 2, fan = FAN * (i - mid) * q;
+    c += h + gap;
+    return axis === "x" ? [along, fan, 0] : [fan, along, 0];
+  });
+}
+const WOW = (window.CutmateFX.wow = window.CutmateFX.wow || {});
+if (!WOW.explodeLayout) Object.assign(WOW, { explodeLayout, SLAB, GAP });
+
+// ---- params ----
+const PL = String(P.lang || "").toLowerCase().startsWith("pl");
+const L = (pl, en) => (PL ? pl : en);
+const PRESETS = {
+  engine: [
+    { label: L("Wał korbowy", "Crankshaft"), shape: "disc", r: 0.95, h: 0.24 },
+    { label: L("Blok silnika", "Engine block"), shape: "block", w: 2.2, d: 1.4, h: 0.82, bores: 2 },
+    { label: L("Tłoki", "Pistons"), shape: "cylinder", n: 2, r: 0.37, h: 0.5 },
+    { label: L("Uszczelka", "Head gasket"), shape: "ring", w: 2.25, d: 1.45, h: 0.08, holes: 2 },
+    { label: L("Pokrywa", "Cover"), shape: "shell", w: 2.2, d: 1.4, h: 0.42 },
+  ],
+  phone: [
+    { label: L("Obudowa", "Back cover"), shape: "shell", w: 2.5, d: 1.25, h: 0.16 },
+    { label: L("Bateria", "Battery"), shape: "block", w: 1.5, d: 0.95, h: 0.13 },
+    { label: L("Płyta główna", "Logic board"), shape: "board", w: 2.3, d: 1.1, h: 0.08 },
+    { label: L("Ramka", "Frame"), shape: "ring", w: 2.5, d: 1.25, h: 0.12 },
+    { label: L("Ekran", "Display"), shape: "screen", w: 2.5, d: 1.25, h: 0.08 },
+  ],
+  layers: [1, 2, 3, 4, 5].map((i) => ({ label: L("Warstwa ", "Layer ") + i, shape: "board", plain: true, w: 2.3, d: 1.5, h: 0.1 })),
+};
+const DIMS = { block: { w: 2.1, d: 1.4, h: 0.8 }, cylinder: { r: 0.5, h: 0.6, n: 1 }, disc: { r: 0.95, h: 0.24 },
+  ring: { w: 2.0, d: 2.0, h: 0.14 }, gear: { r: 1.0, h: 0.26 }, board: { w: 2.1, d: 1.4, h: 0.12 },
+  screen: { w: 2.1, d: 1.4, h: 0.1 }, shell: { w: 2.1, d: 1.4, h: 0.42 } };
+const SHAPES = Object.keys(DIMS);
+const parts = (Array.isArray(P.parts) && P.parts.length >= 2 ? P.parts.slice(0, 7).map((p) => {
+  p = p && typeof p === "object" ? p : { label: String(p || "") };
+  const shape = SHAPES.includes(p.shape) ? p.shape : "block";
+  return Object.assign({}, DIMS[shape], { label: String(p.label || ""), shape, color: p.color || null });
+}) : PRESETS[P.preset] || PRESETS.engine).map((p) => Object.assign({ round: !!p.r }, p));
+const n = parts.length;
+const AXIS = P.axis === "x" ? "x" : "y";
+const heights = parts.map((p) => p.h);
+
+const box = root.querySelector(".xv");
+const s = Math.min(P.w / 1000, P.h / 880);
+box.style.setProperty("--s", s);
+if (P.bg === "none") box.classList.add("bare");
+const lightPanel = U.panelLight(box);
+if (lightPanel) box.style.setProperty("--pi", "var(--ink, #0f172a)");
+
+const span = Math.max(0.6, P.end - P.at);
+const clamp = (v) => Math.min(1, Math.max(0, v));
+const smooth = (a, b, v) => { const x = clamp((v - a) / (b - a)); return x * x * (3 - 2 * x); };
+const out3 = (x) => 1 - Math.pow(1 - x, 3), in3 = (x) => x * x * x;
+const inOut3 = (x) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2);
+const backOut = (x) => 1 + 2.4 * Math.pow(x - 1, 3) + 1.4 * Math.pow(x - 1, 2);
+// beats (local s)
+const tIn = P.panel ? Math.min(0.18 * span, U.fullAt(P.at, P.end) - P.at) : 0.18 * span;
+const T = { in: P.at + tIn, ex: P.at + 0.55 * span, hold: P.at + 0.78 * span, slam: P.at + 0.9 * span,
+  gone: P.at + 0.955 * span, end: P.end };
+const popDur = Math.min(0.32, 0.05 * span);
+const popAt = (i) => P.at + span * (0.24 + 0.18 * (n > 1 ? i / (n - 1) : 0));
+const kAt = (t) => (t < T.in ? 0 : t < T.ex ? inOut3((t - T.in) / (T.ex - T.in)) : t < T.hold ? 1
+  : t < T.slam ? 1 - in3((t - T.hold) / (T.slam - T.hold)) : 0);
+
+const ready = U.three({ el: root.querySelector(".xv-stage"), camera: { fov: 30 },
+                        bloom: { strength: 0.6, radius: 0.4, threshold: 1.7, alpha: "keep" } }).then(async (S) => {
+  const { THREE, scene, camera, renderer } = S;
+  await Promise.all([U.fonts([600, 800, 900]), U.fonts([900], U.token("--font-display", "") || undefined)]);   // titles: display font
+  const bloom = S.composer && S.composer.passes.find((p) => p.strength !== undefined);
+
+  // theme colours: any CSS colour (hex, rgb[a], names, color-mix) → THREE.Color through a probe element
+  const probe = document.createElement("i");
+  box.appendChild(probe);
+  const col = (v) => {
+    probe.style.color = ""; probe.style.color = String(v || "");
+    const c = String(getComputedStyle(probe).color || "");
+    const m = c.match(/[\d.]+/g) || ["255", "255", "255"];
+    const k = /^color\(/.test(c) ? 1 : 255;
+    return new THREE.Color().setRGB(m[0] / k, m[1] / k, m[2] / k, THREE.SRGBColorSpace);
+  };
+  const ACC = col(U.token("--accent", "#7dd3fc")), MUT = col(U.token("--muted", "#475569")),
+        CARD = col(U.token("--card", "#ffffff")), INK = col(U.token("--ink", "#0f172a"));
+  probe.remove();
+  const NEAR_BLACK = new THREE.Color(0.035, 0.037, 0.045);
+  // emissive accent for the glowing edges: scaled to a fixed luminance, so any accent (sky blue, orange) blooms alike
+  const lum = (c) => 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
+  const glowAcc = ACC.clone().multiplyScalar(2.6 / Math.max(0.04, lum(ACC)));   // above the bloom threshold (lit white is not)
+
+  renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 0.85;
+  const { RoomEnvironment } = await import("three/addons/environments/RoomEnvironment.js");
+  const pm = new THREE.PMREMGenerator(renderer);
+  scene.environment = pm.fromScene(new RoomEnvironment(), 0.04).texture; scene.environmentIntensity = 0.5;
+  scene.add(new THREE.HemisphereLight(0xffffff, MUT.clone().multiplyScalar(0.5), 0.55));
+  const key = new THREE.DirectionalLight(0xffffff, 1.5); key.position.set(-3.5, 6, 5); scene.add(key);
+  const rimA = new THREE.DirectionalLight(ACC, 4.5); rimA.position.set(4, 2.5, -5); scene.add(rimA);
+  const rimB = new THREE.DirectionalLight(ACC.clone().lerp(new THREE.Color(1, 1, 1), 0.5), 2.2); rimB.position.set(-5, 1, -4); scene.add(rimB);
+
+  const std = (c, o) => new THREE.MeshStandardMaterial(Object.assign({ color: c, metalness: 0.2, roughness: 0.4, envMapIntensity: 1 }, o || {}));
+  const glow = (o) => new THREE.MeshBasicMaterial(Object.assign({ color: glowAcc, toneMapped: false }, o || {}));
+  const dark = std(NEAR_BLACK, { roughness: 0.55, metalness: 0.3 });
+  const rrect = (w, d, r, sh) => {
+    r = Math.min(r, w / 2 - 0.001, d / 2 - 0.001);
+    const x = -w / 2, y = -d / 2, p = sh || new THREE.Shape();
+    p.moveTo(x + r, y); p.lineTo(x + w - r, y); p.quadraticCurveTo(x + w, y, x + w, y + r); p.lineTo(x + w, y + d - r);
+    p.quadraticCurveTo(x + w, y + d, x + w - r, y + d); p.lineTo(x + r, y + d); p.quadraticCurveTo(x, y + d, x, y + d - r);
+    p.lineTo(x, y + r); p.quadraticCurveTo(x, y, x + r, y);
+    return p;
+  };
+  // a flat shape extruded to thickness h along y, centred, with a bevelled rim
+  const slab = (shape, h, bev) => {
+    bev = Math.min(bev, h * 0.45);
+    const g = new THREE.ExtrudeGeometry(shape, { depth: Math.max(0.002, h - 2 * bev), bevelEnabled: bev > 0, bevelThickness: bev,
+      bevelSize: bev * 0.9, bevelSegments: 3, curveSegments: 14 });
+    g.rotateX(-Math.PI / 2); g.translate(0, -(h - 2 * bev) / 2, 0);
+    return g;
+  };
+  const mesh = (g, m, x, y, z) => { const o = new THREE.Mesh(g, m); o.position.set(x || 0, y || 0, z || 0); return o; };
+  const disc = (r, h, m, y, x, z) => mesh(new THREE.CylinderGeometry(r, r, h, 48), m, x, y, z);
+  const band = (w, d, r, wide, h, m, y) => {           // a thin glowing frame around a footprint (the "tech" accent line)
+    const sh = rrect(w + wide, d + wide, r + wide / 2);
+    sh.holes.push(rrect(w - 0.004, d - 0.004, r, new THREE.Path()));
+    return mesh(slab(sh, h, 0), m, 0, y);
+  };
+  const rnd = U.seed(11);
+
+  function build(p, i) {
+    const g = new THREE.Group(), h = p.h;
+    const custom = p.color ? col(p.color) : null;
+    const tint = (c) => custom || c;
+    if (p.shape === "block") {
+      g.add(mesh(slab(rrect(p.w, p.d, 0.12), h, 0.05), std(tint(MUT), { metalness: 0.55, roughness: 0.32 })));
+      const bores = p.bores || 0;
+      for (let b = 0; b < bores; b++) {
+        const x = (b - (bores - 1) / 2) * p.w * 0.5;
+        g.add(disc(Math.min(0.38, p.d * 0.3), 0.012, dark, h / 2 + 0.002, x));
+        g.add(mesh(new THREE.TorusGeometry(Math.min(0.38, p.d * 0.3), 0.018, 8, 48).rotateX(Math.PI / 2), glow(), x, h / 2 + 0.004));
+      }
+      const fins = h > 0.4 ? 4 : 0;
+      for (let f = 0; f < fins; f++) g.add(mesh(new THREE.BoxGeometry(p.w * 0.78, 0.028, 0.02), dark, 0, -h * 0.32 + f * h * 0.15, p.d / 2 + 0.004));
+      g.add(band(p.w, p.d, 0.12, 0.02, Math.min(0.03, h * 0.25), glow(), h * 0.12));
+    } else if (p.shape === "cylinder") {
+      const cnt = Math.max(1, p.n || 1);
+      for (let c = 0; c < cnt; c++) {
+        const x = (c - (cnt - 1) / 2) * p.r * 2.9;
+        g.add(disc(p.r, h, std(tint(CARD), { metalness: 1, roughness: 0.18 }), 0, x));
+        for (const yy of [h / 2 - 0.08, h / 2 - 0.15]) {
+          g.add(mesh(new THREE.TorusGeometry(p.r * 1.004, 0.012, 8, 48).rotateX(Math.PI / 2), dark, x, yy));
+        }
+        g.add(disc(p.r * 0.55, 0.01, glow(), h / 2 + 0.004, x));
+      }
+    } else if (p.shape === "disc") {
+      g.add(disc(p.r, h, std(tint(MUT), { metalness: 0.9, roughness: 0.26 })));
+      g.add(mesh(new THREE.TorusGeometry(p.r * 0.3, 0.025, 10, 48).rotateX(Math.PI / 2), glow(), 0, h / 2 + 0.01));
+      g.add(disc(p.r * 0.22, 0.012, dark, h / 2 + 0.004));
+      for (let b = 0; b < 8; b++) {
+        const a = (b / 8) * Math.PI * 2;
+        g.add(disc(p.r * 0.07, 0.012, dark, h / 2 + 0.003, Math.cos(a) * p.r * 0.66, Math.sin(a) * p.r * 0.66));
+      }
+      g.add(mesh(new THREE.TorusGeometry(p.r * 1.002, 0.014, 8, 64).rotateX(Math.PI / 2), glow(), 0, 0));
+    } else if (p.shape === "ring") {
+      let sh;
+      if (p.round) {
+        sh = new THREE.Shape(); sh.absarc(0, 0, p.r || p.w / 2, 0, Math.PI * 2, false);
+        const hole = new THREE.Path(); hole.absarc(0, 0, (p.r || p.w / 2) * 0.72, 0, Math.PI * 2, true); sh.holes.push(hole);
+      } else if (p.holes) {
+        sh = rrect(p.w, p.d, 0.16);
+        for (let b = 0; b < p.holes; b++) {
+          const hole = new THREE.Path();
+          hole.absarc((b - (p.holes - 1) / 2) * p.w * 0.5, 0, Math.min(0.4, p.d * 0.3), 0, Math.PI * 2, true);
+          sh.holes.push(hole);
+        }
+      } else {
+        sh = rrect(p.w, p.d, 0.18);
+        sh.holes.push(rrect(p.w - 0.2, p.d - 0.2, 0.1, new THREE.Path()));
+      }
+      g.add(mesh(slab(sh, h, Math.min(0.02, h * 0.3)), std(tint(ACC), { metalness: 0.35, roughness: 0.42 })));
+    } else if (p.shape === "gear") {
+      const sh = new THREE.Shape(), teeth = 14, R = p.r, r0 = R * 0.84;
+      for (let k = 0; k <= teeth * 4; k++) {
+        const a = (k / (teeth * 4)) * Math.PI * 2, rr = k % 4 === 1 || k % 4 === 2 ? R : r0;
+        if (k === 0) sh.moveTo(Math.cos(a) * rr, Math.sin(a) * rr); else sh.lineTo(Math.cos(a) * rr, Math.sin(a) * rr);
+      }
+      const hole = new THREE.Path(); hole.absarc(0, 0, R * 0.28, 0, Math.PI * 2, true); sh.holes.push(hole);
+      g.add(mesh(slab(sh, h, 0.02), std(tint(ACC), { metalness: 0.75, roughness: 0.3 })));
+      g.add(mesh(new THREE.TorusGeometry(R * 0.3, 0.02, 8, 40).rotateX(Math.PI / 2), glow(), 0, h / 2 + 0.01));
+    } else if (p.shape === "board") {
+      const base = p.plain ? [CARD, MUT, ACC][i % 3] : MUT;
+      g.add(mesh(slab(rrect(p.w, p.d, 0.08), h, 0.015), std(tint(base), { metalness: p.plain ? 0.1 : 0.25, roughness: p.plain ? 0.3 : 0.55 })));
+      if (p.plain) {
+        g.add(band(p.w, p.d, 0.08, 0.025, h * 0.35, glow(), 0));
+      } else {
+        for (let c = 0; c < 6; c++) {
+          const cw = 0.2 + rnd() * 0.35, cd = 0.15 + rnd() * 0.3;
+          g.add(mesh(new THREE.BoxGeometry(cw, 0.05, cd), c === 0 ? glow() : dark,
+            (rnd() - 0.5) * (p.w - cw - 0.2), h / 2 + 0.02, (rnd() - 0.5) * (p.d - cd - 0.2)));
+        }
+      }
+    } else if (p.shape === "screen") {
+      g.add(mesh(slab(rrect(p.w, p.d, 0.16), h, 0.02), std(NEAR_BLACK, { metalness: 0.3, roughness: 0.2 })));
+      const cv = document.createElement("canvas"); cv.width = 512; cv.height = Math.round(512 * p.d / p.w);
+      const x = cv.getContext("2d"), gr = x.createLinearGradient(0, 0, cv.width, cv.height);
+      gr.addColorStop(0, "#" + ACC.getHexString()); gr.addColorStop(1, "#" + ACC.clone().multiplyScalar(0.25).getHexString());
+      x.fillStyle = gr; x.fillRect(0, 0, cv.width, cv.height);
+      x.fillStyle = "rgba(255,255,255,0.85)";
+      const rr = (a, b, c, d) => { x.beginPath(); x.roundRect(a, b, c, d, d / 2); x.fill(); };
+      rr(36, 34, 180, 22); x.fillStyle = "rgba(255,255,255,0.4)";
+      for (let k = 0; k < 4; k++) rr(36, 84 + k * 38, 300 - k * 40, 16);
+      x.fillStyle = "rgba(255,255,255,0.22)"; rr(cv.width - 150, cv.height - 150, 110, 110);
+      const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
+      const glass = new THREE.Mesh(new THREE.PlaneGeometry(p.w - 0.14, p.d - 0.14).rotateX(-Math.PI / 2),
+        new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 1.15, roughness: 0.15 }));
+      glass.position.y = h / 2 + 0.003; g.add(glass);
+    } else {                                                   // shell: a rounded cover with a glowing ridge
+      g.add(mesh(slab(rrect(p.w, p.d, Math.min(0.24, p.d * 0.3)), h, Math.min(0.14, h * 0.42)), std(tint(CARD).clone().multiplyScalar(0.78), { metalness: 0.05, roughness: 0.38 })));
+      g.add(mesh(slab(rrect(p.w * 0.55, 0.05, 0.024), 0.02, 0), glow(), 0, h / 2 + 0.005));
+    }
+    return g;
+  }
+
+  // the object: one pivot per part (stack position), turned on a holder (orbit); axis "x" lays every part on its side
+  const holder = new THREE.Group(); scene.add(holder);
+  const pivots = parts.map((p, i) => {
+    const pv = new THREE.Group(), inner = build(p, i);
+    if (AXIS === "x") inner.rotation.z = -Math.PI / 2;
+    pv.add(inner); holder.add(pv);
+    return pv;
+  });
+  const footW = parts.map((p) => (p.r ? p.r * 2 * (p.n > 1 ? 1 + 1.45 * (p.n - 1) : 1) : p.w));
+  const footD = parts.map((p) => (p.r ? p.r * 2 : p.d));
+  const silhouette = (i, yaw) => Math.abs(footW[i] / 2 * Math.cos(yaw)) + Math.abs(footD[i] / 2 * Math.sin(yaw));
+  const halfPerp = Math.max(...parts.map((p, i) => Math.hypot(footW[i], footD[i]) / 2));
+
+  // floor: contact shadow + platform rings + the click shockwave (axis y only: a floor under the stack)
+  const radial = (stops) => {
+    const c = document.createElement("canvas"); c.width = c.height = 128;
+    const x = c.getContext("2d"), gr = x.createRadialGradient(64, 64, 0, 64, 64, 64);
+    stops.forEach(([o, a]) => gr.addColorStop(o, "rgba(255,255,255," + a + ")"));
+    x.fillStyle = gr; x.fillRect(0, 0, 128, 128);
+    return new THREE.CanvasTexture(c);
+  };
+  const floor = new THREE.Group(); holder.parent.add(floor);
+  const shadow = new THREE.Mesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({
+    map: radial([[0, 1], [0.45, 0.55], [1, 0]]), color: 0x000000, transparent: true, opacity: lightPanel ? 0.32 : 0.6, depthWrite: false }));
+  shadow.scale.set(halfPerp * 2.6, 1, halfPerp * 1.9); floor.add(shadow);
+  const ringMat = (o) => new THREE.MeshBasicMaterial({ color: lightPanel ? ACC : glowAcc, toneMapped: false, transparent: true, opacity: o, depthWrite: false,
+    blending: lightPanel ? THREE.NormalBlending : THREE.AdditiveBlending, side: THREE.DoubleSide });
+  const RINGS = [1.15, 1.4];
+  const rings = RINGS.map((k, j) => {
+    const m = new THREE.Mesh(new THREE.RingGeometry(halfPerp * k - 0.012, halfPerp * k + 0.012, 128).rotateX(-Math.PI / 2), ringMat(j ? 0.18 : 0.35));
+    floor.add(m); return m;
+  });
+  const wave = new THREE.Mesh(new THREE.RingGeometry(0.92, 1, 128).rotateX(-Math.PI / 2), ringMat(0));
+  floor.add(wave);
+  const flare = new THREE.Sprite(new THREE.SpriteMaterial({ map: radial([[0, 1], [0.2, 0.6], [1, 0]]), color: glowAcc,
+    transparent: true, opacity: 0, depthWrite: false, depthTest: false, blending: THREE.AdditiveBlending, toneMapped: false }));
+  holder.parent.add(flare);
+
+  // ---- DOM: title, labels, leader lines ----
+  const titleEl = root.querySelector(".xv-title");
+  let titleH = 0;
+  if (P.title) {
+    titleEl.innerHTML = "";
+    titleEl.appendChild(document.createTextNode(String(P.title)));
+    const bar = document.createElement("span"); bar.className = "bar"; titleEl.appendChild(bar);
+    let fs = 64 * s;
+    titleEl.style.fontSize = fs + "px";
+    const maxW = P.w * 0.86;
+    if (titleEl.scrollWidth > maxW) { fs *= maxW / titleEl.scrollWidth; titleEl.style.fontSize = fs + "px"; }
+    titleEl.style.top = Math.round(P.h * 0.06) + "px";
+    titleH = P.h * 0.06 + titleEl.offsetHeight + 24 * s;
+  } else titleEl.remove();
+  const svg = root.querySelector("svg.xv-lines");
+  svg.setAttribute("width", P.w); svg.setAttribute("height", P.h); svg.setAttribute("viewBox", "0 0 " + P.w + " " + P.h);
+  const NS = "http://www.w3.org/2000/svg";
+  const labelsEl = root.querySelector(".xv-labels");
+  const accentCss = "#" + ACC.getHexString();
+  const labels = parts.map((p, i) => {
+    const el = document.createElement("div"); el.className = "wow-label";
+    const chip = document.createElement("span"); chip.className = "n"; chip.textContent = String(i + 1);
+    const tx = document.createElement("span"); tx.textContent = p.label;
+    el.appendChild(chip); el.appendChild(tx); labelsEl.appendChild(el);
+    const line = document.createElementNS(NS, "polyline");
+    line.setAttribute("fill", "none"); line.setAttribute("stroke", accentCss); line.setAttribute("stroke-width", String(3 * s));
+    line.setAttribute("stroke-linecap", "round"); line.setAttribute("stroke-linejoin", "round");
+    const dot = document.createElementNS(NS, "circle"); dot.setAttribute("r", String(7 * s)); dot.setAttribute("fill", accentCss);
+    const halo = document.createElementNS(NS, "circle"); halo.setAttribute("r", String(14 * s)); halo.setAttribute("fill", "none");
+    halo.setAttribute("stroke", accentCss); halo.setAttribute("stroke-width", String(2 * s));
+    svg.appendChild(line); svg.appendChild(halo); svg.appendChild(dot);
+    return { el, line, dot, halo, w: el.offsetWidth, h: el.offsetHeight, side: AXIS === "y" ? (i % 2 ? -1 : 1) : (i % 2 ? 1 : -1) };
+  });
+  const labW = Math.max(...labels.map((l) => l.w)), labH = Math.max(...labels.map((l) => l.h));
+
+  // ---- fit: the exploded object fills the room left by the title and the label columns ----
+  const ELEV = AXIS === "x" ? 0.24 : (P.preset === "phone" || P.preset === "layers") && !(Array.isArray(P.parts) && P.parts.length >= 2) ? 0.6 : 0.42;
+  const AZ = AXIS === "x" ? -0.75 : 0;                       // a horizontal stack is seen from the side: the faces show
+  const margin = 26 * s, gapPx = 30 * s;
+  const area = { x0: margin, x1: P.w - margin, y0: Math.max(margin, titleH), y1: P.h - margin };
+  const room = AXIS === "y"
+    ? { w: Math.max(P.w * 0.22, (area.x1 - area.x0) - 2 * (labW + gapPx)), h: (area.y1 - area.y0) * 0.9 }
+    : { w: (area.x1 - area.x0) * 0.9, h: Math.max(P.h * 0.22, (area.y1 - area.y0) - 2 * (labH + gapPx)) };
+  const centre = [(area.x0 + area.x1) / 2, (area.y0 + area.y1) / 2 + (AXIS === "y" ? 0.02 * P.h : 0)];
+  const view = centre.slice();                                 // where the world origin lands on screen
+  const L1 = explodeLayout(heights, AXIS, 1);
+  let D = 12;
+  const place = (d) => {
+    camera.position.set(Math.sin(AZ) * Math.cos(ELEV) * d, Math.sin(ELEV) * d, Math.cos(AZ) * Math.cos(ELEV) * d);
+    camera.lookAt(0, 0, 0);
+    // a pure screen offset: the world origin lands on `view`
+    camera.setViewOffset(P.w, P.h, P.w / 2 - view[0], P.h / 2 - view[1], P.w, P.h);
+    camera.updateMatrixWorld();
+  };
+  const extent = (floorToo) => {                                       // exploded object's projected size (px) over a full turn
+    let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+    L1.forEach((c, i) => {
+      for (let a = 0; a < 12; a++) {
+        const ang = (a / 12) * Math.PI * 2, r = Math.hypot(footW[i], footD[i]) / 2 * 0.86;   // corners rarely face the side
+        for (const e of [-1, 1]) {
+          const v = AXIS === "y" ? [c[0] + Math.cos(ang) * r, c[1] + e * heights[i] / 2, Math.sin(ang) * r]
+            : [c[0] + e * heights[i] / 2, Math.cos(ang) * r, Math.sin(ang) * r];
+          const [x, y] = U.toScreen(S, v);
+          x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y);
+        }
+      }
+    });
+    if (floorToo && AXIS === "y") {                           // the floor rings under the stack: height only
+      const fy = L1[0][1] - heights[0] / 2 - 0.02, fr = halfPerp * RINGS[RINGS.length - 1];
+      for (let a = 0; a < 24; a++) {
+        const [x, y] = U.toScreen(S, [Math.cos((a / 24) * Math.PI * 2) * fr, fy, Math.sin((a / 24) * Math.PI * 2) * fr]);
+        x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y);
+      }
+    }
+    return { w: x1 - x0, h: y1 - y0, cx: (x0 + x1) / 2, cy: (y0 + y1) / 2 };
+  };
+  // the parts set the width (labels sit beside them), parts + floor rings the height
+  const fit = () => { const a = extent(false), b = extent(true); return { w: a.w, h: b.h, cx: a.cx, cy: b.cy, half: AXIS === "y" ? a.w / 2 : a.h / 2 }; };
+  for (let it = 0; it < 5; it++) {
+    place(D);
+    const e = fit();
+    D *= Math.max(e.w / room.w, e.h / room.h);
+  }
+  place(D);
+  const e1 = fit();
+  view[0] += centre[0] - e1.cx; view[1] += centre[1] - e1.cy;  // the object's box (not the origin) is centred
+  place(D);
+  const objHalf = e1.half;
+
+  // ---- one clock: every frame is a pure function of t ----
+  const tmp = new THREE.Vector3();
+  const colX = { "1": centre[0] + objHalf + gapPx, "-1": centre[0] - objHalf - gapPx };
+  const colY = { "1": centre[1] + objHalf + gapPx, "-1": centre[1] - objHalf - gapPx };
+  const lo = { x: area.x0, y: area.y0 }, hi = { x: area.x1, y: area.y1 };
+  U.clock((t) => {
+    const on = t >= P.at && t < P.end;
+    holder.visible = flare.visible = on;
+    floor.visible = on && AXIS === "y";
+    if (!on) {
+      labels.forEach((l) => { l.el.style.opacity = 0; l.line.style.opacity = l.dot.style.opacity = l.halo.style.opacity = 0; });
+      titleEl.style.opacity = 0;
+      S.render();
+      return;
+    }
+    const a = t - P.at;
+    const k = kAt(t);
+    const uin = clamp(a / Math.max(0.05, tIn));
+    const impact = t >= T.slam ? t - T.slam : -1;
+    const flash = impact >= 0 ? Math.exp(-impact * 7) : 0;
+    const outK = t > T.gone ? in3(clamp((t - T.gone) / (T.end - T.gone))) : 0;
+    const sc = Math.max(0.001, backOut(uin) * (1 - outK) * (1 + 0.05 * flash * Math.sin(impact * 40)));
+    holder.scale.setScalar(sc);
+    // orbit: a turn-in spin, a slow drift and the hold's orbit
+    const spin = -0.55 - 1.7 * (1 - out3(uin)) + 0.3 * (a / span) + 1.15 * smooth(0.5, 0.82, a / span);
+    const yaw = AXIS === "y" ? spin : 0.3 * (spin + 0.55);    // axis x: the stack only rocks about its axis
+    const bob = Math.sin(a * 1.7) * 0.03 * k;
+    const lay = explodeLayout(heights, AXIS, k);
+    const mid = (n - 1) / 2;
+    pivots.forEach((pv, i) => {
+      pv.position.set(lay[i][0], lay[i][1] + (AXIS === "y" ? bob : 0), lay[i][2] + (AXIS === "x" ? bob : 0));
+      const twist = (i - mid) * 0.2 * k;
+      if (AXIS === "y") pv.rotation.set(0, yaw + twist, 0); else pv.rotation.set(yaw + twist, 0, 0);
+    });
+    // floor follows the bottom part; the click: shockwave, flare, a bloom kick
+    const bottom = lay[0][1] - heights[0] / 2 - 0.02;
+    floor.position.y = bottom * sc;
+    floor.scale.setScalar(sc);
+    shadow.material.opacity = (lightPanel ? 0.32 : 0.6) * (1 - 0.45 * k);
+    rings.forEach((r, j) => { r.material.opacity = (j ? 0.18 : 0.35) * (0.6 + 0.4 * k) * (0.7 + 0.3 * Math.sin(a * 2.4 + j)); });
+    wave.material.opacity = flash * 0.9;
+    wave.scale.setScalar(halfPerp * (1.1 + (1 - flash) * 1.6));
+    flare.material.opacity = flash * 0.45;
+    flare.scale.setScalar(halfPerp * (1.2 + 1.4 * (1 - flash)) * sc);
+    if (bloom) bloom.strength = 0.6 + 0.6 * flash;
+    // title
+    if (P.title) {
+      const ti = out3(clamp(a / 0.45)), to = clamp((t - (P.end - 0.35)) / 0.3);
+      titleEl.style.opacity = String(ti * (1 - to));
+      titleEl.style.transform = "translateY(" + ((1 - ti) * -24 * s) + "px)";
+      const bar = titleEl.querySelector(".bar");
+      if (bar) bar.style.transform = "scaleX(" + out3(clamp((a - 0.15) / 0.45)) + ")";
+    }
+    // labels: anchor on each part's silhouette edge, pill in the side column, leader line drawn on
+    const fadeOut = 1 - smooth(T.hold, T.hold + Math.min(0.3, 0.06 * span), t);
+    const pos = labels.map((l, i) => {
+      const c = lay[i];
+      const ext = silhouette(i, yaw + (i - mid) * 0.2 * k) * 0.94;
+      if (AXIS === "y") tmp.set(c[0] + l.side * ext, c[1] + bob, c[2]); else tmp.set(c[0], c[1] - l.side * ext, c[2] + bob);   // world +y is screen up
+      tmp.multiplyScalar(sc);
+      const [ax, ay] = U.toScreen(S, tmp);
+      return { ax, ay, x: AXIS === "y" ? colX[l.side] : ax, y: AXIS === "y" ? ay : colY[l.side] };
+    });
+    // keep the pills apart in each column (deterministic push), inside the area
+    for (const side of [-1, 1]) {
+      const ids = labels.map((l, i) => i).filter((i) => labels[i].side === side);
+      const key = AXIS === "y" ? "y" : "x";
+      const size = (i) => (AXIS === "y" ? labels[i].h : labels[i].w) + 12 * s;
+      ids.sort((p, q) => pos[p][key] - pos[q][key]);
+      for (let j = 1; j < ids.length; j++) {
+        const need = (size(ids[j - 1]) + size(ids[j])) / 2;
+        if (pos[ids[j]][key] - pos[ids[j - 1]][key] < need) pos[ids[j]][key] = pos[ids[j - 1]][key] + need;
+      }
+      const hiK = hi[key], loK = lo[key];
+      for (let j = ids.length - 1; j >= 0; j--) {
+        const lim = j === ids.length - 1 ? hiK - size(ids[j]) / 2 : pos[ids[j + 1]][key] - (size(ids[j]) + size(ids[j + 1])) / 2;
+        pos[ids[j]][key] = Math.min(pos[ids[j]][key], lim);
+      }
+      for (let j = 0; j < ids.length; j++) {
+        const lim = j === 0 ? loK + size(ids[j]) / 2 : pos[ids[j - 1]][key] + (size(ids[j]) + size(ids[j - 1])) / 2;
+        pos[ids[j]][key] = Math.max(pos[ids[j]][key], lim);
+      }
+    }
+    labels.forEach((l, i) => {
+      const p = pos[i];
+      const u = clamp((t - popAt(i)) / popDur);
+      const vis = u * fadeOut * (1 - outK);
+      const pop = backOut(u);
+      let left, top, ex, ey, elbowX, elbowY;
+      if (AXIS === "y") {
+        left = l.side > 0 ? p.x : p.x - l.w;
+        left = Math.min(hi.x - l.w, Math.max(lo.x, left));
+        top = p.y - l.h / 2;
+        ex = l.side > 0 ? left : left + l.w; ey = p.y;
+        elbowX = ex - l.side * 26 * s; elbowY = ey;
+      } else {
+        left = Math.min(hi.x - l.w, Math.max(lo.x, p.x - l.w / 2));
+        top = p.y - l.h / 2;
+        ex = p.x; ey = l.side > 0 ? top : top + l.h;
+        elbowX = ex; elbowY = ey - l.side * 22 * s;
+      }
+      l.el.style.opacity = String(vis);
+      l.el.style.transform = "translate(" + left.toFixed(1) + "px," + top.toFixed(1) + "px) scale(" + (0.7 + 0.3 * pop).toFixed(4) + ")";
+      l.el.style.transformOrigin = (AXIS === "y" ? (l.side > 0 ? "0% 50%" : "100% 50%") : "50% 50%");
+      // leader: anchor → elbow → pill, drawn from the anchor outwards
+      const pts = [[p.ax, p.ay], [elbowX, elbowY], [ex, ey]];
+      const seg = [Math.hypot(pts[1][0] - pts[0][0], pts[1][1] - pts[0][1]), Math.hypot(pts[2][0] - pts[1][0], pts[2][1] - pts[1][1])];
+      const len = seg[0] + seg[1] + 0.001;
+      const draw = clamp((t - popAt(i) + popDur * 0.6) / (popDur * 1.2));
+      l.line.setAttribute("points", pts.map((q) => q[0].toFixed(1) + "," + q[1].toFixed(1)).join(" "));
+      l.line.setAttribute("stroke-dasharray", len.toFixed(1) + " " + len.toFixed(1));
+      l.line.setAttribute("stroke-dashoffset", (len * (1 - draw)).toFixed(1));
+      const lv = draw * fadeOut * (1 - outK);
+      l.line.style.opacity = String(lv);
+      l.dot.setAttribute("cx", p.ax.toFixed(1)); l.dot.setAttribute("cy", p.ay.toFixed(1));
+      l.dot.style.opacity = String(lv);
+      const ph = ((a * 1.1 + i * 0.37) % 1);
+      l.halo.setAttribute("cx", p.ax.toFixed(1)); l.halo.setAttribute("cy", p.ay.toFixed(1));
+      l.halo.setAttribute("r", String((8 + 16 * ph) * s));
+      l.halo.style.opacity = String(lv * (1 - ph) * 0.8);
+    });
+    S.render();
+  });
+});
+U.ready(ready);
+</script>

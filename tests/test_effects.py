@@ -159,7 +159,7 @@ def test_bundled_index_json():
     assert sorted(names) == sorted(p.stem for p in BUNDLED.glob("*.html"))
     for e in idx:
         assert set(e) >= {"name", "kind", "description", "params", "follow", "place"}, e["name"]
-        assert e["kind"] in ("explainer", "vfx", "3d")
+        assert e["kind"] in ("explainer", "vfx", "3d", "wow")
         assert isinstance(e["description"], str) and e["description"]
         assert isinstance(e["params"], dict) and all(isinstance(v, str) for v in e["params"].values())
         assert isinstance(e["follow"], bool) and isinstance(e["place"], bool)

@@ -380,3 +380,27 @@ def test_digit_sheet_renders_display_and_num_fonts(tmp_path):
     assert im.width >= 1000 and im.height >= 300
     lo, hi = im.convert("L").getextrema()
     assert hi - lo > 100                                     # glyphs drawn, not a blank card
+
+
+WOW_PARAMS = {"exploded-view": {"parts", "preset", "axis"}, "globe": {"from", "to", "labels", "style"}}
+_FALLBACK = re.compile(r'U\.token\(\s*"[^"]*"\s*,\s*"#[0-9a-fA-F]{6}"\s*\)|var\(--[\w-]+\s*,\s*#[0-9a-fA-F]{6}\s*\)')
+
+
+def test_wow_index_entries():
+    """The three.js WOW explainers: index.json build needs (kind wow, webgl, modes), documented params, lint, one
+    renderer, no shadow maps, colour only through theme tokens (hex only as a token / var() fallback, black or white)."""
+    import json
+    idx = {e["name"]: e for e in json.loads((_custom_dir() / "index.json").read_text(encoding="utf-8"))}
+    for name, params in WOW_PARAMS.items():
+        e = idx[name]
+        assert e["kind"] == "wow" and e["webgl"] is True, name
+        assert {"panel", "scene", "side"} <= set(e["modes"]), name
+        assert params <= set(e["params"]) and all(isinstance(v, str) and v for v in e["params"].values()), name
+        path = _custom_dir() / f"{name}.html"
+        effects.lint_effect(path)
+        text = path.read_text(encoding="utf-8")
+        assert text.count("U.three(") == 1 and "shadowMap" not in text, name
+        assert effects.effect_meta(path)["kind"] == "wow"
+        bare = _FALLBACK.sub("", text)
+        stray = [h for h in re.findall(r"#[0-9a-fA-F]{6}\b", bare) if h.lower() not in ("#000000", "#ffffff")]
+        assert not stray, (name, stray)

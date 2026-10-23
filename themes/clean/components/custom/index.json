@@ -149,5 +149,46 @@
     },
     "follow": true,
     "place": true
+  },
+  {
+    "name": "exploded-view",
+    "kind": "wow",
+    "modes": [
+      "panel",
+      "scene",
+      "side",
+      "overlay"
+    ],
+    "webgl": true,
+    "description": "3D exploded view (product-render style): the assembled object turns in, its parts slide apart along the axis with a slight fan while numbered leader-line labels pop per part, it holds and orbits, then slams back together with a click flash. Theme accent / muted / card materials, studio light, glowing accent edges; a panel item is assembled by U.fullAt.",
+    "params": {
+      "parts": "2-7 items {\"label\", \"shape\": \"block\"|\"cylinder\"|\"disc\"|\"ring\"|\"gear\"|\"board\"|\"screen\"|\"shell\", \"color\"?} from bottom to top (left to right with axis \"x\")",
+      "preset": "used when parts is missing: \"engine\" (default: crankshaft, block, pistons, gasket, cover), \"phone\" (back, battery, board, frame, display) or \"layers\" (5 boards Warstwa 1…5); labels in the video language (pl / en)",
+      "axis": "\"y\" (default: a vertical stack, labels left / right) or \"x\" (a horizontal stack, labels above / below)",
+      "title": "optional heading above the object",
+      "bg": "\"panel\" (default: the theme's --panel-bg behind the object) or \"none\" (transparent overlay over the video)"
+    },
+    "follow": false,
+    "place": false
+  },
+  {
+    "name": "globe",
+    "kind": "wow",
+    "modes": [
+      "panel",
+      "scene",
+      "side"
+    ],
+    "webgl": true,
+    "description": "Light 3D globe of land dots: it spins in to the origin country, accent arcs shoot out one by one to the destinations and land with pulsing pins while the camera pulls back to frame them all, then country labels decode. Sphere in the panel colour, dots in --muted, arcs and pins in --accent with a bloom rim glow.",
+    "params": {
+      "from": "origin country, ISO-2 code (e.g. \"PL\")",
+      "to": "1-6 destination ISO-2 codes (e.g. [\"US\", \"JP\", \"BR\"])",
+      "labels": "\"auto\" (default: country names in the video language) or a list of names: [origin, destination 1, …], or one per destination only",
+      "style": "\"dots\" (default: dotted land) or \"solid\" (dense dots that read as filled land)",
+      "title": "optional heading above the globe"
+    },
+    "follow": false,
+    "place": false
   }
 ]

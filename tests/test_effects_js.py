@@ -621,3 +621,109 @@ def test_anime_promise_wrong_value_is_a_one_line_error():
     assert "{ timeline: tl }" in d["bare"] and "\n" not in d["bare"]
     assert "{ timeline: tl }" in d["junk"] and "object" in d["junk"]
     assert "{ timeline: tl }" in d["sync"]
+
+
+# WOW explainers (exploded-view, globe): their pure helpers, registered on window.CutmateFX.wow by the effect file.
+# The effect script runs as in a composition, with U.three stubbed out (no WebGL in node): only the helpers matter here
+WOW = """
+global.window = {};
+require(%s);
+const tl = { to() { return tl; }, set() { return tl; }, fromTo() { return tl; } };
+// any DOM access before the (never resolving) U.three promise gets an inert stand-in
+const stub = () => new Proxy(function () {}, { get: (o, k) => (k === Symbol.toPrimitive ? () => "" : stub()), apply: () => stub(),
+                                               set: () => true });
+const root = stub();
+for (const src of %s) {
+  const U = window.CutmateFX.make(tl, {}, "c1", { dur: 4 });
+  U.three = () => new Promise(() => {});
+  new Function("tl", "root", "P", "U", src)(tl, root, { at: 0.5, end: 3.5, dur: 4, w: 1000, h: 880, lang: "pl" }, U);
+}
+const W = window.CutmateFX.wow;
+console.log(JSON.stringify((function () { %s })()));
+"""
+
+
+def _wow(body: str, names=("exploded-view", "globe")) -> dict:
+    from cutmate.build import _sections
+    fx = plugin_root() / "themes" / "clean" / "components" / "custom"
+    srcs = [_sections(fx / f"{n}.html")["script"] for n in names]
+    return _node(WOW, json.dumps(str(web_dir() / "effects.js")), json.dumps(srcs), body)
+
+
+def test_explode_layout():
+    d = _wow("""
+      const out = {};
+      for (const n of [2, 3, 5, 7]) out[n] = { k0: W.explodeLayout(n, "y", 0), k1: W.explodeLayout(n, "y", 1),
+                                              half: W.explodeLayout(n, "y", 0.5), x1: W.explodeLayout(n, "x", 1) };
+      out.slab = W.SLAB;
+      out.heights = W.explodeLayout([0.3, 0.8, 0.12], "y", 0);
+      out.heights1 = W.explodeLayout([0.3, 0.8, 0.12], "y", 1);
+      return out;""", names=("exploded-view",))
+    slab = d["slab"]
+    assert slab > 0
+    for n in ("2", "3", "5", "7"):
+        k0, k1, x1, half = d[n]["k0"], d[n]["k1"], d[n]["x1"], d[n]["half"]
+        assert len(k0) == len(k1) == len(x1) == int(n) and all(len(p) == 3 for p in k0 + k1)
+        gaps0 = [b[1] - a[1] - slab for a, b in zip(k0, k0[1:])]
+        gaps1 = [b[1] - a[1] - slab for a, b in zip(k1, k1[1:])]
+        assert all(abs(g) <= 0.01 for g in gaps0), (n, gaps0)              # assembled: every part touches the next
+        assert all(g >= 0.15 for g in gaps1), (n, gaps1)                   # exploded: never overlapping
+        assert all(0.0 < (b[1] - a[1] - slab) < g1 for a, b, g1 in zip(half, half[1:], gaps1))   # k between
+        for L in (k0, k1):                                                  # symmetric about the centre
+            for i in range(len(L)):
+                assert all(abs(L[i][j] + L[-1 - i][j]) <= 1e-9 for j in range(3)), (n, L)
+        assert all(abs(k0[i][0]) <= 1e-9 for i in range(len(k0)))         # no fan while assembled
+        for p, q in zip(k1, x1):                                            # axis "x": the axes swap
+            assert abs(q[0] - p[1]) <= 1e-9 and abs(q[1] - p[0]) <= 1e-9 and abs(q[2] - p[2]) <= 1e-9
+    hs, h0, h1 = [0.3, 0.8, 0.12], d["heights"], d["heights1"]
+    assert all(abs((b[1] - a[1]) - (ha + hb) / 2) <= 1e-9 for a, b, ha, hb in zip(h0, h0[1:], hs, hs[1:]))
+    assert all((b[1] - a[1]) - (ha + hb) / 2 >= 0.15 for a, b, ha, hb in zip(h1, h1[1:], hs, hs[1:]))
+
+
+def _countries():
+    p = plugin_root() / "themes" / "clean" / "components" / "custom" / "globe" / "countries.json"
+    return json.loads(p.read_text(encoding="utf-8"))
+
+
+def test_globe_math():
+    c = _countries()
+    pl, us = c["PL"], c["US"]
+    d = _wow(f"""
+      const a = W.arcPoints({pl['lat']}, {pl['lng']}, {us['lat']}, {us['lng']});
+      const b = W.arcPoints({pl['lat']}, {pl['lng']}, {us['lat']}, {us['lng']}, 17);
+      return {{ zero: W.latLngToVec(0, 0, 1), north: W.latLngToVec(90, 0, 1), east: W.latLngToVec(0, 90, 2),
+               pl: W.latLngToVec({pl['lat']}, {pl['lng']}, 1), us: W.latLngToVec({us['lat']}, {us['lng']}, 1), a, b }};""",
+             names=("globe",))
+    import math
+    close = lambda u, v, e=1e-9: all(abs(x - y) <= e for x, y in zip(u, v))  # noqa: E731
+    assert close(d["zero"], [0, 0, 1]) and close(d["north"], [0, 1, 0]) and close(d["east"], [2, 0, 0])
+    a = d["a"]
+    norm = lambda v: math.sqrt(sum(x * x for x in v))  # noqa: E731
+    assert len(a) == 64 and len(d["b"]) == 17
+    assert abs(norm(a[0]) - 1) <= 1e-6 and abs(norm(a[-1]) - 1) <= 1e-6        # starts / ends on the sphere
+    assert close(a[0], d["pl"], 1e-6) and close(a[-1], d["us"], 1e-6)
+    hs = [norm(p) - 1 for p in a]
+    top = max(range(len(hs)), key=hs.__getitem__)
+    assert top in (31, 32)                                                       # the apex is in the middle
+    ang = math.acos(sum(x * y for x, y in zip(d["pl"], d["us"])))
+    apex = 0.15 + 0.35 * ang / math.pi
+    assert apex * 0.99 <= hs[top] <= apex + 1e-9
+    assert all(h >= -1e-9 for h in hs)                                            # never under the surface
+
+
+def test_globe_frames_every_point():
+    """At 0.8 of the span the pose (pure, shared with the hf test) shows the origin and every destination in front,
+    inside the region with room to spare."""
+    c = _countries()
+    ll = lambda k: [c[k]["lat"], c[k]["lng"]]  # noqa: E731
+    for w, h, panel, title in ((1000, 880, True, ""), (1080, 1920, False, "Zasięg"), (840, 960, False, "")):
+        o = {"from": ll("PL"), "to": [ll("US"), ll("JP"), ll("BR")], "w": w, "h": h, "at": 0.5, "end": 3.5,
+             "panel": panel, "title": title}
+        d = _wow(f"""
+          const o = {json.dumps(o)};
+          const pose = W.globePose(o, 0.5 + 0.8 * 3.0);
+          return [o.from, ...o.to].map((p) => W.globeProject(pose, W.latLngToVec(p[0], p[1], 1), o.w, o.h));""",
+                 names=("globe",))
+        for x, y, front in d:
+            assert front > 0.05, (w, h, d)
+            assert 0.06 * w <= x <= 0.94 * w and 0.06 * h <= y <= 0.94 * h, (w, h, d)

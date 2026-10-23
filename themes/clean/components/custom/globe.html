@@ -1,0 +1,373 @@
+<style>
+ROOT .gl { position: absolute; inset: 0; overflow: hidden; font-family: var(--font); --pi: #ffffff; }
+ROOT .gl-bg { position: absolute; inset: 0; background: var(--panel-bg, #0b0b0f); }
+ROOT .gl-glow { position: absolute; inset: 0; }
+/* the atmosphere: a DOM halo behind the canvas (a transparent WebGL glow is sRGB-encoded without its alpha) */
+ROOT .gl-halo { position: absolute; left: 0; top: 0; width: 100px; height: 100px; border-radius: 50%; opacity: 0;
+  background: radial-gradient(circle closest-side, transparent 0%, transparent 76%,
+    color-mix(in srgb, var(--accent, #7dd3fc) 62%, transparent) 79%, color-mix(in srgb, var(--accent, #7dd3fc) 22%, transparent) 86%,
+    color-mix(in srgb, var(--accent, #7dd3fc) 6%, transparent) 93%, transparent 100%); }
+ROOT .gl-stage { position: absolute; inset: 0; }
+ROOT svg.gl-lines { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
+ROOT .gl-labels { position: absolute; inset: 0; }
+ROOT .gl-title { position: absolute; left: 0; right: 0; text-align: center; color: var(--pi); font-family: var(--font-display);
+  font-weight: 900; font-synthesis: none; letter-spacing: -0.03em; line-height: 1.02; white-space: nowrap; }
+ROOT .gl-title .bar { display: block; margin: calc(var(--s) * 14px) auto 0; width: calc(var(--s) * 96px);
+  height: calc(var(--s) * 8px); border-radius: calc(var(--s) * 4px); background: var(--accent, #7dd3fc); transform-origin: center; }
+ROOT .wow-label { position: absolute; left: 0; top: 0; display: flex; align-items: center; box-sizing: border-box; white-space: nowrap;
+  gap: calc(var(--s) * 12px); padding: calc(var(--s) * 9px) calc(var(--s) * 20px) calc(var(--s) * 9px) calc(var(--s) * 9px);
+  background: var(--card, #ffffff); color: var(--ink, #0f172a); border-radius: 999px; font-family: var(--font);
+  font-weight: 600; font-size: calc(var(--s) * 31px); line-height: 1.1; letter-spacing: -0.01em;
+  box-shadow: var(--shadow, 0 10px 30px rgba(0, 0, 0, 0.35)); will-change: transform, opacity; }
+ROOT .wow-label .n { flex: none; min-width: calc(var(--s) * 42px); height: calc(var(--s) * 42px); border-radius: 999px; box-sizing: border-box;
+  padding: 0 calc(var(--s) * 8px); display: flex; align-items: center; justify-content: center;
+  background: var(--accent, #7dd3fc); color: var(--on-accent, #0f172a);
+  font-family: var(--font-num, var(--font-display)); font-weight: 900; font-size: calc(var(--s) * 20px); font-synthesis: none; }
+</style>
+<markup><div class="gl"><div class="gl-bg"></div><div class="gl-glow"></div><div class="gl-halo"></div><div class="gl-stage"></div><svg class="gl-lines"></svg><div class="gl-labels"></div><div class="gl-title"></div></div></markup>
+<script>
+// globe: a light dotted globe (Natural Earth land dots, instanced) spins in to the origin country; accent arcs shoot out
+// one by one to the destinations (setDrawRange) and land with pulsing pins while the view pulls back to frame every
+// point; country labels decode (U.scramble). Beats (fractions of [P.at, P.end]): 0–0.25 spin in (a panel item: by
+// U.fullAt), 0.25–0.66 arcs, view settles by 0.72, labels final by 0.78, hold with pulses, out 0.95–1. The pose is a
+// pure function (window.CutmateFX.wow.globePose / globeProject), shared with the tests.
+
+// ---- pure helpers (window.CutmateFX.wow, registered once) ----
+const DEG = Math.PI / 180;
+// three's frame: lng 0 / lat 0 faces the camera (+z), north is +y, east is +x
+function latLngToVec(lat, lng, r) {
+  r = r ?? 1;
+  const a = lat * DEG, b = lng * DEG;
+  return [r * Math.cos(a) * Math.sin(b), r * Math.sin(a), r * Math.cos(a) * Math.cos(b)];
+}
+// n points of the great-circle arc between two places, lifted off the unit sphere by a sine bump whose apex is
+// 0.15 + 0.35·angle/π above the surface (long hauls fly higher); the ends sit on the sphere
+function arcPoints(lat1, lng1, lat2, lng2, n) {
+  n = Math.max(2, Math.floor(n || 64));
+  const a = latLngToVec(lat1, lng1, 1), b = latLngToVec(lat2, lng2, 1);
+  const ang = Math.acos(Math.min(1, Math.max(-1, a[0] * b[0] + a[1] * b[1] + a[2] * b[2])));
+  const H = 0.15 + (0.35 * ang) / Math.PI, sn = Math.sin(ang);
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const s = i / (n - 1);
+    const ka = ang < 1e-6 ? 1 - s : Math.sin((1 - s) * ang) / sn, kb = ang < 1e-6 ? s : Math.sin(s * ang) / sn;
+    const r = 1 + H * Math.sin(Math.PI * s);
+    out.push([0, 1, 2].map((j) => (ka * a[j] + kb * b[j]) * r));
+  }
+  return out;
+}
+const clamp = (v) => Math.min(1, Math.max(0, v));
+const smooth = (a, b, v) => { const x = clamp((v - a) / (b - a)); return x * x * (3 - 2 * x); };
+const out3 = (x) => 1 - Math.pow(1 - x, 3), in3 = (x) => x * x * x;
+const backOut = (x) => 1 + 2.2 * Math.pow(x - 1, 3) + 1.2 * Math.pow(x - 1, 2);
+const turn = (a, b) => ((((b - a) % 360) + 540) % 360) - 180;          // shortest signed angle a → b (deg)
+function globeBeats(o) {
+  const span = Math.max(0.6, o.end - o.at);
+  const full = o.at + Math.min(0.5, 0.35 * span);                       // = U.fullAt
+  const tIn = o.panel ? Math.min(0.25 * span, full - o.at) : 0.25 * span;
+  return { span, tIn, a0: o.at + tIn, a1: o.at + 0.66 * span, v1: o.at + 0.72 * span, out: o.at + 0.95 * span };
+}
+// the globe's pose at local time t: rotation (lat / lng facing the camera), radius on screen, centre — for the region
+// o = { from: [lat, lng], to: [[lat, lng], …], w, h, at, end, panel, title }
+function globePose(o, t) {
+  const B = globeBeats(o);
+  const fov = 12, D = 8;                                             // a long lens: the horizon is ~85° out, not 78°
+  const top = o.title ? 0.15 * o.h : 0;
+  const cx = o.w / 2, cy = top + (o.h - top) / 2;
+  const Rf = Math.min(o.w * 0.41, (o.h - top) * 0.355);
+  const pts = [o.from, ...(o.to || [])].map((p) => latLngToVec(p[0], p[1], 1));
+  // the view direction that faces every point best (the centre of the smallest cap holding them): start at the
+  // centroid, then repeatedly lean toward the worst-facing point with a shrinking step — deterministic
+  let c = [0, 1, 2].map((j) => pts.reduce((s, p) => s + p[j], 0));
+  if (Math.hypot(c[0], c[1], c[2]) < 1e-6) c = pts[0].slice();
+  for (let it = 0; it < 80; it++) {
+    const l = Math.hypot(c[0], c[1], c[2]);
+    c = c.map((v) => v / l);
+    let worst = pts[0], wd = 2;
+    for (const p of pts) { const d = p[0] * c[0] + p[1] * c[1] + p[2] * c[2]; if (d < wd) { wd = d; worst = p; } }
+    const k = 0.25 * Math.pow(0.95, it);
+    c = c.map((v, j) => v + worst[j] * k);
+  }
+  const cl = Math.hypot(c[0], c[1], c[2]);
+  const view = cl < 1e-6 ? [o.from[0], o.from[1]]
+    : [Math.asin(c[1] / cl) / DEG, Math.atan2(c[0], c[2]) / DEG];
+  view[0] = Math.max(-60, Math.min(65, view[0]));
+  const start = [o.from[0] * 0.85, o.from[1]];
+  const uin = clamp((t - o.at) / Math.max(0.05, B.tIn));
+  const m = smooth(B.a0, B.v1, t);
+  let lat = start[0] * out3(uin) + (view[0] - start[0]) * m;
+  let lng = start[1] + 150 * (1 - out3(uin)) + turn(start[1], view[1]) * m;
+  const zoom = 1.12 - 0.12 * m;                                       // close on the origin, then pull back
+  const k = backOut(uin) * (1 - in3(clamp((t - B.out) / Math.max(0.05, o.end - B.out))));
+  const R = Math.max(0.001, Math.min(Rf * zoom * k, 0.45 * o.w, 0.45 * (o.h - top)));   // never clipped by the region
+  const ta = (R / (o.h / 2)) * Math.tan((fov * DEG) / 2);
+  return { lat, lng, r: D * Math.sin(Math.atan(ta)), R, cx, cy, fov, D };
+}
+// a point in globe space (unit sphere, arcs above it) → [x, y] in region px and how much it faces the camera (> 0 front)
+function globeProject(pose, v, w, h) {
+  const th = -pose.lng * DEG, ph = pose.lat * DEG;
+  const x1 = v[0] * Math.cos(th) + v[2] * Math.sin(th), z1 = -v[0] * Math.sin(th) + v[2] * Math.cos(th), y1 = v[1];
+  const y2 = y1 * Math.cos(ph) - z1 * Math.sin(ph), z2 = y1 * Math.sin(ph) + z1 * Math.cos(ph);
+  const X = x1 * pose.r, Y = y2 * pose.r, Z = z2 * pose.r;
+  const f = h / 2 / Math.tan((pose.fov * DEG) / 2) / (pose.D - Z);
+  const len = Math.hypot(x1, y2, z2) || 1, cv = [-X, -Y, pose.D - Z], cvl = Math.hypot(cv[0], cv[1], cv[2]);
+  const front = (x1 * cv[0] + y2 * cv[1] + z2 * cv[2]) / len / cvl;
+  return [pose.cx + X * f, pose.cy - Y * f, front];
+}
+const WOW = (window.CutmateFX.wow = window.CutmateFX.wow || {});
+if (!WOW.globePose) Object.assign(WOW, { latLngToVec, arcPoints, globePose, globeProject, globeBeats });
+
+// ---- params ----
+const PL = String(P.lang || "").toLowerCase().startsWith("pl");
+const ISO = (v) => String(v || "").trim().toUpperCase();
+const fromIso = ISO(P.from) || "PL";
+const toIso = (Array.isArray(P.to) ? P.to : P.to ? [P.to] : []).map(ISO).filter((c) => c && c !== fromIso).slice(0, 6);
+const box = root.querySelector(".gl");
+const s = Math.min(P.w / 1000, P.h / 880);
+box.style.setProperty("--s", s);
+const lightPanel = U.panelLight(box);
+if (lightPanel) box.style.setProperty("--pi", "var(--ink, #0f172a)");
+const solid = P.style === "solid";
+
+const ready = U.three({ el: root.querySelector(".gl-stage"), camera: { fov: 30, z: 8 },
+                        bloom: { strength: 0.75, radius: 0.45, threshold: 0.9, alpha: "keep" } }).then(async (S) => {
+  const { THREE, scene, camera, renderer } = S;
+  const base = P.assets || "";
+  const [land, countries] = await Promise.all([
+    fetch(base + "land.json").then((r) => r.json()), fetch(base + "countries.json").then((r) => r.json()), U.fonts([600, 800, 900]),
+    U.fonts([900], U.token("--font-display", "") || undefined)]);
+  const known = (c) => countries[c] && Number.isFinite(countries[c].lat);
+  if (!known(fromIso)) console.warn("globe: unknown country " + fromIso + " (ISO-2 code expected)");
+  const dests = toIso.filter((c) => { if (!known(c)) console.warn("globe: unknown country " + c + " — skipped"); return known(c); });
+  const origin = known(fromIso) ? fromIso : "PL";
+  const ll = (c) => [countries[c].lat, countries[c].lng];
+  const O = { from: ll(origin), to: dests.map(ll), w: P.w, h: P.h, at: P.at, end: P.end, panel: !!P.panel, title: P.title || "" };
+  const B = globeBeats(O);
+  const nA = dests.length;
+  const drawDur = nA > 1 ? (B.a1 - B.a0) * 0.5 : (B.a1 - B.a0) * 0.75;
+  const step = nA > 1 ? (B.a1 - B.a0 - drawDur) / (nA - 1) : 0;
+  const arcT = dests.map((c, i) => [B.a0 + i * step, B.a0 + i * step + drawDur]);
+  const decode = Math.min(0.4, 0.1 * B.span);
+
+  // theme colours through a probe (any CSS colour → THREE.Color)
+  const probe = document.createElement("i");
+  box.appendChild(probe);
+  const col = (v) => {
+    probe.style.color = ""; probe.style.color = String(v || "");
+    const c = String(getComputedStyle(probe).color || "");
+    const m = c.match(/[\d.]+/g) || ["255", "255", "255"];
+    const k = /^color\(/.test(c) ? 1 : 255;
+    return new THREE.Color().setRGB(m[0] / k, m[1] / k, m[2] / k, THREE.SRGBColorSpace);
+  };
+  const ACC = col(U.token("--accent", "#7dd3fc")), MUT = col(U.token("--muted", "#475569")), PAN = col(U.token("--panel-bg", "#0b0b0f"));
+  probe.remove();
+  const SPH = PAN.clone().lerp(new THREE.Color(1, 1, 1), 0.06);
+  const lum = (c) => 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
+  const HOT = ACC.clone().multiplyScalar(1.6 / Math.max(0.04, lum(ACC)));      // pins / comets: bloom
+  const DOT = lightPanel ? MUT.clone() : MUT.clone().lerp(new THREE.Color(1, 1, 1), 0.18);
+  const accentCss = "#" + ACC.getHexString();
+  root.querySelector(".gl-glow").style.background = "radial-gradient(circle at " + (100 * globePose(O, B.v1).cx / P.w) + "% "
+    + (100 * globePose(O, B.v1).cy / P.h) + "%, color-mix(in srgb, var(--accent, #7dd3fc) " + (lightPanel ? 12 : 18) + "%, transparent) 0%, transparent "
+    + Math.round(globePose(O, B.v1).R * 1.25) + "px)";
+
+  renderer.toneMapping = THREE.NoToneMapping;
+  const globe = new THREE.Group(); scene.add(globe);
+  camera.position.set(0, 0, 8); camera.lookAt(0, 0, 0);
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x000000, lightPanel ? 0.9 : 0.6));
+  const key = new THREE.DirectionalLight(0xffffff, lightPanel ? 1.6 : 1.5); key.position.set(-4, 5, 6); scene.add(key);
+  const sphere = new THREE.Mesh(new THREE.SphereGeometry(1, 96, 64), new THREE.MeshStandardMaterial({ color: SPH, roughness: 0.92, metalness: 0 }));
+  globe.add(sphere);
+
+  // land: one InstancedMesh of small discs tangent to the sphere; a shader fades the limb and heats dots near the pins
+  const pts = land.pts || [];
+  const disc = new THREE.CircleGeometry(solid ? 0.0105 : 0.0062, 6);
+  const NH = 7;
+  const dotMat = new THREE.ShaderMaterial({
+    uniforms: { uDot: { value: DOT }, uAcc: { value: ACC.clone().multiplyScalar(lightPanel ? 1 : 1.25) },
+                uHot: { value: Array.from({ length: NH }, () => new THREE.Vector3(0, 0, 9)) }, uHeat: { value: new Array(NH).fill(0) } },
+    vertexShader: "uniform vec3 uHot[" + NH + "]; uniform float uHeat[" + NH + "]; varying float vF; varying float vH;"
+      + " void main(){ vec4 c=instanceMatrix*vec4(0.0,0.0,0.0,1.0); vec3 n=normalize(c.xyz);"
+      + " vec4 mc=modelViewMatrix*c; vec3 vn=normalize((modelViewMatrix*vec4(n,0.0)).xyz); vF=dot(vn,normalize(-mc.xyz));"
+      + " float h=0.0; for(int i=0;i<" + NH + ";i++){ h+=uHeat[i]*(1.0-smoothstep(0.0,0.11,distance(n,uHot[i]))); } vH=clamp(h,0.0,1.0);"
+      + " gl_Position=projectionMatrix*modelViewMatrix*instanceMatrix*vec4(position,1.0); }",
+    fragmentShader: "uniform vec3 uDot; uniform vec3 uAcc; varying float vF; varying float vH;"
+      + " void main(){ float limb=mix(0.18,1.0,smoothstep(0.0,0.55,vF)); gl_FragColor=vec4(mix(uDot*limb,uAcc,vH),1.0); }",
+  });
+  const dots = new THREE.InstancedMesh(disc, dotMat, pts.length);
+  const mtx = new THREE.Matrix4(), q = new THREE.Quaternion(), Z = new THREE.Vector3(0, 0, 1), one = new THREE.Vector3(1, 1, 1);
+  const pv = new THREE.Vector3();
+  pts.forEach((p, i) => {
+    pv.fromArray(latLngToVec(p[0], p[1], 1.003));
+    q.setFromUnitVectors(Z, pv.clone().normalize());
+    mtx.compose(pv, q, one); dots.setMatrixAt(i, mtx);
+  });
+  dots.instanceMatrix.needsUpdate = true;
+  globe.add(dots);
+
+  // arcs: a core tube drawn by setDrawRange, a soft sleeve, a comet head and flow pulses after landing
+  const radial = (stops) => {
+    const c = document.createElement("canvas"); c.width = c.height = 64;
+    const x = c.getContext("2d"), gr = x.createRadialGradient(32, 32, 0, 32, 32, 32);
+    stops.forEach(([o, a]) => gr.addColorStop(o, "rgba(255,255,255," + a + ")"));
+    x.fillStyle = gr; x.fillRect(0, 0, 64, 64);
+    return new THREE.CanvasTexture(c);
+  };
+  const spot = radial([[0, 1], [0.25, 0.7], [1, 0]]);
+  const sprite = (c, o) => { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: spot, color: c, transparent: true, opacity: o ?? 1,
+    depthWrite: false, blending: lightPanel ? THREE.NormalBlending : THREE.AdditiveBlending })); globe.add(sp); return sp; };
+  const SEG = 95, RAD = 6;
+  const arcs = dests.map((c, i) => {
+    const P2 = arcPoints(O.from[0], O.from[1], O.to[i][0], O.to[i][1], 96).map((p) => new THREE.Vector3(...p));
+    const curve = new THREE.CatmullRomCurve3(P2);
+    const core = new THREE.Mesh(new THREE.TubeGeometry(curve, SEG, 0.0068, RAD, false),
+      new THREE.MeshBasicMaterial({ color: ACC }));
+    const sleeve = new THREE.Mesh(new THREE.TubeGeometry(curve, SEG, 0.02, RAD, false),
+      new THREE.MeshBasicMaterial({ color: ACC, transparent: true, opacity: lightPanel ? 0.16 : 0.22, depthWrite: false,
+                                    blending: lightPanel ? THREE.NormalBlending : THREE.AdditiveBlending }));
+    globe.add(sleeve); globe.add(core);
+    const head = sprite(HOT), flows = [sprite(HOT), sprite(HOT)];
+    return { curve, core, sleeve, head, flows };
+  });
+  // pins: a bright bead + two pulse rings (tangent to the sphere) per place
+  const places = [origin, ...dests].map((c, i) => {
+    const v = new THREE.Vector3(...latLngToVec(countries[c].lat, countries[c].lng, 1.004));
+    const bead = sprite(HOT);
+    bead.position.copy(v);
+    const rings = [0, 1].map(() => {
+      const r = new THREE.Mesh(new THREE.RingGeometry(0.8, 1, 48), new THREE.MeshBasicMaterial({ color: HOT, transparent: true, opacity: 0,
+        depthWrite: false, side: THREE.DoubleSide, blending: lightPanel ? THREE.NormalBlending : THREE.AdditiveBlending }));
+      r.position.copy(v); r.quaternion.setFromUnitVectors(Z, v.clone().normalize()); globe.add(r);
+      return r;
+    });
+    return { c, v, bead, rings, land: i ? arcT[i - 1][1] : B.a0 - 0.05 };
+  });
+  places.forEach((p, i) => { if (i < NH) dotMat.uniforms.uHot.value[i].copy(p.v).normalize(); });
+
+  // ---- DOM: title, labels (decode with U.scramble), leader lines ----
+  const titleEl = root.querySelector(".gl-title");
+  if (P.title) {
+    titleEl.textContent = String(P.title);
+    const bar = document.createElement("span"); bar.className = "bar"; titleEl.appendChild(bar);
+    let fs = 64 * s; titleEl.style.fontSize = fs + "px";
+    if (titleEl.scrollWidth > P.w * 0.86) { fs *= (P.w * 0.86) / titleEl.scrollWidth; titleEl.style.fontSize = fs + "px"; }
+    titleEl.style.top = Math.round(P.h * 0.045) + "px";
+  } else titleEl.remove();
+  const names = places.map((p) => { const e = countries[p.c]; return PL ? e.pl || e.en : e.en; });
+  if (Array.isArray(P.labels)) {
+    const L = P.labels.map(String);
+    if (L.length === dests.length && L.length !== places.length) L.forEach((v, i) => { names[i + 1] = v; });
+    else L.slice(0, places.length).forEach((v, i) => { names[i] = v; });
+  }
+  const svg = root.querySelector("svg.gl-lines");
+  svg.setAttribute("width", P.w); svg.setAttribute("height", P.h); svg.setAttribute("viewBox", "0 0 " + P.w + " " + P.h);
+  const NS = "http://www.w3.org/2000/svg";
+  const labels = places.map((p, i) => {
+    const el = document.createElement("div"); el.className = "wow-label";
+    const chip = document.createElement("span"); chip.className = "n"; chip.textContent = i ? String(i) : origin;
+    const tx = document.createElement("span"); tx.textContent = names[i];
+    el.appendChild(chip); el.appendChild(tx); root.querySelector(".gl-labels").appendChild(el);
+    const w = el.offsetWidth, h = el.offsetHeight;
+    const line = document.createElementNS(NS, "line");
+    line.setAttribute("stroke", accentCss); line.setAttribute("stroke-width", String(3 * s)); line.setAttribute("stroke-linecap", "round");
+    svg.appendChild(line);
+    const from = i ? p.land : B.a0 - 0.05;
+    U.scramble(tx, names[i], { from, dur: decode, seed: 7 + i });
+    return { el, line, w, h, from };
+  });
+
+  // ---- one clock ----
+  const margin = 22 * s;
+  const halo = root.querySelector(".gl-halo");
+  U.clock((t) => {
+    const on = t >= P.at && t < P.end;
+    globe.visible = on;
+    const pose = globePose(O, t);
+    globe.rotation.set(pose.lat * DEG, -pose.lng * DEG, 0, "XYZ");
+    globe.scale.setScalar(pose.r);
+    camera.fov = pose.fov; camera.position.set(0, 0, pose.D); camera.lookAt(0, 0, 0);
+    camera.setViewOffset(P.w, P.h, P.w / 2 - pose.cx, P.h / 2 - pose.cy, P.w, P.h);
+    camera.updateProjectionMatrix();
+    const a = t - P.at;
+    const gone = 1 - in3(clamp((t - B.out) / Math.max(0.05, P.end - B.out)));
+    const hd = (2 * pose.R) / 0.78;                                    // the halo's 78 % stop sits on the limb
+    halo.style.width = halo.style.height = hd.toFixed(1) + "px";
+    halo.style.transform = "translate(" + (pose.cx - hd / 2).toFixed(1) + "px," + (pose.cy - hd / 2).toFixed(1) + "px)";
+    halo.style.opacity = String(on ? smooth(P.at, P.at + B.tIn, t) * gone * (lightPanel ? 0.8 : 1) : 0);
+    if (P.title) {
+      const ti = out3(clamp(a / 0.45));
+      titleEl.style.opacity = String(on ? ti * gone : 0);
+      titleEl.style.transform = "translateY(" + ((1 - ti) * -24 * s) + "px)";
+      const bar = titleEl.querySelector(".bar");
+      if (bar) bar.style.transform = "scaleX(" + out3(clamp((a - 0.15) / 0.45)) + ")";
+    }
+    // arcs
+    arcs.forEach((A, i) => {
+      const [t0, t1] = arcT[i];
+      const pr = smooth(t0, t1, t) ** 0.85;
+      const segs = Math.round(pr * SEG);
+      A.core.geometry.setDrawRange(0, segs * RAD * 6);
+      A.sleeve.geometry.setDrawRange(0, segs * RAD * 6);
+      A.core.visible = A.sleeve.visible = segs > 0;
+      const flying = pr > 0 && pr < 1;
+      A.head.visible = flying;
+      if (flying) { A.head.position.copy(A.curve.getPointAt(pr)); A.head.scale.setScalar(0.075); }
+      A.flows.forEach((f, j) => {
+        const u = t > t1 ? ((t - t1) * 0.55 + j / 2) % 1 : -1;
+        f.visible = u >= 0;
+        if (u >= 0) { f.position.copy(A.curve.getPointAt(u)); f.scale.setScalar(0.05); f.material.opacity = Math.sin(Math.PI * u) * gone; }
+      });
+    });
+    // pins: beads appear on landing, rings pulse; the land dots around them heat up
+    places.forEach((p, i) => {
+      const since = t - p.land;
+      const lit = clamp(since / 0.15) * gone;
+      p.bead.visible = lit > 0;
+      p.bead.scale.setScalar((i ? 0.05 : 0.07) * (1 + 0.6 * Math.exp(-Math.max(0, since) * 6)));
+      p.bead.material.opacity = lit;
+      p.rings.forEach((r, j) => {
+        const ph = since > 0 ? ((since * 0.9 + j * 0.5) % 1) : 0;
+        r.visible = since > 0;
+        r.scale.setScalar(0.015 + 0.075 * ph);
+        r.material.opacity = (1 - ph) * 0.9 * lit;
+      });
+      if (i < NH) dotMat.uniforms.uHeat.value[i] = lit * (0.75 + 0.25 * Math.sin(a * 3 + i));
+    });
+    // labels: beside the pin, pushed outwards from the globe centre, kept apart and inside the region
+    const pos = places.map((p, i) => {
+      const [x, y, front] = globeProject(pose, p.v.toArray(), P.w, P.h);
+      let dx = x - pose.cx, dy = y - pose.cy;
+      const d = Math.hypot(dx, dy);
+      if (d < 1e-3) { dx = 1; dy = -0.3; }
+      const side = dx >= 0 ? 1 : -1;
+      const L = labels[i];
+      let lx = side > 0 ? x + 30 * s : x - 30 * s - L.w;
+      lx = Math.min(P.w - margin - L.w, Math.max(margin, lx));
+      return { x, y, front, side, lx, cy: y + (dy / (Math.hypot(dx, dy) || 1)) * 18 * s };
+    });
+    const order = places.map((p, i) => i).sort((p2, q2) => pos[p2].cy - pos[q2].cy);
+    for (let j = 1; j < order.length; j++) {          // labels whose pills overlap horizontally are pushed apart vertically
+      for (let k = 0; k < j; k++) {
+        const A = pos[order[k]], Bq = pos[order[j]], la = labels[order[k]], lb = labels[order[j]];
+        const overlapX = Bq.lx < A.lx + la.w + 8 * s && A.lx < Bq.lx + lb.w + 8 * s;
+        const need = (la.h + lb.h) / 2 + 8 * s;
+        if (overlapX && Bq.cy - A.cy < need) Bq.cy = A.cy + need;
+      }
+    }
+    labels.forEach((L, i) => {
+      const p = pos[i];
+      const top = Math.min(P.h - margin - L.h, Math.max(margin + (P.title ? 0.14 * P.h : 0), p.cy - L.h / 2));
+      const appear = clamp((t - L.from) / 0.22);
+      const vis = on ? appear * smooth(-0.04, 0.03, p.front) * gone : 0;   // a place near the limb keeps a solid label
+      L.el.style.opacity = String(vis);
+      L.el.style.transform = "translate(" + p.lx.toFixed(1) + "px," + top.toFixed(1) + "px) scale(" + (0.75 + 0.25 * backOut(appear)).toFixed(4) + ")";
+      L.el.style.transformOrigin = p.lx + L.w / 2 < p.x ? "100% 50%" : "0% 50%";
+      const ex = p.lx + L.w / 2 < p.x ? p.lx + L.w : p.lx, ey = top + L.h / 2;
+      L.line.setAttribute("x1", p.x.toFixed(1)); L.line.setAttribute("y1", p.y.toFixed(1));
+      L.line.setAttribute("x2", ex.toFixed(1)); L.line.setAttribute("y2", ey.toFixed(1));
+      L.line.style.opacity = String(vis);
+    });
+    S.render();
+  });
+});
+U.ready(ready);
+</script>
