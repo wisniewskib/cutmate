@@ -1,0 +1,127 @@
+[
+  {
+    "name": "gsap",
+    "version": "3.14.2",
+    "license": "Standard 'no charge' license: https://gsap.com/standard-license.",
+    "source": "https://cdn.jsdelivr.net/npm/gsap@3.14.2/",
+    "files": {
+      "dist/DrawSVGPlugin.min.js": "2d2b28b7b1ad56cd5ca0d3032ed0f56503d0aaba6b5467169dc596d96e1125e3",
+      "dist/MorphSVGPlugin.min.js": "40e4246c7f898f5204a9d3f02c34672e7da589c297c157cdff714e87a362b045",
+      "dist/MotionPathPlugin.min.js": "aa5f955ca4ce3095ebe5726f43a46b72532230edb3501b28fb853f189f023cab",
+      "dist/SplitText.min.js": "3c38c97c364b3048ed6f7756388d2aa32580b81cf42932ea251b77fc626b3831",
+      "dist/gsap.min.js": "c174bfce53a729418d57a8ad8625e7247c793a22fef8e2851e3cfa3de9cd8280"
+    },
+    "license_file": "LICENSES/gsap.txt",
+    "redistribute": false
+  },
+  {
+    "name": "three",
+    "version": "0.181.2",
+    "license": "MIT",
+    "source": "https://cdn.jsdelivr.net/npm/three@0.181.2/",
+    "files": {
+      "build/three.core.min.js": "295a28f4a9786dd24a2a357a4ce90921eb041127e53a508335b9a0556c1e0875",
+      "build/three.module.min.js": "979c1ae4b0579c9901eacf797602c0b46df129d87102c6443d14be4a1f790b70",
+      "examples/fonts/droid/droid_sans_bold.typeface.json": "ec40f077e0695e4ce9f74e9953034312eb6d1d5a9eb6c584b1eb0fd84077fb81",
+      "examples/fonts/helvetiker_bold.typeface.json": "bd68159ee0b8d10fe24b9daa2e32f19686f9d8269a79dc8d44203a66298bfa2f",
+      "examples/jsm/environments/RoomEnvironment.js": "c20f0b4677f6128a138d7152b85cbef9091f4f45cdfa05adca04d40c1697c7ae",
+      "examples/jsm/geometries/TextGeometry.js": "45840de590c3c6b784fefd6a6a1868c3fcb2cb83862068aa5bd823b8a42aa065",
+      "examples/jsm/loaders/FontLoader.js": "a8d78ab85e596ef6c274023ee165520000f010011553dbfafe5c966387aca3d8",
+      "examples/jsm/loaders/GLTFLoader.js": "a2d45c28c56774cc789b99154e914c34db3197f9ea2b89fee27600cc2509b14f",
+      "examples/jsm/postprocessing/EffectComposer.js": "4b8c855f28eed2570bed898adc0ab89c585a8a281ecb6d905c09d00697f9f50a",
+      "examples/jsm/postprocessing/MaskPass.js": "7cd08eee9d5d6f5578beaddbdcbe9c384f6873810af27f22ab7db3ceeb127aa3",
+      "examples/jsm/postprocessing/OutputPass.js": "f5b81c96e76b6b28b4b3ba8c41c4aeb982b1e03f3d82883242d951b2ab082fa2",
+      "examples/jsm/postprocessing/Pass.js": "444b409c235ead986893c472e720da1b779a56985c7d10b279c7944b52bd61c5",
+      "examples/jsm/postprocessing/RenderPass.js": "fd91229aacc5830e3984b0f2bdefcf566163ea028f4c1f1ab233fa6665a133ac",
+      "examples/jsm/postprocessing/SavePass.js": "7625b183efa4270f221f082727062ffd2568088473f0e6292938e52d4dc01a2b",
+      "examples/jsm/postprocessing/ShaderPass.js": "e2500a5913b26bbf5148ceaae644c6edcff06a18b01494ee37bf856353d2ab9d",
+      "examples/jsm/postprocessing/UnrealBloomPass.js": "9751d74e06537e298f089e1502c1c4d78e88e39a73e99028b06c9ffdae37511a",
+      "examples/jsm/shaders/CopyShader.js": "a33057d5ac91c43304c186ac0e8816e62bb2ed471d3a00ff3018dfd5c0389718",
+      "examples/jsm/shaders/LuminosityHighPassShader.js": "5044f780b6e6cf863947f64c36fe1587132f7fbe395ada863cd1e5f0388dcf1e",
+      "examples/jsm/shaders/OutputShader.js": "353479f77a8d7e2629d49ccac9fc2f5dbfdda5442e0adf867b00377a2fcb0cb2",
+      "examples/jsm/utils/BufferGeometryUtils.js": "fda7e946b8e0b5ab39b779206589e7a1079a22eb24efb89d7223e03fdfb1f751"
+    },
+    "license_file": "LICENSES/three.txt"
+  },
+  {
+    "name": "postprocessing",
+    "version": "6.39.5",
+    "license": "Zlib",
+    "source": "https://cdn.jsdelivr.net/npm/postprocessing@6.39.5/",
+    "files": {
+      "build/index.js": "b1111c2a755e2f05ffeed9cccecb16580e3022517d93c56a069673a92bed0b4f"
+    },
+    "license_file": "LICENSES/postprocessing.txt"
+  },
+  {
+    "name": "animejs",
+    "version": "4.5.0",
+    "license": "MIT",
+    "source": "https://cdn.jsdelivr.net/npm/animejs@4.5.0/",
+    "files": {
+      "dist/bundles/anime.umd.min.js": "8d5b3a58a1f64023a04a4cedeef135a2263b18da04b35177ac13438a0bad033b"
+    },
+    "license_file": "LICENSES/animejs.txt"
+  },
+  {
+    "name": "lottie",
+    "version": "5.12.2",
+    "license": "MIT",
+    "source": "https://cdn.jsdelivr.net/npm/lottie-web@5.12.2/",
+    "files": {
+      "build/player/lottie.min.js": "a0757321f974527bda3cc2593bf56cc7ffe4578421249ced6ae49ffb1c529f90"
+    },
+    "license_file": "LICENSES/lottie.txt"
+  },
+  {
+    "name": "katex",
+    "version": "0.19.0",
+    "license": "MIT",
+    "source": "https://cdn.jsdelivr.net/npm/katex@0.19.0/",
+    "files": {
+      "dist/fonts/KaTeX_AMS-Regular.woff2": "0cdd387c9590a1a9f9794560022dbb59654a7d86f187aa0c81495ad42d3a7308",
+      "dist/fonts/KaTeX_Caligraphic-Bold.woff2": "de7701e42cf1f4cf0b766c03fb27977207eee2f4fd5d76fa82188406da43ea4c",
+      "dist/fonts/KaTeX_Caligraphic-Regular.woff2": "5d53e70ad607c2352162dec9e0923fb54ecdafaccbf604cd8dcf7d00facb989b",
+      "dist/fonts/KaTeX_Fraktur-Bold.woff2": "74444efd593c005e3f4573b44524704c0af0a937fe911cca9e94068d0d140d3f",
+      "dist/fonts/KaTeX_Fraktur-Regular.woff2": "51814d270d06ff0255dba0799994fa4d8c84d11f09951d47595f4abb1f3602dc",
+      "dist/fonts/KaTeX_Main-Bold.woff2": "0f60d1b897938ec918c8ce073092411baf9438f6739465693ff18b0f9d20b021",
+      "dist/fonts/KaTeX_Main-BoldItalic.woff2": "99cd42a3c072d918f2f44984a807cf7aa16e13545fd0875fc07c6c65f99e715b",
+      "dist/fonts/KaTeX_Main-Italic.woff2": "97479ca6cce906abc961ecac96faa5f9ca2e61b8e7670d475826bcdee9a7c267",
+      "dist/fonts/KaTeX_Main-Regular.woff2": "c2342cd8b869e01752a9321dc17213fc40d4d04c79688c1d43f2cf316abd7866",
+      "dist/fonts/KaTeX_Math-BoldItalic.woff2": "dc47344dbb6cb5b655c8460d561f4df5f501b90c804ad3c6cec65fe322351ab1",
+      "dist/fonts/KaTeX_Math-Italic.woff2": "7af58c5ec8f132a2ddde9027c6d7814decce4d3b822a11192a42a20e2e973264",
+      "dist/fonts/KaTeX_SansSerif-Bold.woff2": "e99ae51144bf1232efcc1bfe5add36262c6866b0faab24fa75740e1b98577a62",
+      "dist/fonts/KaTeX_SansSerif-Italic.woff2": "00b26ac825e2095056396e0553b8ac26d3f8ad158c3826e28b4c45b385c4714a",
+      "dist/fonts/KaTeX_SansSerif-Regular.woff2": "68e8c73ef42afd3ccec58bf0fba302cce448938e7fc020a5e31f8a952eee1342",
+      "dist/fonts/KaTeX_Script-Regular.woff2": "036d4e95149b69ff9bcc0cd55771efeb25ffa3947293e69acd78d5ac328c684b",
+      "dist/fonts/KaTeX_Size1-Regular.woff2": "6b47c40166b6dbe21a5dfca7718413f2147fd2399be1ba605d8ad39cedf25dfe",
+      "dist/fonts/KaTeX_Size2-Regular.woff2": "d04c54219f9eaec6d4d4fd42dfb28785975a4794d6b2fc71e566b9cd6db842dd",
+      "dist/fonts/KaTeX_Size3-Regular.woff2": "73d591271b1604960cb10bb90fee021670af7297017e0e98480b332d11f51995",
+      "dist/fonts/KaTeX_Size4-Regular.woff2": "a4af7d414440a1c1790825cfb700cf9cf43b0f2c4b04f0ebc523011ad9853ec0",
+      "dist/fonts/KaTeX_Typewriter-Regular.woff2": "71d517d67827787cfabdf186914cc3358eda539e37931941f2b2fd4a21f68c0b",
+      "dist/katex.min.css": "864f909fc1f3da0f140321d0e277ac0a444d8909e072cdbf174bcea93b95c089",
+      "dist/katex.min.js": "103a53763cc033bba8d175bf3f0ba597c3505c9b6747dd3f2c7bc2a6bfcc8ae7"
+    },
+    "license_file": "LICENSES/katex.txt"
+  },
+  {
+    "name": "roughjs",
+    "version": "4.6.6",
+    "license": "MIT",
+    "source": "https://cdn.jsdelivr.net/npm/roughjs@4.6.6/",
+    "files": {
+      "bundled/rough.js": "6853af8619532f3939b156cd16824d2e14f31e71d3df306ad5558eeafacab194"
+    },
+    "license_file": "LICENSES/roughjs.txt"
+  },
+  {
+    "name": "d3",
+    "version": "7.9.0",
+    "license": "ISC",
+    "source": "https://cdn.jsdelivr.net/npm/d3@7.9.0/",
+    "files": {
+      "dist/d3.min.js": "f2094bbf6141b359722c4fe454eb6c4b0f0e42cc10cc7af921fc158fceb86539"
+    },
+    "license_file": "LICENSES/d3.txt"
+  }
+]

@@ -1,9 +1,10 @@
+import json
 import re
 
 import pytest
 
 from cutmate import effects as E
-from cutmate.errors import PlanError
+from cutmate.errors import CutmateError, PlanError
 from cutmate.paths import plugin_root
 
 GOOD = "<markup><div class='fx'></div></markup>\n<script>\nU.clock((t) => {});\n</script>"
@@ -46,7 +47,7 @@ def test_libs_head_by_marker():
     assert E.libs_head([GOOD]) == ""
     h = E.libs_head(["U.three({}).then(() => {}); U.draw('.p', {})", "katex.render('x', el)"])
     assert h.index('type="importmap"') < h.index("DrawSVGPlugin.min.js")
-    assert "three@0.181.2/build/three.module.js" in h and "three@0.181.2/examples/jsm/" in h
+    assert "three@0.181.2/build/three.module.min.js" in h and "three@0.181.2/examples/jsm/" in h
     assert "katex@0.19.0/dist/katex.min.js" in h and "katex.min.css" in h
     assert "gsap.registerPlugin(DrawSVGPlugin)" in h and "anime" not in h and "rough" not in h
 
@@ -242,3 +243,43 @@ def test_held_slice_holds_nearest_sample():
     assert all(b[0] - a[0] <= 0.5 for a, b in zip(out, out[1:]))        # no gap that trackAt would blank
     assert out[-1] == [1.5, 60.0, 50.0] and [1.0, 60.0, 50.0] in out
     assert held_slice([], 0, 1, 0, 100, 100) == []
+
+
+ALL_MARKS = ("U.three({}) U.post({}) anime.stagger U.anime( lottie.load U.lottie( katex.render U.tex( rough.svg U.rough( d3.select "
+             "drawSVG morphSVG motionPath SplitText")
+
+
+def test_libs_head_is_local():
+    head = E.libs_head([ALL_MARKS])
+    assert "http" not in head and "assets/vendor/" in head
+    for folder in E.VENDOR.values():
+        assert f"assets/vendor/{folder}/" in head or folder.startswith("gsap@")
+    imap = json.loads(re.search(r'<script type="importmap">(.*?)</script>', head).group(1))["imports"]
+    # "./": an import map address that is a bare "assets/..." is ignored by the browser ("Bare specifier")
+    assert imap == {"three": "./assets/vendor/three@0.181.2/build/three.module.min.js",
+                    "three/addons/": "./assets/vendor/three@0.181.2/examples/jsm/",
+                    "postprocessing": "./assets/vendor/postprocessing@6.39.5/build/index.js"}
+    only3 = json.loads(re.search(r'<script type="importmap">(.*?)</script>', E.libs_head(["U.three({})"])).group(1))["imports"]
+    assert "postprocessing" not in only3 and set(only3) == {"three", "three/addons/"}
+    quoted = E.libs_head(["await import('postprocessing')"])                     # postprocessing implies three
+    assert '"three"' in quoted and '"postprocessing"' in quoted
+    assert "importmap" not in E.libs_head(["gsap.to(x)"])
+
+
+def test_vendor_files_selects_used():
+    assert E.vendor_files([]) == ["gsap@3.14.2"] and E.vendor_files(["x"]) == ["gsap@3.14.2"]
+    assert E.vendor_files(["U.three({})"]) == ["gsap@3.14.2", "three@0.181.2"]
+    assert E.vendor_files(["U.post({})"]) == ["gsap@3.14.2", "three@0.181.2", "postprocessing@6.39.5"]
+    assert E.vendor_files(["U.tex('x')", "d3.select()"]) == ["gsap@3.14.2", "katex@0.19.0", "d3@7.9.0"]
+    assert set(E.vendor_files([ALL_MARKS])) == set(E.VENDOR.values())
+
+
+def test_vendor_root_falls_back_to_home_then_errors(tmp_path, monkeypatch):
+    monkeypatch.setattr(E, "vendor_dir", lambda: tmp_path / "bundled")
+    monkeypatch.setenv("CUTMATE_HOME", str(tmp_path / "home"))
+    with pytest.raises(CutmateError, match=r"gsap@3.14.2 not found.*tools/vendor_libs.py --only gsap"):
+        E.vendor_root("gsap@3.14.2")
+    (tmp_path / "home" / "vendor" / "gsap@3.14.2").mkdir(parents=True)
+    assert E.vendor_root("gsap@3.14.2") == tmp_path / "home" / "vendor" / "gsap@3.14.2"
+    (tmp_path / "bundled" / "gsap@3.14.2").mkdir(parents=True)
+    assert E.vendor_root("gsap@3.14.2") == tmp_path / "bundled" / "gsap@3.14.2"

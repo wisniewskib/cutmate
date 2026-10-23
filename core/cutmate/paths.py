@@ -15,6 +15,10 @@ def assets_dir() -> Path:
     return _ROOT / "assets"
 
 
+def vendor_dir() -> Path:
+    return assets_dir() / "vendor"
+
+
 def web_dir() -> Path:
     return _ROOT / "core" / "cutmate" / "web"
 

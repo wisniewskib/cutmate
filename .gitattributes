@@ -1,0 +1,2 @@
+assets/vendor/** -text
+themes/clean/components/custom/*/** -text

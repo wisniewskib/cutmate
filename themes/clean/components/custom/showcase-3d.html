@@ -7,7 +7,7 @@ ROOT .fx-show { position: absolute; inset: 0; }
 // shape "torus-knot" | "icosahedron" | "text" (TextGeometry) | "glb" (P.assets + model). Studio light: key + two rims +
 // hemisphere + RoomEnvironment reflections on a clearcoat physical material; fresnel rim glow, soft halo, dust motes.
 const box = root.querySelector(".fx-show");
-const FONTS = "https://cdn.jsdelivr.net/npm/three@0.181.2/examples/fonts/";
+const FONTS = P.vendor + "three@0.181.2/examples/fonts/";
 // the model: the graphic's "media" (copied by build, P.media), else P.model inside the effect folder (P.assets)
 const modelUrl = P.media && /\.(glb|gltf)$/i.test(P.media) ? P.media : P.model ? (P.assets || "") + P.model : null;
 const shape = ["torus-knot", "icosahedron", "text", "glb"].includes(P.shape) ? P.shape : (P.text ? "text" : modelUrl ? "glb" : "torus-knot");

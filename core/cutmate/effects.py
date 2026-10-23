@@ -6,26 +6,32 @@ from pathlib import Path
 
 from .config import home
 from .errors import CutmateError, PlanError
-from .paths import plugin_root
+from .paths import plugin_root, vendor_dir
 from .plan import NAME_RE
 
 FORBIDDEN = ("Date.now", "Math.random", "performance.now", "requestAnimationFrame", "setTimeout", "setInterval",
              "onUpdate", "setAnimationLoop", "anime.utils.random", "d3.transition", "AfterimagePass",
              "THREE.Clock", "new Date", "crypto.getRandomValues", "gsap.ticker", ".play(")
 _SECTION = re.compile(r"<(style|markup|script)>(.*?)</\1>", re.S)
-GSAP = "https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/"
-THREE = "https://cdn.jsdelivr.net/npm/three@0.181.2/"
-LIBS = [  # (marker, html)
-    (r"\banime\.|U\.anime\(", '<script src="https://cdn.jsdelivr.net/npm/animejs@4.5.0/dist/bundles/anime.umd.min.js"></script>'),
-    (r"\blottie\.|U\.lottie\(", '<script src="https://cdnjs.cloudflare.com/ajax/libs/bodymovin/5.12.2/lottie.min.js"></script>'),
-    (r"\bkatex\.|U\.tex\(", '<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.19.0/dist/katex.min.css" />'
-                           '<script src="https://cdn.jsdelivr.net/npm/katex@0.19.0/dist/katex.min.js"></script>'),
-    (r"\brough\.|U\.rough\(", '<script src="https://cdn.jsdelivr.net/npm/roughjs@4.6.6/bundled/rough.js"></script>'),
-    (r"\bd3\.", '<script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>'),
+VENDOR = {"gsap": "gsap@3.14.2", "three": "three@0.181.2", "postprocessing": "postprocessing@6.39.5",
+          "animejs": "animejs@4.5.0", "lottie": "lottie@5.12.2", "katex": "katex@0.19.0", "roughjs": "roughjs@4.6.6",
+          "d3": "d3@7.9.0"}                              # name -> assets/vendor folder (tools/vendor_libs.py writes them)
+VENDOR_URL = "assets/vendor/"                            # the same, as seen from index.html (P.vendor in every custom effect)
+GSAP = f"{VENDOR_URL}{VENDOR['gsap']}/dist/"
+THREE = f"{VENDOR_URL}{VENDOR['three']}/"
+POST = f"{VENDOR_URL}{VENDOR['postprocessing']}/build/index.js"
+LIBS = [  # (marker, vendor name, html)
+    (r"\banime\.|U\.anime\(", "animejs", f'<script src="{VENDOR_URL}{VENDOR["animejs"]}/dist/bundles/anime.umd.min.js"></script>'),
+    (r"\blottie\.|U\.lottie\(", "lottie", f'<script src="{VENDOR_URL}{VENDOR["lottie"]}/build/player/lottie.min.js"></script>'),
+    (r"\bkatex\.|U\.tex\(", "katex", f'<link rel="stylesheet" href="{VENDOR_URL}{VENDOR["katex"]}/dist/katex.min.css" />'
+                                      f'<script src="{VENDOR_URL}{VENDOR["katex"]}/dist/katex.min.js"></script>'),
+    (r"\brough\.|U\.rough\(", "roughjs", f'<script src="{VENDOR_URL}{VENDOR["roughjs"]}/bundled/rough.js"></script>'),
+    (r"\bd3\.", "d3", f'<script src="{VENDOR_URL}{VENDOR["d3"]}/dist/d3.min.js"></script>'),
 ]
 PLUGINS = [(r"drawSVG|U\.draw\(", "DrawSVGPlugin"), (r"morphSVG", "MorphSVGPlugin"),
            (r"motionPath", "MotionPathPlugin"), (r"\bSplitText\b", "SplitText")]
 THREE_MARK = r"\bTHREE\b|U\.three\(|U\.glowOrb\(|['\"]three['\"]"
+POST_MARK = r"U\.post\(|['\"]postprocessing['\"]"      # postprocessing implies three
 
 
 def find_effect(name: str, out_dir: Path, theme: str) -> Path:
@@ -49,13 +55,40 @@ def lint_effect(path: Path) -> None:
             raise PlanError(f"{Path(path).name}: uses {api} — not allowed in effects (see SKILL.md, effects rules)")
 
 
+def vendor_root(folder: str) -> Path:
+    """The vendored folder `<name>@<version>`: bundled in assets/vendor, else downloaded by setup into $CUTMATE_HOME/vendor
+    (gsap: its licence does not clearly allow redistribution, so setup fetches it, sha-checked)."""
+    for base in (vendor_dir(), home() / "vendor"):
+        if (base / folder).is_dir():
+            return base / folder
+    raise CutmateError(f"vendored library {folder} not found in {vendor_dir()} or {home() / 'vendor'} — run cutmate setup "
+                       f"(or `python tools/vendor_libs.py --only {folder.split('@')[0]} --dest \"{home() / 'vendor'}\"`)")
+
+
+def vendor_files(texts: list[str]) -> list[str]:
+    """The vendor folder names the given composition texts need (`gsap` is in every index.html)."""
+    blob = "\n".join(texts)
+    post = bool(re.search(POST_MARK, blob))
+    names = ["gsap"]
+    if post or re.search(THREE_MARK, blob):
+        names.append("three")
+    if post:
+        names.append("postprocessing")
+    names += [name for mark, name, _ in LIBS if re.search(mark, blob)]
+    return [VENDOR[n] for n in names]
+
+
 def libs_head(texts: list[str]) -> str:
     blob = "\n".join(texts)
     parts = []
-    if re.search(THREE_MARK, blob):
-        parts.append('<script type="importmap">{"imports":{"three":"' + THREE + 'build/three.module.js",'
-                     '"three/addons/":"' + THREE + 'examples/jsm/"}}</script>')
-    parts += [html for mark, html in LIBS if re.search(mark, blob)]
+    post = bool(re.search(POST_MARK, blob))
+    if post or re.search(THREE_MARK, blob):
+        # an import map address must be a URL, not a bare specifier: "./" makes it relative to index.html
+        imports = {"three": "./" + THREE + "build/three.module.min.js", "three/addons/": "./" + THREE + "examples/jsm/"}
+        if post:
+            imports["postprocessing"] = "./" + POST
+        parts.append('<script type="importmap">' + json.dumps({"imports": imports}, separators=(",", ":")) + "</script>")
+    parts += [html for mark, _, html in LIBS if re.search(mark, blob)]
     plugins = [name for mark, name in PLUGINS if re.search(mark, blob)]
     parts += [f'<script src="{GSAP}{p}.min.js"></script>' for p in plugins]
     if plugins:

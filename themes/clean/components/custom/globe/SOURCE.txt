@@ -1,0 +1,5 @@
+Natural Earth 1:110m Admin 0 - Countries (public domain, https://www.naturalearthdata.com/about/terms-of-use/)
+Source file: https://raw.githubusercontent.com/nvkelso/natural-earth-vector/v5.1.2/geojson/ne_110m_admin_0_countries.geojson
+land.json: 11517 of 40000 Fibonacci-sphere points that fall inside a land polygon, [lat, lng] rounded to 2 decimals.
+countries.json: ISO_A2 (ADM0_A3 where ISO_A2 is -99) -> NAME_EN, NAME_PL, label lat (LABEL_Y), label lng (LABEL_X).
+Built by tools/vendor_libs.py.

@@ -632,9 +632,10 @@ def test_no_effects_build_matches_2b_shape(out, theme):
     write_plan(out, {"graphics": [{"type": "chip", "at": "S2:minus", "text": "X"}]})
     proj = B.build(out, theme=theme)["project"]
     html = (proj / "index.html").read_text(encoding="utf-8")
-    assert ('<script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>\n'
+    assert ('<script src="assets/vendor/gsap@3.14.2/dist/gsap.min.js"></script>\n'
             '    <link rel="stylesheet" href="assets/tokens.css" />') in html
     assert "effects.js" not in html and "\n    \n" not in html and not (proj / "assets" / "effects.js").exists()
+    assert [d.name for d in (proj / "assets" / "vendor").iterdir()] == ["gsap@3.14.2"]    # only what index.html loads
     sub = (proj / "compositions" / "gx-01-chip.html").read_text(encoding="utf-8")
     assert "CutmateFX" not in sub and "    const U = {\n" in sub and "    };\n" in sub
     assert "pointer-events: none; }\n#gx-01-chip .band" in sub                # no extra style line
@@ -1433,3 +1434,38 @@ def test_hand_placed_and_low_region_effects_leave_the_panel_item(out, theme):
     assert band_hides({"type": "custom", "name": "orb", "at": 1.0, "until": 1.5, "region": [0, 1100, 1080, 600]}) == []
     hid = band_hides({"type": "custom", "name": "orb", "at": 1.0, "until": 1.5, "region": [40, 100, 600, 400]})
     assert len(hid) == 1 and hid[0][1:] == [1.0, 0.15, 1.5, 0.15]
+
+
+def test_built_project_is_offline(out, theme):
+    """Review Focus 5: no URL in a built project, every vendored path it references exists next to it, and a project
+    copies only the libraries it loads. (The SVG namespace http://www.w3.org/... is an identifier, not a fetch.)"""
+    write_plan(out, {"graphics": [
+        {"type": "split", "from": "S2:minus", "to": "S2:Claude'a", "effect": "flow", "params": {}},
+        {"type": "custom", "name": "energy-ball", "at": "S1:Mówić"}]})
+    proj = B.build(out, theme=theme)["project"]
+    pages = [proj / "index.html", *sorted((proj / "compositions").glob("*.html"))]
+    assert len(pages) >= 4
+    refs = set()
+    for page in pages:
+        text = page.read_text(encoding="utf-8").replace("http://www.w3.org/", "")
+        assert not re.search(r"https?://", text), page.name
+        refs |= set(re.findall(r"assets/vendor/[A-Za-z0-9@._/+-]+", text))
+    assert any("three.module.min.js" in r for r in refs) and any("gsap.min.js" in r for r in refs)
+    for r in refs:
+        assert (proj / r).is_file() or (proj / r.rstrip("/")).is_dir(), r
+    assert {d.name for d in (proj / "assets" / "vendor").iterdir()} >= {"gsap@3.14.2", "three@0.181.2"}
+    assert (proj / "assets" / "vendor" / "three@0.181.2" / "build" / "three.core.min.js").is_file()
+    sub = next(p for p in pages if "custom" in p.name).read_text(encoding="utf-8")
+    assert '"vendor": "assets/vendor/"' in sub
+
+
+def test_vendor_dirs_follow_the_effects_used(out, theme):
+    write_plan(out, {"graphics": [{"type": "chip", "at": "S2:minus", "text": "X"}]})
+    proj = B.build(out, theme=theme)["project"]
+    assert [d.name for d in (proj / "assets" / "vendor").iterdir()] == ["gsap@3.14.2"]
+    write_plan(out, {"graphics": [{"type": "custom", "name": "energy-ball", "at": "S1:Mówić"}]})
+    proj = B.build(out, theme=theme)["project"]
+    assert (proj / "assets" / "vendor" / "three@0.181.2").is_dir()
+    write_plan(out, {"graphics": [{"type": "chip", "at": "S2:minus", "text": "X"}]})
+    proj = B.build(out, theme=theme)["project"]
+    assert [d.name for d in (proj / "assets" / "vendor").iterdir()] == ["gsap@3.14.2"]   # pruned again

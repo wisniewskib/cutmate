@@ -19,7 +19,8 @@ from .captions import to_srt
 from .chapters import chapters_txt
 from .config import CAPTION_MODES, DEFAULT_CAPTIONS
 from .cut import load_timed
-from .effects import THREE_MARK, find_effect, held_slice, libs_head, lint_effect, track_slice
+from .effects import (THREE_MARK, VENDOR_URL, find_effect, held_slice, libs_head, lint_effect, track_slice, vendor_files,
+                      vendor_root)
 from .errors import CutmateError
 from .formats import format_of, size_of
 from .hf import ensure_project, hf
@@ -97,7 +98,7 @@ INDEX = """<!doctype html>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width={w}, height={h}" />
     <title>cutmate</title>
-    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>{fx_head}
+    <script src="assets/vendor/gsap@3.14.2/dist/gsap.min.js"></script>{fx_head}
     <link rel="stylesheet" href="assets/tokens.css" />
     <link rel="stylesheet" href="assets/theme.css" />
   </head>
@@ -443,7 +444,7 @@ def subcomp(cid: str, g: Graphic, host_start: float, theme: Path, assets: Path, 
         if isinstance(m, str) and Path(m).is_absolute() and Path(m).exists():
             P["media"] = _copy_media(m, assets, media_map)   # params.media (resolved by the plan) -> asset URL
         P.update(name=g.params["name"], at=loc(g.start), end=loc(g.end), lang=lang, w=rw, h=rh,
-                 dur=round(g.end - host_start, 3), track=track)
+                 dur=round(g.end - host_start, 3), track=track, vendor=VENDOR_URL)
         P.pop("panel", None)                             # build-owned: a panel item's explainer builds in at once
         if g.params.get("_panel"):
             P["panel"] = True
@@ -718,6 +719,12 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
         shutil.copy2(web_dir() / "effects.js", A / "effects.js")
     else:
         (A / "effects.js").unlink(missing_ok=True)
+    needed = vendor_files(effect_texts)                  # offline renders: only the libraries this project loads
+    for folder in needed:
+        _sync_dir(vendor_root(folder), A / "vendor" / folder)
+    for d in (A / "vendor").iterdir():
+        if d.name not in needed:
+            shutil.rmtree(d) if d.is_dir() else d.unlink()
     for f in (proj / "compositions").glob("gx-*.html"):
         if f.stem not in ids:
             f.unlink()

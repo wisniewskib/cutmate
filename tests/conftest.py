@@ -28,6 +28,14 @@ def make_wav(path, dur=2.0, gaps=(), amp=0.3):
     return path
 
 
+def pytest_sessionstart(session):
+    """gsap's licence text does not clearly allow redistribution, so it is not committed: fetch it once (sha-checked)."""
+    from cutmate.effects import VENDOR
+    from cutmate.paths import vendor_dir
+    if not (vendor_dir() / VENDOR["gsap"]).is_dir():
+        pytest.exit(f"{VENDOR['gsap']} is not in {vendor_dir()} — run once: python tools/vendor_libs.py --only gsap", 2)
+
+
 @pytest.fixture(autouse=True)
 def isolated_cutmate_home(tmp_path, monkeypatch):
     """Never read the developer's real ~/.cutmate/config.json in tests."""

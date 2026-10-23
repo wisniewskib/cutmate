@@ -129,6 +129,13 @@ def test_setup_sh_dry_run_nvidia(tmp_path):
     assert not (tmp_path / "cm").exists()
 
 
+def test_setup_fetches_gsap_into_home_vendor(tmp_path):
+    r = run_setup(tmp_path, "--gpu", "none", "--dry-run")
+    assert f"tools/vendor_libs.py --only gsap --dest {tmp_path / 'cm' / 'vendor'}" in r.stdout
+    t = (ROOT / "install" / "setup.ps1").read_text(encoding="utf-8")
+    assert "tools\\vendor_libs.py" in t and "'--only', 'gsap', '--dest'" in t and "'vendor'" in t
+
+
 def test_setup_sh_dry_run_api(tmp_path):
     r = run_setup(tmp_path, "--gpu", "none", "--dry-run")
     assert r.returncode == 0, r.stderr

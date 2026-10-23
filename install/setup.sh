@@ -65,5 +65,8 @@ if [ "$gpu" = nvidia ] && [ "$local_" = 1 ]; then
   run "$PY" -m pip install nvidia-cublas-cu12 'nvidia-cudnn-cu12==9.*'
 fi
 
+# gsap's licence does not clearly allow redistribution: fetch it (sha-checked against assets/vendor/MANIFEST.json)
+run "$PY" "$ROOT/tools/vendor_libs.py" --only gsap --dest "$HOME_DIR/vendor"
+
 echo "venv: $VENV"
 echo "cutmate: $VENV/bin/cutmate"

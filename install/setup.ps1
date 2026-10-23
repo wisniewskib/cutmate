@@ -80,5 +80,8 @@ if ($Gpu -eq 'nvidia' -and $Local) {
   Run @($Py, '-m', 'pip', 'install', 'nvidia-cublas-cu12', 'nvidia-cudnn-cu12==9.*')
 }
 
+# gsap's licence does not clearly allow redistribution: fetch it (sha-checked against assets/vendor/MANIFEST.json)
+Run @($Py, (Join-Path $Root 'tools\vendor_libs.py'), '--only', 'gsap', '--dest', (Join-Path $HomeDir 'vendor'))
+
 Write-Output "venv: $Venv"
 Write-Output "cutmate: $(Join-Path $Venv 'Scripts\cutmate.exe')"
