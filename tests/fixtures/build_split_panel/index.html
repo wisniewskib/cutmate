@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="pl" class="f916">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1080, height=1920" />
+    <title>cutmate</title>
+    <script src="assets/vendor/gsap@3.14.2/dist/gsap.min.js"></script>
+    <script src="assets/effects.js"></script>
+    <link rel="stylesheet" href="assets/tokens.css" />
+    <link rel="stylesheet" href="assets/theme.css" />
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="4.0" data-width="1080" data-height="1920">
+      <div id="split"><div id="cam"><div id="shake"><video id="aroll" src="assets/aroll.mp4" data-start="0" data-duration="4.0" data-media-start="0" data-track-index="0" playsinline data-has-audio="true"></video></div></div></div>
+      <div id="gx-02-panel-slot" data-composition-id="gx-02-panel" data-composition-src="compositions/gx-02-panel.html" data-start="0.6" data-duration="3.35" data-track-index="1" data-width="1080" data-height="1920"></div>
+      <div id="gx-03-panel-media-slot" data-composition-id="gx-03-panel-media" data-composition-src="compositions/gx-03-panel-media.html" data-start="0.9" data-duration="2.05" data-track-index="2" data-width="1080" data-height="1920"></div>
+      <div id="gx-05-stamp-slot" data-composition-id="gx-05-stamp" data-composition-src="compositions/gx-05-stamp.html" data-start="2.05" data-duration="1.9" data-track-index="3" data-width="1080" data-height="1920"></div>
+      <div id="gx-06-custom-slot" data-composition-id="gx-06-custom" data-composition-src="compositions/gx-06-custom.html" data-start="2.75" data-duration="1.2" data-track-index="2" data-width="1080" data-height="1920"></div>
+      <div id="gx-01-custom-slot" data-composition-id="gx-01-custom" data-composition-src="compositions/gx-01-custom.html" data-start="0.0" data-duration="1.2" data-track-index="4" data-width="1080" data-height="1920"></div>
+      <div id="gx-04-scene-slot" data-composition-id="gx-04-scene" data-composition-src="compositions/gx-04-scene.html" data-start="1.8" data-duration="1.7" data-track-index="4" data-width="1080" data-height="1920"></div>
+      <div id="flash"></div>
+      <div id="captions" class="clip" data-start="0" data-duration="4.0" data-track-index="5"></div>
+      <audio id="sfx-1" src="assets/sfx/impact.mp3" data-start="2.35" data-duration="0.696" data-track-index="10" data-volume="0.4" data-audio-group="sfx"></audio>
+    </div>
+    <script src="assets/cutmate.js"></script>
+    <script>
+      const CFG = {"end": 4.0, "pages": [{"start": 0.06, "end": 0.86, "words": [["Mówić", 0.06, ""], ["krótko,", 0.41, ""]]}, {"start": 0.86, "end": 1.9, "words": [["mniej", 0.86, ""]]}, {"start": 2.06, "end": 2.71, "words": [["minus", 2.06, ""], ["75%", 2.31, "num"]]}, {"start": 2.71, "end": 3.16, "words": [["Claude'a", 2.71, "key"]]}, {"start": 3.16, "end": 3.99, "words": [["<\/script>", 3.16, ""]]}], "cam": [[0.0, 1.0], [2.0, 1.12]], "hits": [[2.35, 1.12, 0.5]], "splits": [[0.9, null, 672, -415, 0]], "hide": [["#gx-02-panel-slot", 0.1, 0.25, 1.2, 0.25], ["#gx-02-panel-slot", 2.1, 0.25, 3.5, 0.25], ["#gx-03-panel-media-slot", 0.1, 0.25, 1.2, 0.25], ["#gx-03-panel-media-slot", 2.1, 0.25, null, 0], ["#gx-05-stamp-slot", 2.1, 0.25, 3.5, 0.25], ["#gx-06-custom-slot", 2.1, 0.25, 3.95, 0.15]]};
+      const tl = gsap.timeline({ paused: true });
+      Cutmate.build(tl, CFG);
+      window.__timelines["main"] = tl;
+    </script>
+  </body>
+</html>

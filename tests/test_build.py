@@ -1627,6 +1627,50 @@ def test_no_wow_no_change(out, theme, monkeypatch):
         assert (proj / "compositions" / f.name).read_text(encoding="utf-8") == f.read_text(encoding="utf-8"), f.name
 
 
+FIXTURE_SPLIT_PANEL = Path(__file__).parent / "fixtures" / "build_split_panel"   # built by HEAD a60f35b (pre caption drop)
+SPLIT_PANEL_PLAN = {"captions": {"key": ["claude'a"]},
+                    "panel": [{"at": "S1:mniej", "media": "broll/p.png"}, {"at": "S2:Claude'a", "effect": "orb"}],
+                    "scenes": [{"from": "S2:minus", "to": "S2:</script>", "media": "broll/s.png"},
+                               {"from": 0.1, "to": 1.2, "effect": "orb"}],
+                    "graphics": [{"type": "stamp", "at": "S2:75%", "text": "NIE", "hit": True}]}
+FIXTURE_169_CHAPTERS = Path(__file__).parent / "fixtures" / "build_169_chapters"  # built by HEAD a60f35b
+CHAPTERS_169_PLAN = {"chapters": [{"at": "S1:Mówić", "title": "Intro"}, {"at": "S2:minus", "title": "Dwa"}],
+                     "graphics": [{"type": "chip", "at": "S1:mniej", "text": "Caveman"}]}
+
+
+def _same_as_golden(proj: Path, golden: Path) -> None:
+    built = sorted(["index.html"] + [p.name for p in (proj / "compositions").glob("gx-*.html")])
+    assert built == sorted(p.name for p in golden.iterdir())
+    assert (proj / "index.html").read_text(encoding="utf-8") == (golden / "index.html").read_text(encoding="utf-8")
+    for f in golden.glob("gx-*.html"):
+        assert (proj / "compositions" / f.name).read_text(encoding="utf-8") == f.read_text(encoding="utf-8"), f.name
+
+
+def _split_panel_build(out, theme):
+    _png(out)
+    _png(out, "s.png", "red")
+    _fx(out, "orb")
+    _with_layout_components(theme)
+    _layout_theme(theme, {"mode": "split-panel"})
+    write_plan(out, SPLIT_PANEL_PLAN)
+    return B.build(out, theme=theme)["project"]
+
+
+def test_no_wow_split_panel_no_change(out, theme):
+    """Review Focus 5: a split-panel plan (panel items, a media scene, a non-WOW effect scene, a hit) builds byte-identical
+    to the build from before the WOW scene caption drop: no WOW scene, no caption move."""
+    proj = _split_panel_build(out, theme)
+    assert "cap_moves" not in cfg_of((proj / "index.html").read_text(encoding="utf-8"))
+    _same_as_golden(proj, FIXTURE_SPLIT_PANEL)
+
+
+def test_no_wow_169_chapters_no_change(out169, theme):
+    """Review Focus 5: a 16:9 plan with chapter plates (no chapter_fx) and burned captions builds byte-identical."""
+    write_plan(out169, CHAPTERS_169_PLAN)
+    proj = B.build(out169, theme=theme, captions={"16:9": "burn"})["project"]
+    _same_as_golden(proj, FIXTURE_169_CHAPTERS)
+
+
 def test_hit_true_lands_on_effect_impact(out, theme, monkeypatch):
     """"hit": true on an effect whose index.json declares an `impact` offset (burst-out: 1 s) shakes, flashes and plays the
     hit sound at the effect's real impact (start + impact), where the effect jumps in front (P.hit_at) — not at the start.

@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="pl" class="f169">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <title>cutmate</title>
+    <script src="assets/vendor/gsap@3.14.2/dist/gsap.min.js"></script>
+    <link rel="stylesheet" href="assets/tokens.css" />
+    <link rel="stylesheet" href="assets/theme.css" />
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="4.0" data-width="1920" data-height="1080">
+      <div id="split"><div id="cam"><div id="shake"><video id="aroll" src="assets/aroll.mp4" data-start="0" data-duration="4.0" data-media-start="0" data-track-index="0" playsinline data-has-audio="true"></video></div></div></div>
+      <div id="gx-01-chip-slot" data-composition-id="gx-01-chip" data-composition-src="compositions/gx-01-chip.html" data-start="0.6" data-duration="2.8" data-track-index="2" data-width="1920" data-height="1080"></div>
+      <div id="gx-02-chapter-slot" data-composition-id="gx-02-chapter" data-composition-src="compositions/gx-02-chapter.html" data-start="1.8" data-duration="1.8" data-track-index="3" data-width="1920" data-height="1080"></div>
+      <div id="flash"></div>
+      <div id="captions" class="clip" data-start="0" data-duration="4.0" data-track-index="5"></div>
+      <audio id="sfx-1" src="assets/sfx/pop.mp3" data-start="0.9" data-duration="0.144" data-track-index="10" data-volume="0.3" data-audio-group="sfx"></audio>
+      <audio id="sfx-2" src="assets/sfx/swell.mp3" data-start="1.9" data-duration="0.984" data-track-index="10" data-volume="0.3" data-audio-group="sfx"></audio>
+    </div>
+    <script src="assets/cutmate.js"></script>
+    <script>
+      const CFG = {"end": 4.0, "pages": [{"start": 0.06, "end": 0.86, "words": [["Mówić", 0.06, ""], ["krótko,", 0.41, ""]]}, {"start": 0.86, "end": 1.9, "words": [["mniej", 0.86, ""]]}, {"start": 2.06, "end": 2.71, "words": [["minus", 2.06, ""], ["75%", 2.31, "num"]]}, {"start": 2.71, "end": 3.16, "words": [["Claude'a", 2.71, ""]]}, {"start": 3.16, "end": 3.99, "words": [["<\/script>", 3.16, ""]]}], "cam": [[0.0, 1.0, 0.5, 0.4], [2.0, 1.25, 0.5, 0.4]], "hits": [], "splits": []};
+      const tl = gsap.timeline({ paused: true });
+      Cutmate.build(tl, CFG);
+      window.__timelines["main"] = tl;
+    </script>
+  </body>
+</html>

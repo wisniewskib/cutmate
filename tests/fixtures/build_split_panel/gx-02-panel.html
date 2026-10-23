@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="pl"><head><meta charset="UTF-8" /></head><body><template>
+  <link rel="stylesheet" href="assets/tokens.css" />
+  <link rel="stylesheet" href="assets/theme.css" />
+  <style>#gx-02-panel { position: absolute; inset: 0; pointer-events: none; }
+
+#gx-02-panel .panel-wrap { position: absolute; left: 0; right: 0; top: 0; }
+#gx-02-panel .panel-fill { position: absolute; inset: 0; background: var(--panel-bg, #0b0b0f); }
+#gx-02-panel .panel-edge { position: absolute; left: 0; right: 0; bottom: 0; height: 8px; background: var(--accent); }
+</style>
+  <div id="gx-02-panel" data-composition-id="gx-02-panel" data-width="1080" data-height="1920" data-duration="3.35"><div class="panel-wrap" style="height:960px"><div class="panel-fill"></div><div class="panel-edge"></div></div></div>
+  <script>(function () {
+    const tl = gsap.timeline({ paused: true });
+    const root = document.getElementById("gx-02-panel");
+    const P = {"ratio": 0.5, "open_at_zero": false, "stays": true, "at": 0.3, "end": 3.35, "lang": "pl", "panel_h": 960};
+    const U = {
+      el(tag, cls, text, parent) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; (parent || root).appendChild(e); return e; },
+      counter(el, fmt) { const d = {}; let v = 0; Object.defineProperty(d, "v", { get: () => v, set: (n) => { v = n; el.textContent = fmt(n); } }); return d; },
+      out(target, t) { tl.to(target, { opacity: 0, y: -30, duration: 0.2, ease: "power2.in", immediateRender: false }, Math.max(0, t)); },
+      seed(n) { let a = (n >>> 0) || 1; return () => { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; },
+    };
+
+// the persistent panel frame: slides in once (or is already up at 0 s), slides out once (or stays to the end)
+const w = root.querySelector(".panel-wrap");
+if (P.open_at_zero) tl.set(w, { yPercent: 0 }, 0);
+else tl.fromTo(w, { yPercent: -100 }, { yPercent: 0, duration: 0.45, ease: "power3.out" }, P.at);
+if (!P.stays) tl.to(w, { yPercent: -100, duration: 0.4, ease: "power3.inOut", immediateRender: false }, Math.max(P.at + 0.45, P.end - 0.4));
+
+    window.__timelines["gx-02-panel"] = tl;
+  })();</script>
+</template></body></html>
