@@ -1746,14 +1746,14 @@ def test_glitch_cfg_from_meta(out, out169, theme):
     write_plan(out, {"graphics": [{"type": "custom", "name": "topic-change", "from": "S2:minus", "to": "S2:</script>",
                                    "params": {"title": "Druga sprawa"}}]})
     html = (B.build(out, theme=theme)["project"] / "index.html").read_text(encoding="utf-8")
-    assert cfg_of(html)["glitch"] == [[2.1, 0.6, "glitch"]]
+    assert cfg_of(html)["glitch"] == [[2.1, 0.6, "glitch", 24]]                     # amp: 2.2 % of 1080 px
     assert html.count('id="cm-fx"') == 1 and 'id="cm-rgb"' in html and 'id="cm-wave"' in html
     assert 'seed="7"' in html and 'baseFrequency="0.004 0.03"' in html and "feDisplacementMap" in html
     assert html.index('id="cm-fx"') < html.index('id="flash"')
     write_plan(out, {"graphics": [{"type": "custom", "name": "topic-change", "from": "S2:minus", "to": "S2:</script>",
                                    "params": {"title": "Druga sprawa", "style": "wave"}}]})
     html = (B.build(out, theme=theme)["project"] / "index.html").read_text(encoding="utf-8")
-    assert cfg_of(html)["glitch"] == [[2.1, 0.6, "wave"]]
+    assert cfg_of(html)["glitch"] == [[2.1, 0.6, "wave", 24]]
     write_plan(out, {"graphics": [{"type": "custom", "name": "orb", "from": "S2:minus", "to": "S2:</script>"}]})
     _fx(out)
     html = (B.build(out, theme=theme)["project"] / "index.html").read_text(encoding="utf-8")
@@ -1762,7 +1762,7 @@ def test_glitch_cfg_from_meta(out, out169, theme):
                         "chapters": [{"at": "S1:Mówić", "title": "Intro"}, {"at": "S2:minus", "title": "Dwa"}]})
     proj = B.build(out169, theme=theme)["project"]
     html = (proj / "index.html").read_text(encoding="utf-8")
-    assert cfg_of(html)["glitch"] == [[2.1, 0.6, "glitch"]] and 'id="cm-fx"' in html
+    assert cfg_of(html)["glitch"] == [[2.1, 0.6, "glitch", 42]] and 'id="cm-fx"' in html   # 2.2 % of 1920 px
     assert not list((proj / "compositions").glob("gx-*-chapter.html"))
     (sub,) = (proj / "compositions").glob("gx-*-custom.html")
     P = _P(sub.read_text(encoding="utf-8"))
@@ -1783,3 +1783,20 @@ def test_chapter_fx_effect_found_and_linted(out169, theme):
     with pytest.raises(B.PlanError, match="onComplete"):
         B.build(out169, theme=theme)
     assert not (out169 / "composition").exists()
+
+
+def test_kinetic_word_hit_lands_on_the_word(out, theme):
+    """kinetic-word declares "impact": 1.0 — "hit": true shakes (and plays the hit sound) where the word lands, 1 s after
+    its start, and the effect gets that time as P.hit_at; an anchor on a later word moves both there."""
+    write_plan(out, {"graphics": [{"type": "custom", "name": "kinetic-word", "from": "S1:Mówić", "to": "S2:</script>",
+                                   "params": {"text": "+300%"}, "hit": True}]})
+    proj = B.build(out, theme=theme)["project"]
+    hits = cfg_of((proj / "index.html").read_text(encoding="utf-8"))["hits"]
+    P = _P(next((proj / "compositions").glob("gx-*-custom.html")).read_text(encoding="utf-8"))
+    assert hits[0][0] == 1.1 and P["hit_at"] == round(P["at"] + 1.0, 3)
+    write_plan(out, {"graphics": [{"type": "custom", "name": "kinetic-word", "from": "S1:Mówić", "to": "S2:</script>",
+                                   "params": {"text": "+300%"}, "hit": "S2:minus"}]})
+    proj = B.build(out, theme=theme)["project"]
+    hits = cfg_of((proj / "index.html").read_text(encoding="utf-8"))["hits"]
+    P = _P(next((proj / "compositions").glob("gx-*-custom.html")).read_text(encoding="utf-8"))
+    assert hits[0][0] == 2.1 and P["hit_at"] == round(P["at"] + 2.0, 3)

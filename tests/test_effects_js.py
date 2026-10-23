@@ -1107,6 +1107,12 @@ def test_glitch_runtime():
     assert max(last_attr(c, "scale") for c in w if str(c[1]).startswith("#cm-wave feDisplacementMap")
                and c[0] == "fromTo") == 0 and any(c[0] == "fromTo" for c in disp)
     assert not any(str(c[1]).startswith("#cm-") or (c[1] == "#split" and "filter" in (c[2] or {})) for c in d["none"])
+    assert not any(c[1] == "#shake" and "scale" in (c[2] or {}) for c in d["none"])
+    punch = [c for c in g if c[1] == "#shake" and c[0] == "fromTo" and "scale" in (c[2] or {})]
+    assert punch and punch[0][3] == 4 and punch[0][2]["scale"] == 1                   # the A-roll punches in, back to 1
+    big = _glitch_calls({"b": {**base, "glitch": [[4, 0.6, "glitch", 42]]}})["b"]       # amp from the build (16:9)
+    dx = [abs(c[2]["attr"]["dx"]) for c in big if str(c[1]).startswith("#cm-rgb feOffset.cm-") and c[0] == "set"]
+    assert max(dx) == 42
 
 
 # topic-change in a DOM harness: the real effect script with a recording tl; the clock is seeked by hand
@@ -1163,17 +1169,10 @@ def test_topic_change_title_resolves(style):
     assert all(_offset(c["tr"]) == 0 for c in final + hold), final
 
 
-# kinetic-word's pure helpers (window.CutmateFX.wow): the effect script runs with fonts never loading (no build)
+# kinetic-word's pure helpers (window.CutmateFX.wow, in effects.js)
 KINETIC = """
 global.window = {};
 require(%s);
-const tl = { to() { return tl; }, set() { return tl; }, fromTo() { return tl; } };
-const stub = () => new Proxy(function () {}, { get: (o, k) => (k === Symbol.toPrimitive ? () => "" : stub()), apply: () => stub(),
-                                               set: () => true });
-global.document = stub();
-const U = window.CutmateFX.make(tl, {}, "c1", { dur: 4 });
-U.fonts = () => new Promise(() => {});
-new Function("tl", "root", "P", "U", %s)(tl, stub(), { text: "+300%%", at: 0.3, end: 3.8, dur: 4, w: 1080, h: 1920, lang: "pl" }, U);
 const W = window.CutmateFX.wow;
 console.log(JSON.stringify((function () { %s })()));
 """
@@ -1183,9 +1182,7 @@ def test_kinetic_word_targets():
     """gridStart: n points of a centred grid inside the frame (cols = ceil(sqrt(n·W/H))); assignTargets: n targets from
     the glyph points, the same for the same seed, another order for another seed, every one a glyph point (inside the
     text box); repeats wrap when n > points."""
-    from cutmate.build import _sections
-    src = _sections(plugin_root() / "themes" / "clean" / "components" / "custom" / "kinetic-word.html")["script"]
-    d = _node(KINETIC, json.dumps(str(web_dir() / "effects.js")), json.dumps(src), """
+    d = _node(KINETIC, json.dumps(str(web_dir() / "effects.js")), """
       const pts = [];
       for (let y = 800; y <= 1000; y += 10) for (let x = 100; x <= 980; x += 10) if ((x + y) % 30) pts.push([x, y]);
       return { grid: W.gridStart(600, 1080, 1920), grid169: W.gridStart(600, 1920, 1080), pts,
@@ -1204,3 +1201,20 @@ def test_kinetic_word_targets():
     assert all(tuple(p) in pts for p in d["a"])                                      # inside the text box
     assert len({tuple(p) for p in d["a"]}) == min(600, len(pts))
     assert len(d["few"]) == 600 and len({tuple(p) for p in d["few"]}) == 50           # repeats wrap
+
+
+def test_kinetic_word_lands_on_its_impact():
+    """The word lands 1.0 s after P.at (index.json impact) whatever the span (>= 2.5 s), or on P.hit_at (a hit anchor on
+    the spoken word) with the <= 1 s build-up just before it; the shatter takes the end."""
+    d = _node(KINETIC, json.dumps(str(web_dir() / "effects.js")), """
+      const b = (o) => W.kineticBeats(o);
+      return { a: b({ at: 0.3, end: 3.8 }), long: b({ at: 0.3, end: 6.3 }), hit: b({ at: 0.3, end: 3.8, hit_at: 2.1 }),
+               early: b({ at: 0.3, end: 3.8, hit_at: 0.5 }), late: b({ at: 0.3, end: 3.8, hit_at: 3.7 }),
+               short: b({ at: 0, end: 2.0 }) };
+    """)
+    assert d["a"]["land"] == pytest.approx(1.3) and d["a"]["t0"] == pytest.approx(0.3) and d["a"]["pre"] == pytest.approx(1.0)
+    assert d["long"]["land"] == pytest.approx(1.3) and d["a"]["shatter"] == pytest.approx(3.32)
+    assert d["hit"]["land"] == pytest.approx(2.1) and d["hit"]["t0"] == pytest.approx(1.1)
+    assert d["early"]["land"] == pytest.approx(0.9) and d["early"]["pre"] == pytest.approx(0.6)
+    assert d["late"]["land"] == pytest.approx(2.8)                                    # room for the hold + shatter
+    assert d["short"]["k"] == pytest.approx(0.8) and d["short"]["land"] == pytest.approx(0.8)

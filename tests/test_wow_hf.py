@@ -557,18 +557,22 @@ def test_topic_change_169_chapter(tmp_path, home):
     a, raw = _img(s1), _raw(proj, t1, tmp_path)
     # each channel's x shift against the clean frame (scanlines and the title keep the scores low, ~0.1–0.25; the
     # peaks are still sharp): green moves only with the #shake jitter, red and blue split away from it on both sides
-    (sr, cr), (sg, cg), (sb, cb) = (_x_shift(a[:, :, c], raw[:, :, c]) for c in range(3))
+    # (the A-roll is also punched in, 1.08 -> 1 around the centre: measured in a central band where that moves little)
+    band = (slice(None), slice(760, 1160))
+    (sr, cr), (sg, cg), (sb, cb) = (_x_shift(a[band][:, :, c], raw[band][:, :, c], reach=80) for c in range(3))
     print(f"channel shift at +0.15: R {sr} px ({cr:.2f}), G {sg} px ({cg:.2f}), B {sb} px ({cb:.2f})")
-    assert sr - sg >= 4 and sg - sb >= 4 and min(cr, cg, cb) > 0.05, (sr, sg, sb, cr, cg, cb, s1)
+    assert sr - sb >= 0.02 * 1920 and sr > sg > sb and min(cr, cg, cb) > 0.05, (sr, sg, sb, cr, cg, cb, s1)
     b, raw2 = _img(s2), _raw(proj, t2, tmp_path)
     shifts = [_x_shift(b[:, :, c], raw2[:, :, c])[0] for c in range(3)]
     print(f"channel shift at +0.9: R / G / B {shifts} px")
     assert shifts == [0, 0, 0], shifts                                  # the glitch is over
-    mid = b[300:800, 160:1760]
-    white = int((mid.min(axis=2) >= 225).sum())
-    ghosts = int((_hue_mask(mid, 340, 20, sat=0.6, val=0.6) | _hue_mask(mid, 170, 200, sat=0.6, val=0.6)).sum())
-    print(f"title at +0.9: {white} white px, {ghosts} saturated red / cyan px")
-    assert white >= 12000 and ghosts <= 0.05 * white, (white, ghosts, s2)
+    wm = b.min(axis=2) >= 225
+    white = int(wm.sum())
+    ghosts = int((_hue_mask(b, 340, 20, sat=0.6, val=0.6) | _hue_mask(b, 170, 200, sat=0.6, val=0.6)).sum())
+    rows = np.nonzero(wm.sum(axis=1) > 20)[0]
+    tall = (rows.max() - rows.min()) / 1080 if len(rows) else 0
+    print(f"title at +0.9: {white} white px over {tall:.2f} of the height, {ghosts} saturated red / cyan px")
+    assert white >= 60000 and tall >= 0.25 and ghosts <= 0.05 * white, (white, tall, ghosts, s2)
     for t in (t1, t2):
         worst = wowkit.seek_safe(proj, t)
         print(f"seek_safe({t}) = {worst}")
@@ -577,16 +581,24 @@ def test_topic_change_169_chapter(tmp_path, home):
 
 
 def _kinetic_blobs(a: np.ndarray, accent_hue: float, text_dark: bool = False) -> list:
-    """The small accent / text-colour shapes: connected components (1 px grid) of accent-hue or text-colour pixels, kept
-    when 12–900 px."""
+    """Accent / text-colour blobs (1 px grid, kept when 12–900 px): the overlay's shapes over the video."""
     m = _hue_mask(a, accent_hue - 22, accent_hue + 22, sat=0.3, val=0.35)
     m |= (a.max(axis=2) <= 60) & (a.max(axis=2) - a.min(axis=2) < 40) if text_dark else (a.min(axis=2) >= 200)
     return [b for b in _blobs(m, step=1) if 12 <= b[4] <= 900]
 
 
+def _targets(mask_png: Path) -> int:
+    """The distinct shape targets inside the word: params._mask dots every shape's target (3x3 black) on the solid word;
+    shapes that share a cell share a dot. (Counting shapes in the real frame cannot work: the landed shapes nearly touch
+    and merge through their anti-aliased edges.)"""
+    a = _img(mask_png)
+    dots = a.max(axis=2) <= 4
+    return len([b for b in _blobs(dots, step=1) if 4 <= b[4] <= 25])
+
+
 def _covered(a: np.ndarray, mask_png: Path, bg) -> tuple:
     """(share of the glyph mask covered by shape pixels within 1 px, mask px): the mask is the solid word the effect draws
-    with params.debug "mask" at the same place."""
+    with params._mask (a test aid) at the same place (its target dots, black, fall outside the > 100 threshold: holes)."""
     mk = _img(mask_png)
     mask = np.abs(mk - np.array(bg)).max(axis=2) > 100
     shape = np.abs(a - np.array(bg)).max(axis=2) > 60
@@ -598,7 +610,8 @@ def _covered(a: np.ndarray, mask_png: Path, bg) -> tuple:
 
 def test_kinetic_word_scene_and_overlay(tmp_path, home):
     """kinetic-word as a 9:16 split-panel scene ("+300%", 3.5 s): at the span's middle the word stands built out of
-    >= 400 small accent / text-colour shapes covering >= 60 % of its glyphs (1 px tolerance), seek-safe, and the project
+    >= 400 shapes (distinct targets) covering >= 60 % of its glyphs (1 px tolerance) — already 1.1 s after its start —,
+    seek-safe, and the project
     renders. Then as a classic transparent overlay (bg "none") over the A-roll. READ the snapshots and 0.25 s strips."""
     from cutmate.media import run
     from cutmate.hf import hf
@@ -610,18 +623,23 @@ def test_kinetic_word_scene_and_overlay(tmp_path, home):
     assert round(end - at, 2) == 3.5
     mid = round((at + end) / 2, 3)
     s_mid = wowkit.snap(proj, mid)
-    mask_proj = wowkit.project(tmp_path / "mask", {"scenes": [dict(scene, params={"text": "+300%", "debug": "mask"})]},
+    mask_proj = wowkit.project(tmp_path / "mask", {"scenes": [dict(scene, params={"text": "+300%", "_mask": True})]},
                                dur=5.0, theme=theme)
     s_mask = wowkit.snap(mask_proj, mid)
     print(f"snapshot mid {mid}: {s_mid}\nglyph mask: {s_mask}")
     a = _img(s_mid)
     bg = (0x0b, 0x0b, 0x0f)
     assert all(abs(int(c) - e) <= 8 for c, e in zip(a[40, 40], bg)), a[40, 40]          # the panel colour, full frame
-    blobs = _kinetic_blobs(a, _hue_of("#7dd3fc"))
+    targets = _targets(s_mask)
     share, n_mask = _covered(a, s_mask, bg)
-    print(f"shapes: {len(blobs)} small accent / text blobs; glyph mask {n_mask} px covered {share:.2f}")
-    assert len(blobs) >= 400, (len(blobs), s_mid)
+    print(f"shapes: {targets} distinct targets in the word; glyph mask {n_mask} px covered {share:.2f}")
+    assert targets >= 400, (targets, s_mask)
     assert n_mask >= 40000 and share >= 0.60, (n_mask, share, s_mid)
+    # the word reads early: landed 1.0 s after the start (index.json impact)
+    s_early = wowkit.snap(proj, round(at + 1.1, 3))
+    share_e, _ = _covered(_img(s_early), s_mask, bg)
+    print(f"snapshot at+1.1 {s_early}: glyph mask covered {share_e:.2f}")
+    assert share_e >= 0.55, (share_e, s_early)
     worst = wowkit.seek_safe(proj, mid)
     print(f"seek_safe({mid}) = {worst}")
     assert worst <= 1.0

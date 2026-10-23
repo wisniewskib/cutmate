@@ -32,6 +32,7 @@ from .plan import PLATE, SCENE_FADE, Graphic, _expanded_pair, load_plan, panel_b
 from .tracks import FINGERS, TIP_TRACKS, pick_hand
 
 CHAPTER_LABEL = {"pl": "ROZDZIAŁ", "en": "CHAPTER"}
+GLITCH_AMP = 0.022            # the A-roll glitch's peak R / B split, as a share of the frame width
 LEAD = 0.3                    # host starts this much before the graphic's word (entrance lead-in)
 VIDEO_EXTS = {".mp4", ".mov", ".m4v", ".webm", ".mkv"}
 ILLUSTRATIVE = {"pl": "ILUSTRACYJNIE", "en": "ILLUSTRATIVE"}
@@ -867,7 +868,8 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
     cues += [(hit_name, h[0], hit_vol) for h in hits]
     pages = caption_pages(words, end, plan.captions["key"], plan.captions["max_words"])
     cfg = {"end": end, "pages": pages if mode in ("burn", "both") else [], "cam": cam, "hits": hits, "splits": splits}
-    # an effect whose index.json has "aroll_fx" (topic-change) glitches the A-roll at its start: [t, dur, kind]
+    # an effect whose index.json has "aroll_fx" (topic-change) glitches the A-roll at its start: [t, dur, kind, amp] —
+    # amp, the peak R / B split in px, scales with the frame (2.2 % of its width: 24 px at 1080, 42 px at 1920)
     glitch = []
     for g in items:
         fx_meta = effect_meta(found[g.params["name"]]).get("aroll_fx") if g.type == "custom" else None
@@ -875,7 +877,8 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
             style = ((g.params.get("params") or {}).get("style"))
             dur = fx_meta.get("dur")
             dur = float(dur) if isinstance(dur, (int, float)) and not isinstance(dur, bool) and dur > 0 else 0.6
-            glitch.append([round(g.start, 3), round(min(dur, g.end - g.start), 3), "wave" if style == "wave" else "glitch"])
+            glitch.append([round(g.start, 3), round(min(dur, g.end - g.start), 3), "wave" if style == "wave" else "glitch",
+                           round(GLITCH_AMP * W)])
     if glitch:
         cfg["glitch"] = glitch
     if shake:

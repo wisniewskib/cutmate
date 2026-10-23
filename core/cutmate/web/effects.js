@@ -404,6 +404,45 @@
     return U;
   }
 
-  window.CutmateFX = { make, pure: { seed, trackAt, particleState, scrambleAt, openAmount, safeBox } };
+  // ---- kinetic-word's pure helpers (CutmateFX.wow) ----
+  // n points of a grid centred in W x H: cols = ceil(sqrt(n·W/H)) columns, rows filled left to right, top to bottom
+  function gridSize(n, W, H) {
+    const cols = Math.max(1, Math.ceil(Math.sqrt((n * W) / H))), rows = Math.max(1, Math.ceil(n / cols));
+    return { cols, rows, sp: Math.min(W / cols, H / rows) };
+  }
+  function gridStart(n, W, H) {
+    const { cols, sp } = gridSize(n, W, H), rows = Math.max(1, Math.ceil(n / cols));
+    const x0 = (W - (cols - 1) * sp) / 2, y0 = (H - (rows - 1) * sp) / 2;
+    return Array.from({ length: n }, (_, i) => [x0 + (i % cols) * sp, y0 + Math.floor(i / cols) * sp]);
+  }
+  // n targets from the glyph points: a seeded Fisher–Yates shuffle (same seed, same targets); repeats wrap when n > points
+  function assignTargets(points, n, sd) {
+    if (!points || !points.length) return [];
+    const r = seed((sd || 1) * 7919 + 13), idx = points.map((_, i) => i);
+    for (let i = idx.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); const v = idx[i]; idx[i] = idx[j]; idx[j] = v; }
+    return Array.from({ length: n }, (_, i) => points[idx[i % idx.length]].slice());
+  }
+  // a star path: n spikes, outer / inner radius, rotated by rot (rad)
+  function star(cx, cy, n, ro, ri, rot) {
+    let d = "";
+    for (let i = 0; i < n * 2; i++) {
+      const a = rot + (i * Math.PI) / n, rr = i % 2 ? ri : ro;
+      d += (i ? "L" : "M") + (cx + Math.cos(a) * rr).toFixed(1) + " " + (cy + Math.sin(a) * rr).toFixed(1);
+    }
+    return d + "Z";
+  }
+  // kinetic-word's beats (local s): the word lands 1 s after its start (index.json "impact": 1.0; a shorter span than
+  // 2.5 s compresses everything by k) or on P.hit_at (a "hit" anchor on the spoken word) — then the 1 s build-up (pre,
+  // shorter when the anchor is close to the start) runs from t0 = land - pre; the shatter takes the last 0.48·k s
+  function kineticBeats(o) {
+    const at = o.at || 0, end = Math.max(at + 1.2, o.end || at + 3.5), k = Math.min(1, (end - at) / 2.5);
+    let land = at + k;
+    if (typeof o.hit_at === "number" && isFinite(o.hit_at)) land = Math.min(Math.max(o.hit_at, at + 0.6 * k), end - k);
+    const pre = Math.min(k, land - at);
+    return { at, end, k, land, pre, t0: land - pre, shatter: end - 0.48 * k, dShat: 0.46 * k };
+  }
+
+  window.CutmateFX = { make, pure: { seed, trackAt, particleState, scrambleAt, openAmount, safeBox },
+                       wow: { gridSize, gridStart, assignTargets, star, kineticBeats } };
   if (typeof module !== "undefined") module.exports = window.CutmateFX;
 })();

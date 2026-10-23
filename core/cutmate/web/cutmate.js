@@ -90,39 +90,42 @@
     });
   }
 
-  // the A-roll glitch of an aroll_fx effect (topic-change): cfg.glitch [[t, dur, kind]]. #split gets the SVG filter of
-  // index.html's #cm-fx at t and loses it at t + dur. kind "glitch": the R / B channel offsets step (every 2 frames)
-  // from ±18 px down to exactly 0; "wave": the turbulence displacement eases 60 -> 0. Both jitter #shake sideways in
-  // fixed steps (sin(i·2.7), as hits do). Every value is a constant: any frame renders the same alone
+  // the A-roll glitch of an aroll_fx effect (topic-change): cfg.glitch [[t, dur, kind, amp]]. #split gets the SVG filter
+  // of index.html's #cm-fx at t and loses it at t + dur. kind "glitch": the R / B channel offsets step (every 2 frames)
+  // from ±amp px (the build: 2.2 % of the frame width; 18 when missing) down to exactly 0; "wave": the turbulence
+  // displacement eases 3.3·amp -> 0. Both punch the A-roll in (#shake scale 1.08 -> 1) and jitter it sideways in fixed
+  // steps (sin(i·2.7), as hits do). Every value is a constant: any frame renders the same alone
   function glitch(tl, cfg) {
     const gs = cfg.glitch || [];
     if (!gs.length) return;
     tl.set("#split", { filter: "none" }, 0);
     tl.set("#cm-rgb feOffset", { attr: { dx: 0 } }, 0);
     tl.set("#cm-wave feDisplacementMap", { attr: { scale: 0 } }, 0);
-    gs.forEach(([t, dur, kind]) => {
-      const wave = kind === "wave";
+    tl.set("#shake", { scale: 1 }, 0);
+    gs.forEach(([t, dur, kind, amp]) => {
+      const wave = kind === "wave", A = amp > 0 ? amp : 18;
       tl.set("#split", { filter: wave ? "url(#cm-wave)" : "url(#cm-rgb)" }, t);
       tl.set("#split", { filter: "none" }, t + dur);
       if (wave) {
-        tl.fromTo("#cm-wave feDisplacementMap", { attr: { scale: 60 } },
+        tl.fromTo("#cm-wave feDisplacementMap", { attr: { scale: Math.round(A * 3.3) } },
           { attr: { scale: 0 }, duration: dur, ease: "power2.out", immediateRender: false }, t);
       } else {
         const n = Math.max(1, Math.round(dur * 15));
         [["#cm-rgb feOffset.cm-r", 1], ["#cm-rgb feOffset.cm-b", -1]].forEach(([sel, sign]) => {
           for (let i = 0; i < n; i++) {
             const k = i ? (1 - i / n) * (0.45 + 0.55 * Math.abs(Math.sin(i * 2.7 + (sign > 0 ? 0 : 1.3)))) : 1;
-            tl.set(sel, { attr: { dx: Math.round(sign * 18 * k * 10) / 10 } }, t + (i * dur) / n);
+            tl.set(sel, { attr: { dx: Math.round(sign * A * k * 10) / 10 } }, t + (i * dur) / n);
           }
           tl.set(sel, { attr: { dx: 0 } }, t + dur);
         });
       }
       const steps = Math.max(2, Math.round(dur / 0.033)), pts = [];
       for (let i = 1; i <= steps; i++) {
-        pts.push({ x: Math.round(Math.sin(i * 2.7) * 16 * (1 - i / steps) * 10) / 10, duration: dur / steps, ease: "none" });
+        pts.push({ x: Math.round(Math.sin(i * 2.7) * 0.9 * A * (1 - i / steps) * 10) / 10, duration: dur / steps, ease: "none" });
       }
       pts[pts.length - 1] = { x: 0, duration: dur / steps, ease: "none" };
       tl.to("#shake", { keyframes: pts }, t);
+      tl.fromTo("#shake", { scale: 1.08 }, { scale: 1, duration: dur + 0.35, ease: "expo.out", immediateRender: false }, t);
     });
   }
 

@@ -7,26 +7,32 @@ ROOT .tc-bar.tint { background: var(--panel-bg, #0b0b0f); opacity: 0.86; }
 ROOT .tc-bar.hot { background: var(--accent, #7dd3fc); mix-blend-mode: difference; }
 ROOT .tc-lines { opacity: 0; background: repeating-linear-gradient(to bottom, rgba(0, 0, 0, 0.26) 0 2px, transparent 2px 5px); }
 ROOT .tc-flash { background: #ffffff; opacity: 0; }
-ROOT .tc-box { position: absolute; left: 0; right: 0; display: flex; flex-direction: column; align-items: center;
+ROOT .tc-box { position: absolute; left: 0; right: 0; visibility: hidden; display: flex; flex-direction: column; align-items: center;
   justify-content: center; gap: 30px; }
 ROOT .tc-kicker { display: flex; align-items: center; gap: 18px; font-family: var(--font, sans-serif); font-weight: 800;
-  font-size: 46px; letter-spacing: 0.32em; color: var(--accent, #7dd3fc); white-space: nowrap; opacity: 0; }
-ROOT .tc-kicker i { display: block; width: 22px; height: 22px; background: var(--accent, #7dd3fc); }
+  font-size: 52px; letter-spacing: 0.32em; color: var(--accent, #7dd3fc); white-space: nowrap; opacity: 0; }
+ROOT .tc-kicker i { display: block; width: 0.55em; height: 0.55em; background: var(--accent, #7dd3fc); }
 ROOT .tc-title { position: relative; max-width: 86%; font-family: var(--font-display, var(--font, sans-serif));
-  font-weight: 900; font-synthesis: none; font-size: 112px; line-height: 1.02; letter-spacing: -0.02em; text-align: center;
+  font-weight: 900; font-synthesis: none; font-size: 150px; line-height: 1.02; letter-spacing: -0.02em; text-align: center;
   text-wrap: balance; color: var(--text, #ffffff); }
 ROOT .tc-sizer { visibility: hidden; }
-ROOT .tc-rgb { position: absolute; inset: 0; white-space: pre; will-change: transform; }
+ROOT .tc-rgb, ROOT .tc-slice { position: absolute; inset: 0; white-space: pre; will-change: transform; }
+ROOT .tc-base { text-shadow: 0 6px 40px rgba(0, 0, 0, 0.45); }
+ROOT .tc-slice { visibility: hidden; }
+ROOT .tc-slice.s0 { clip-path: inset(0 0 64% 0); }
+ROOT .tc-slice.s1 { clip-path: inset(38% 0 34% 0); }
+ROOT .tc-slice.s2 { clip-path: inset(70% 0 0 0); }
 ROOT .tc-a { color: var(--glitch-a, #ff0000); mix-blend-mode: screen; }
 ROOT .tc-b { color: var(--glitch-b, #00ffff); mix-blend-mode: screen; }
 ROOT .tc.light .tc-title { color: var(--ink, #0f172a); }
+ROOT .tc.light .tc-base { text-shadow: none; }
 ROOT .tc.light .tc-a, ROOT .tc.light .tc-b { mix-blend-mode: multiply; }
-ROOT .tc-rule { width: 38%; height: 10px; background: var(--accent, #7dd3fc); transform-origin: 0 50%; transform: scaleX(0); }
-html.f169 ROOT .tc-title { font-size: 132px; max-width: 80%; }
-html.f169 ROOT .tc-kicker { font-size: 44px; }
-html.f169 ROOT .tc-rule { width: 22%; }
+ROOT .tc-rule { width: 44%; height: 14px; background: var(--accent, #7dd3fc); transform-origin: 0 50%; transform: scaleX(0); }
+html.f169 ROOT .tc-title { font-size: 220px; max-width: 86%; }
+html.f169 ROOT .tc-kicker { font-size: 64px; }
+html.f169 ROOT .tc-rule { width: 30%; height: 18px; }
 </style>
-<markup><div class="tc"><div class="tc-scrim"></div><div class="tc-bars" data-layout-allow-overflow></div><div class="tc-lines"></div><div class="tc-box"><div class="tc-kicker"><i></i><span class="tc-k"></span></div><div class="tc-title" data-layout-allow-overlap><span class="tc-sizer">{{title}}</span><span class="tc-rgb tc-a" data-layout-ignore></span><span class="tc-rgb tc-b" data-layout-ignore></span><span class="tc-rgb tc-base"></span></div><div class="tc-rule"></div></div><div class="tc-flash"></div></div></markup>
+<markup><div class="tc"><div class="tc-scrim"></div><div class="tc-bars" data-layout-allow-overflow></div><div class="tc-lines"></div><div class="tc-box"><div class="tc-kicker"><i></i><span class="tc-k"></span></div><div class="tc-title" data-layout-allow-overlap><span class="tc-sizer">{{title}}</span><span class="tc-rgb tc-a" data-layout-ignore></span><span class="tc-rgb tc-b" data-layout-ignore></span><span class="tc-rgb tc-base"></span><span class="tc-slice s0" data-layout-ignore></span><span class="tc-slice s1" data-layout-ignore></span><span class="tc-slice s2" data-layout-ignore></span></div><div class="tc-rule"></div></div><div class="tc-flash"></div></div></markup>
 <script>
 // topic-change (WOW: overlay / scene / chapter; index.json "aroll_fx" {"dur": 0.6}: the build glitches the A-roll itself
 // on the main timeline — RGB split or wave — over the first 0.6 s). Over that glitch: 8 horizontal slice bars of the
@@ -34,12 +40,16 @@ html.f169 ROOT .tc-rule { width: 22%; }
 // --font-display as three copies (two coloured ghosts in screen blend — multiply on a light panel — and the text-colour
 // base) whose offsets fall to 0 while it decodes (U.scramble), the kicker in --accent and an accent rule. It holds, glitches
 // out for 0.3 s and hard-cuts with one 2-frame white flash. style "wave": the copies swing on a sine instead of jumping.
+// The scrim comes up only from +0.28 s (full by +0.48), so the A-roll glitch (and the build's punch-in) reads on the speaker first; the
+// title block appears at +0.12 s and punches in (1.16 -> 1), three horizontal slices of it jump sideways while it glitches, and it pushes in
+// slowly through the hold.
 // Everything is a pure function of t (U.seed per 2-frame step), so any frame renders the same alone.
 const tc = root.querySelector(".tc");
 const tcBox = root.querySelector(".tc-box"), tcTitle = root.querySelector(".tc-title");
 const tcCopies = Array.from(root.querySelectorAll(".tc-rgb"));
 const tcScrim = root.querySelector(".tc-scrim"), tcLines = root.querySelector(".tc-lines"), tcFlash = root.querySelector(".tc-flash");
 const tcKick = root.querySelector(".tc-kicker"), tcRule = root.querySelector(".tc-rule");
+const tcSlices = Array.from(root.querySelectorAll(".tc-slice"));
 const TC_IN = 0.6, TC_OUT = 0.3, TC_STEP = 1 / 15, TC_FLASH = 2 / 30;
 const tcAt = P.at || 0, tcEnd = Math.max(tcAt + 0.9, P.end || tcAt + 1.5), tcWave = P.style === "wave";
 const tcTxt = String(P.title || "").slice(0, 40);
@@ -108,17 +118,28 @@ U.clock((t) => {
     if (live) b.el.style.transform = `translateX(${(b.off[k % TC_STEPS] * Math.min(1, 0.4 + g)).toFixed(1)}px)`;
   });
   tcLines.style.opacity = u < 0 ? "0" : (0.3 + 0.55 * g).toFixed(3);
+  tcSlices.forEach((el, i) => {                        // slice displacement: bands of the title jump sideways
+    const on = g > 0.04 && r() < 0.75, dx = on ? Math.round((r() - 0.5) * 0.16 * W * g) : 0;
+    tcVis(el, on);
+    if (on) el.style.transform = `translateX(${dx}px)`;
+  });
 });
-// the title decodes in every copy (each its own seed: coloured noise while it decodes, one text when final)
+// the title decodes in every copy (each its own seed: coloured noise while it decodes, one text when final); the slices
+// show the base copy's text
 const tcScr = window.CutmateFX.pure.scrambleAt;
 U.clock((t) => {
-  const p = Math.min(1, Math.max(0, (t - tcAt - 0.04) / 0.5)), fr = Math.floor(t * 30 + 1e-6);
+  const p = Math.min(1, Math.max(0, (t - tcAt - 0.12) / 0.45)), fr = Math.floor(t * 30 + 1e-6);
   tcCopies.forEach((el, i) => { const s = tcScr(tcLaid, p, fr, 3 + 2 * i); if (el.textContent !== s) el.textContent = s; });
+  const base = tcCopies[tcCopies.length - 1].textContent;
+  tcSlices.forEach((el) => { if (el.textContent !== base) el.textContent = base; });
 });
 if (P.kicker) U.scramble(root.querySelector(".tc-k"), String(P.kicker), { from: tcAt + 0.12, dur: 0.4, seed: 11 });
 
 tl.set(tc, { autoAlpha: 1 }, tcAt);                    // hidden before by its CSS
-tl.fromTo(tcScrim, { opacity: 0 }, { opacity: 0.8, duration: 0.42, ease: "steps(6)", immediateRender: false }, tcAt + 0.12);
+tl.fromTo(tcScrim, { opacity: 0 }, { opacity: 0.78, duration: 0.2, ease: "steps(3)", immediateRender: false }, tcAt + 0.28);
+tl.set(tcBox, { autoAlpha: 1 }, tcAt + 0.12);          // the first 0.12 s: the A-roll glitch alone
+tl.fromTo(tcBox, { scale: 1.16 }, { scale: 1, duration: 0.5, ease: "expo.out", immediateRender: false }, tcAt + 0.12);
+tl.fromTo(tcBox, { scale: 1 }, { scale: 1.04, duration: Math.max(0.1, tcEnd - TC_OUT - tcAt - 0.5), ease: "none", immediateRender: false }, tcAt + 0.5);
 tl.fromTo(tcKick, { opacity: 0, x: -24 }, { opacity: 1, x: 0, duration: 0.3, ease: "power3.out", immediateRender: false }, tcAt + 0.12);
 tl.fromTo(tcRule, { scaleX: 0 }, { scaleX: 1, duration: 0.45, ease: "expo.out", immediateRender: false }, tcAt + 0.42);
 tl.to(tcRule, { scaleX: 0, transformOrigin: "100% 50%", duration: 0.22, ease: "power2.in", immediateRender: false }, tcEnd - TC_OUT);
