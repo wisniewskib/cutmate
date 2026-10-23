@@ -35,18 +35,19 @@ ROOT .wow-label .n { flex: none; width: calc(var(--s) * 42px); height: calc(var(
 // transparent overlay).
 
 // ---- pure helpers (window.CutmateFX.wow, registered once) ----
-const SLAB = 0.5, GAP = 0.55, FAN = 0.06;
+const SLAB = 0.5, GAP = 1.0, FAN = 0.2;
 // centres of `parts` slabs stacked along `axis` ("y" bottom→top, "x" left→right) at explode amount k (0 assembled:
 // every slab touches the next, 1 exploded: GAP between slabs) plus a slight linear fan across the axis; symmetric about
-// the centre. `parts`: a count (slabs SLAB thick) or the list of slab thicknesses
-function explodeLayout(parts, axis, k) {
+// the centre. `parts`: a count (slabs SLAB thick) or the list of slab thicknesses; `gap0` / `fan0`: the exploded gap and
+// the sideways step per part (defaults GAP / FAN)
+function explodeLayout(parts, axis, k, gap0, fan0) {
   const hs = Array.isArray(parts) ? parts.map((h) => Math.max(0.01, Number(h) || SLAB))
     : Array.from({ length: Math.max(0, Math.floor(Number(parts) || 0)) }, () => SLAB);
   const n = hs.length, q = Math.min(1, Math.max(0, Number(k) || 0));
-  const gap = GAP * q, mid = (n - 1) / 2;
+  const gap = (gap0 > 0 ? gap0 : GAP) * q, mid = (n - 1) / 2;
   let c = -(hs.reduce((a, b) => a + b, 0) + gap * Math.max(0, n - 1)) / 2;
   return hs.map((h, i) => {
-    const along = c + h / 2, fan = FAN * (i - mid) * q;
+    const along = c + h / 2, fan = (fan0 > 0 ? fan0 : FAN) * (i - mid) * q;
     c += h + gap;
     return axis === "x" ? [along, fan, 0] : [fan, along, 0];
   });
@@ -88,7 +89,11 @@ const AXIS = P.axis === "x" ? "x" : "y";
 const heights = parts.map((p) => p.h);
 
 const box = root.querySelector(".xv");
-const s = Math.min(P.w / 1000, P.h / 880);
+// type size: a panel item ~40 px at 1000 x 880; a full-frame scene / side ~50 px per 1080 px of the shorter side (a reel
+// on a phone). --s scales pills, chips, lines and margins with it
+const labelPx = P.panel ? 40 * Math.min(P.w / 1000, P.h / 880) : 50 * Math.min(P.w, P.h) / 1080;
+const titlePx = P.panel ? 60 * Math.min(P.w / 1000, P.h / 880) : 84 * Math.min(P.w, P.h) / 1080;
+const s = labelPx / 31;
 box.style.setProperty("--s", s);
 if (P.bg === "none") box.classList.add("bare");
 const lightPanel = U.panelLight(box);
@@ -110,7 +115,7 @@ const kAt = (t) => (t < T.in ? 0 : t < T.ex ? inOut3((t - T.in) / (T.ex - T.in))
   : t < T.slam ? 1 - in3((t - T.hold) / (T.slam - T.hold)) : 0);
 
 const ready = U.three({ el: root.querySelector(".xv-stage"), camera: { fov: 30 },
-                        bloom: { strength: 0.6, radius: 0.4, threshold: 1.7, alpha: "keep" } }).then(async (S) => {
+                        bloom: { strength: lightPanel ? 0.12 : 0.6, radius: 0.4, threshold: 1.7, alpha: "keep" } }).then(async (S) => {
   const { THREE, scene, camera, renderer } = S;
   await Promise.all([U.fonts([600, 800, 900]), U.fonts([900], U.token("--font-display", "") || undefined)]);   // titles: display font
   const bloom = S.composer && S.composer.passes.find((p) => p.strength !== undefined);
@@ -131,7 +136,9 @@ const ready = U.three({ el: root.querySelector(".xv-stage"), camera: { fov: 30 }
   const NEAR_BLACK = new THREE.Color(0.035, 0.037, 0.045);
   // emissive accent for the glowing edges: scaled to a fixed luminance, so any accent (sky blue, orange) blooms alike
   const lum = (c) => 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
-  const glowAcc = ACC.clone().multiplyScalar(2.6 / Math.max(0.04, lum(ACC)));   // above the bloom threshold (lit white is not)
+  // (a light panel: plain accent — additive glow adds no contrast on a light background, it only washes the object out)
+  const glowAcc = lightPanel ? ACC.clone() : ACC.clone().multiplyScalar(2.6 / Math.max(0.04, lum(ACC)));   // above the bloom threshold (lit white is not)
+  const WHITE = lightPanel ? CARD.clone().lerp(MUT, 0.35) : CARD;   // white parts keep their edges on a light panel
 
   renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 0.85;
   const { RoomEnvironment } = await import("three/addons/environments/RoomEnvironment.js");
@@ -189,7 +196,7 @@ const ready = U.three({ el: root.querySelector(".xv-stage"), camera: { fov: 30 }
       const cnt = Math.max(1, p.n || 1);
       for (let c = 0; c < cnt; c++) {
         const x = (c - (cnt - 1) / 2) * p.r * 2.9;
-        g.add(disc(p.r, h, std(tint(CARD), { metalness: 1, roughness: 0.18 }), 0, x));
+        g.add(disc(p.r, h, std(tint(WHITE), { metalness: 1, roughness: 0.18 }), 0, x));
         for (const yy of [h / 2 - 0.08, h / 2 - 0.15]) {
           g.add(mesh(new THREE.TorusGeometry(p.r * 1.004, 0.012, 8, 48).rotateX(Math.PI / 2), dark, x, yy));
         }
@@ -231,7 +238,7 @@ const ready = U.three({ el: root.querySelector(".xv-stage"), camera: { fov: 30 }
       g.add(mesh(slab(sh, h, 0.02), std(tint(ACC), { metalness: 0.75, roughness: 0.3 })));
       g.add(mesh(new THREE.TorusGeometry(R * 0.3, 0.02, 8, 40).rotateX(Math.PI / 2), glow(), 0, h / 2 + 0.01));
     } else if (p.shape === "board") {
-      const base = p.plain ? [CARD, MUT, ACC][i % 3] : MUT;
+      const base = p.plain ? [WHITE, MUT, ACC][i % 3] : MUT;
       g.add(mesh(slab(rrect(p.w, p.d, 0.08), h, 0.015), std(tint(base), { metalness: p.plain ? 0.1 : 0.25, roughness: p.plain ? 0.3 : 0.55 })));
       if (p.plain) {
         g.add(band(p.w, p.d, 0.08, 0.025, h * 0.35, glow(), 0));
@@ -258,7 +265,7 @@ const ready = U.three({ el: root.querySelector(".xv-stage"), camera: { fov: 30 }
         new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 1.15, roughness: 0.15 }));
       glass.position.y = h / 2 + 0.003; g.add(glass);
     } else {                                                   // shell: a rounded cover with a glowing ridge
-      g.add(mesh(slab(rrect(p.w, p.d, Math.min(0.24, p.d * 0.3)), h, Math.min(0.14, h * 0.42)), std(tint(CARD).clone().multiplyScalar(0.78), { metalness: 0.05, roughness: 0.38 })));
+      g.add(mesh(slab(rrect(p.w, p.d, Math.min(0.24, p.d * 0.3)), h, Math.min(0.14, h * 0.42)), std(tint(WHITE).clone().multiplyScalar(0.78), { metalness: 0.05, roughness: 0.38 })));
       g.add(mesh(slab(rrect(p.w * 0.55, 0.05, 0.024), 0.02, 0), glow(), 0, h / 2 + 0.005));
     }
     return g;
@@ -276,6 +283,7 @@ const ready = U.three({ el: root.querySelector(".xv-stage"), camera: { fov: 30 }
   const footD = parts.map((p) => (p.r ? p.r * 2 : p.d));
   const silhouette = (i, yaw) => Math.abs(footW[i] / 2 * Math.cos(yaw)) + Math.abs(footD[i] / 2 * Math.sin(yaw));
   const halfPerp = Math.max(...parts.map((p, i) => Math.hypot(footW[i], footD[i]) / 2));
+  const floorR = Math.hypot(footW[0], footD[0]) / 2 * 0.95;    // the floor rings: under the bottom part
 
   // floor: contact shadow + platform rings + the click shockwave (axis y only: a floor under the stack)
   const radial = (stops) => {
@@ -288,12 +296,12 @@ const ready = U.three({ el: root.querySelector(".xv-stage"), camera: { fov: 30 }
   const floor = new THREE.Group(); holder.parent.add(floor);
   const shadow = new THREE.Mesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({
     map: radial([[0, 1], [0.45, 0.55], [1, 0]]), color: 0x000000, transparent: true, opacity: lightPanel ? 0.32 : 0.6, depthWrite: false }));
-  shadow.scale.set(halfPerp * 2.6, 1, halfPerp * 1.9); floor.add(shadow);
+  shadow.scale.set(floorR * 2.6, 1, floorR * 1.9); floor.add(shadow);
   const ringMat = (o) => new THREE.MeshBasicMaterial({ color: lightPanel ? ACC : glowAcc, toneMapped: false, transparent: true, opacity: o, depthWrite: false,
     blending: lightPanel ? THREE.NormalBlending : THREE.AdditiveBlending, side: THREE.DoubleSide });
   const RINGS = [1.15, 1.4];
   const rings = RINGS.map((k, j) => {
-    const m = new THREE.Mesh(new THREE.RingGeometry(halfPerp * k - 0.012, halfPerp * k + 0.012, 128).rotateX(-Math.PI / 2), ringMat(j ? 0.18 : 0.35));
+    const m = new THREE.Mesh(new THREE.RingGeometry(floorR * k - 0.012, floorR * k + 0.012, 128).rotateX(-Math.PI / 2), ringMat(j ? 0.18 : 0.35));
     floor.add(m); return m;
   });
   const wave = new THREE.Mesh(new THREE.RingGeometry(0.92, 1, 128).rotateX(-Math.PI / 2), ringMat(0));
@@ -309,7 +317,7 @@ const ready = U.three({ el: root.querySelector(".xv-stage"), camera: { fov: 30 }
     titleEl.innerHTML = "";
     titleEl.appendChild(document.createTextNode(String(P.title)));
     const bar = document.createElement("span"); bar.className = "bar"; titleEl.appendChild(bar);
-    let fs = 64 * s;
+    let fs = titlePx;
     titleEl.style.fontSize = fs + "px";
     const maxW = P.w * 0.86;
     if (titleEl.scrollWidth > maxW) { fs *= maxW / titleEl.scrollWidth; titleEl.style.fontSize = fs + "px"; }
@@ -342,12 +350,33 @@ const ready = U.three({ el: root.querySelector(".xv-stage"), camera: { fov: 30 }
   const AZ = AXIS === "x" ? -0.75 : 0;                       // a horizontal stack is seen from the side: the faces show
   const margin = 26 * s, gapPx = 30 * s;
   const area = { x0: margin, x1: P.w - margin, y0: Math.max(margin, titleH), y1: P.h - margin };
+  // the object gets most of the region: the pills may overlap its outer margin (short leaders) instead of reserving
+  // whole label columns
+  const aw = area.x1 - area.x0, ah = area.y1 - area.y0;
   const room = AXIS === "y"
-    ? { w: Math.max(P.w * 0.22, (area.x1 - area.x0) - 2 * (labW + gapPx)), h: (area.y1 - area.y0) * 0.9 }
-    : { w: (area.x1 - area.x0) * 0.9, h: Math.max(P.h * 0.22, (area.y1 - area.y0) - 2 * (labH + gapPx)) };
+    ? { w: Math.min(aw * 0.8, Math.max(aw * 0.62, aw - 2 * (labW + gapPx))), h: ah * 0.92 }
+    : { w: aw * 0.92, h: Math.min(ah * 0.8, Math.max(ah * 0.5, ah - 2 * (labH + gapPx))) };
+  // the exploded gap: as long as the room's shape allows (a dramatic "taken apart"), never under 0.7 or a part's height
+  const footMax = Math.max(...parts.map((p, i) => Math.hypot(footW[i], footD[i]) * 0.86));
+  const along = footMax * (AXIS === "y" ? room.h / room.w : room.w / room.h) * 0.92;
+  const sumH = heights.reduce((a, b) => a + b, 0);
+  const GAPX = Math.min(1.6, Math.max(0.7, 0.9 * Math.max(...heights), (along - sumH) / Math.max(1, n - 1)));
+  // the sideways step: a squarish room gets a diagonal explode (the box of the exploded object matches the room, so it
+  // fills a panel instead of standing as a thin tower), a tall / wide one a slight fan
+  const lenX = sumH + (n - 1) * GAPX;
+  // (label columns that do not fit beside the object also call for the diagonal: the pills then sit in its empty corners,
+  // and the object gets the region's width)
+  const noColumns = AXIS === "y" && aw - 2 * (labW + gapPx) < room.w * 0.98;
+  const fanFor = (rw, rh) => ((AXIS === "y" ? rw / rh : rh / rw) * lenX - footMax) / Math.max(1, n - 1);
+  const DIAG = AXIS === "y" && (noColumns || fanFor(room.w, room.h) > 0.3);
+  if (DIAG) room.w = aw * 0.84;
+  const FANX = DIAG ? Math.min(1.9, Math.max(0.5, fanFor(room.w, room.h))) : Math.min(1.0, Math.max(FAN, fanFor(room.w, room.h)));
+  // label sides: a diagonal leaves the upper left and the lower right empty, so upper parts are labelled on the left and
+  // lower ones on the right, right beside their part; otherwise the sides alternate in columns hugging the object
+  labels.forEach((l, i) => { l.side = DIAG ? (i > (n - 1) / 2 ? -1 : 1) : AXIS === "y" ? (i % 2 ? -1 : 1) : (i % 2 ? 1 : -1); });
   const centre = [(area.x0 + area.x1) / 2, (area.y0 + area.y1) / 2 + (AXIS === "y" ? 0.02 * P.h : 0)];
   const view = centre.slice();                                 // where the world origin lands on screen
-  const L1 = explodeLayout(heights, AXIS, 1);
+  const L1 = explodeLayout(heights, AXIS, 1, GAPX, FANX);
   let D = 12;
   const place = (d) => {
     camera.position.set(Math.sin(AZ) * Math.cos(ELEV) * d, Math.sin(ELEV) * d, Math.cos(AZ) * Math.cos(ELEV) * d);
@@ -369,17 +398,17 @@ const ready = U.three({ el: root.querySelector(".xv-stage"), camera: { fov: 30 }
         }
       }
     });
-    if (floorToo && AXIS === "y") {                           // the floor rings under the stack: height only
-      const fy = L1[0][1] - heights[0] / 2 - 0.02, fr = halfPerp * RINGS[RINGS.length - 1];
+    if (floorToo && AXIS === "y") {                           // the floor rings under the stack
+      const fy = L1[0][1] - heights[0] / 2 - 0.02, fr = floorR * RINGS[RINGS.length - 1];
       for (let a = 0; a < 24; a++) {
-        const [x, y] = U.toScreen(S, [Math.cos((a / 24) * Math.PI * 2) * fr, fy, Math.sin((a / 24) * Math.PI * 2) * fr]);
+        const [x, y] = U.toScreen(S, [L1[0][0] + Math.cos((a / 24) * Math.PI * 2) * fr, fy, Math.sin((a / 24) * Math.PI * 2) * fr]);
         x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y);
       }
     }
     return { w: x1 - x0, h: y1 - y0, cx: (x0 + x1) / 2, cy: (y0 + y1) / 2 };
   };
-  // the parts set the width (labels sit beside them), parts + floor rings the height
-  const fit = () => { const a = extent(false), b = extent(true); return { w: a.w, h: b.h, cx: a.cx, cy: b.cy, half: AXIS === "y" ? a.w / 2 : a.h / 2 }; };
+  // parts + floor rings are fitted and centred; the parts alone set the label columns
+  const fit = () => { const a = extent(false), b = extent(true); return { w: b.w, h: b.h, cx: b.cx, cy: b.cy, half: AXIS === "y" ? a.w / 2 : a.h / 2 }; };
   for (let it = 0; it < 5; it++) {
     place(D);
     const e = fit();
@@ -393,6 +422,7 @@ const ready = U.three({ el: root.querySelector(".xv-stage"), camera: { fov: 30 }
 
   // ---- one clock: every frame is a pure function of t ----
   const tmp = new THREE.Vector3();
+  const TWIST = 0.34;                                          // fan: each part turns ~20° further than the one below
   const colX = { "1": centre[0] + objHalf + gapPx, "-1": centre[0] - objHalf - gapPx };
   const colY = { "1": centre[1] + objHalf + gapPx, "-1": centre[1] - objHalf - gapPx };
   const lo = { x: area.x0, y: area.y0 }, hi = { x: area.x1, y: area.y1 };
@@ -418,24 +448,26 @@ const ready = U.three({ el: root.querySelector(".xv-stage"), camera: { fov: 30 }
     const spin = -0.55 - 1.7 * (1 - out3(uin)) + 0.3 * (a / span) + 1.15 * smooth(0.5, 0.82, a / span);
     const yaw = AXIS === "y" ? spin : 0.3 * (spin + 0.55);    // axis x: the stack only rocks about its axis
     const bob = Math.sin(a * 1.7) * 0.03 * k;
-    const lay = explodeLayout(heights, AXIS, k);
+    const lay = explodeLayout(heights, AXIS, k, GAPX, FANX);
+    // the camera starts close on the assembled object and pulls back as it comes apart; a slow push during the hold
+    place(D * (0.9 + 0.1 * k) * (1 - 0.03 * smooth(0.55, 0.8, a / span)));
     const mid = (n - 1) / 2;
     pivots.forEach((pv, i) => {
       pv.position.set(lay[i][0], lay[i][1] + (AXIS === "y" ? bob : 0), lay[i][2] + (AXIS === "x" ? bob : 0));
-      const twist = (i - mid) * 0.2 * k;
+      const twist = (i - mid) * TWIST * k;
       if (AXIS === "y") pv.rotation.set(0, yaw + twist, 0); else pv.rotation.set(yaw + twist, 0, 0);
     });
     // floor follows the bottom part; the click: shockwave, flare, a bloom kick
     const bottom = lay[0][1] - heights[0] / 2 - 0.02;
-    floor.position.y = bottom * sc;
+    floor.position.set(lay[0][0] * sc, bottom * sc, 0);         // under the bottom part (the diagonal moves it aside)
     floor.scale.setScalar(sc);
     shadow.material.opacity = (lightPanel ? 0.32 : 0.6) * (1 - 0.45 * k);
     rings.forEach((r, j) => { r.material.opacity = (j ? 0.18 : 0.35) * (0.6 + 0.4 * k) * (0.7 + 0.3 * Math.sin(a * 2.4 + j)); });
     wave.material.opacity = flash * 0.9;
-    wave.scale.setScalar(halfPerp * (1.1 + (1 - flash) * 1.6));
-    flare.material.opacity = flash * 0.45;
+    wave.scale.setScalar(floorR * (1.1 + (1 - flash) * 1.4));
+    flare.material.opacity = lightPanel ? 0 : flash * 0.45;
     flare.scale.setScalar(halfPerp * (1.2 + 1.4 * (1 - flash)) * sc);
-    if (bloom) bloom.strength = 0.6 + 0.6 * flash;
+    if (bloom) bloom.strength = lightPanel ? 0.12 : 0.6 + 0.6 * flash;
     // title
     if (P.title) {
       const ti = out3(clamp(a / 0.45)), to = clamp((t - (P.end - 0.35)) / 0.3);
@@ -448,12 +480,17 @@ const ready = U.three({ el: root.querySelector(".xv-stage"), camera: { fov: 30 }
     const fadeOut = 1 - smooth(T.hold, T.hold + Math.min(0.3, 0.06 * span), t);
     const pos = labels.map((l, i) => {
       const c = lay[i];
-      const ext = silhouette(i, yaw + (i - mid) * 0.2 * k) * 0.94;
+      const ext = silhouette(i, yaw + (i - mid) * TWIST * k) * 0.94;
       if (AXIS === "y") tmp.set(c[0] + l.side * ext, c[1] + bob, c[2]); else tmp.set(c[0], c[1] - l.side * ext, c[2] + bob);   // world +y is screen up
       tmp.multiplyScalar(sc);
       const [ax, ay] = U.toScreen(S, tmp);
       return { ax, ay, x: AXIS === "y" ? colX[l.side] : ax, y: AXIS === "y" ? ay : colY[l.side] };
     });
+    if (AXIS === "y") {                                         // columns follow the object as it turns and comes apart
+      const edge = { "1": -1e9, "-1": 1e9 };
+      labels.forEach((l, i) => { edge[l.side] = l.side > 0 ? Math.max(edge[1], pos[i].ax) : Math.min(edge[-1], pos[i].ax); });
+      labels.forEach((l, i) => { pos[i].x = (DIAG ? pos[i].ax : edge[l.side]) + l.side * 34 * s; });
+    }
     // keep the pills apart in each column (deterministic push), inside the area
     for (const side of [-1, 1]) {
       const ids = labels.map((l, i) => i).filter((i) => labels[i].side === side);

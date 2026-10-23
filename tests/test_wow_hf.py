@@ -156,6 +156,20 @@ def _spans(proj: Path, name: str) -> list[tuple]:
     return out
 
 
+def _object_box(a: np.ndarray, box, bg, pills=()) -> tuple:
+    """The 3D object's bounding box (frame px) inside `box`: pixels clearly off the background colour, label pills
+    blanked out, 1st-99th percentile of columns / rows (a stray glow pixel does not stretch it)."""
+    sub = _crop(a, box).copy()
+    for x0, y0, x1, y1 in pills:
+        sub[max(0, y0 - box[1] - 6):y1 - box[1] + 6, max(0, x0 - box[0] - 6):x1 - box[0] + 6] = bg
+    m = np.abs(sub - np.array(bg)).max(axis=2) > 45
+    ys, xs = np.nonzero(m)
+    if not len(xs):
+        return (0, 0, 0, 0)
+    x0, x1 = np.percentile(xs, [1, 99]); y0, y1 = np.percentile(ys, [1, 99])
+    return (box[0] + x0, box[1] + y0, box[0] + x1, box[1] + y1)
+
+
 def _check_ok(proj):
     chk = check(proj)
     if chk.status == "deadline":
@@ -182,6 +196,7 @@ def test_exploded_view_panel_item(tmp_path, home):
     pills = _pills(_img(s_mid), BOX)
     print("pills at mid:", pills)
     assert len(pills) >= 4, (pills, s_mid)
+    assert min(y1 - y0 for x0, y0, x1, y1 in pills) >= 54, pills  # readable on a phone (~40 px type in the panel)
     for x0, y0, x1, y1 in pills:                                # nothing clipped at the panel edge
         assert x0 > BOX[0] + 2 and x1 < BOX[0] + BOX[2] - 2 and y0 > BOX[1] + 2 and y1 < BOX[1] + BOX[3] - 2
     worst = wowkit.seek_safe(proj, mid)
@@ -202,6 +217,33 @@ def test_exploded_view_scene_169(tmp_path, home):
     print("pills at mid:", pills)
     assert len(pills) >= 4, (pills, s_mid)
     print("strip:", wowkit.strip(proj, 0.5, 4.5, 0.25))
+
+
+def test_exploded_view_fills_a_916_scene(tmp_path, home):
+    """A reel scene: the exploded object takes most of the frame width, reads as taken apart (exploded much taller than
+    assembled) and its labels are big enough for a phone."""
+    plan = {"scenes": [{"from": 0.5, "to": 4.5, "effect": "exploded-view", "params": {"preset": "engine", "title": "Silnik"}}]}
+    proj = wowkit.project(tmp_path, plan, dur=5.0)
+    (at, end), = _spans(proj, "exploded-view")
+    span = end - at
+    t_asm, t_mid = round(at + 0.19 * span, 3), round(at + 0.62 * span, 3)
+    s_asm, s_mid = wowkit.snap(proj, t_asm), wowkit.snap(proj, t_mid)
+    print(f"snapshot assembled {t_asm}: {s_asm}\nsnapshot exploded {t_mid}: {s_mid}")
+    full, below = (0, 0, 1080, 1920), (0, 300, 1080, 1800)     # the object is measured under the title band
+    a, m = _img(s_asm), _img(s_mid)
+    pills = _pills(m, full)
+    print("pills:", pills)
+    assert len(pills) >= 4 and min(y1 - y0 for x0, y0, x1, y1 in pills) >= 64, pills   # ~50 px type at 1080 wide
+    bx_a, bx_m = _object_box(a, below, (0x0b, 0x0b, 0x0f)), _object_box(m, below, (0x0b, 0x0b, 0x0f), pills)
+    wr = (bx_m[2] - bx_m[0]) / 1080
+    hr = (bx_m[3] - bx_m[1]) / max(1.0, bx_a[3] - bx_a[1])
+    print(f"object box assembled {bx_a}, exploded {bx_m}: width {wr:.2f} of the frame, exploded / assembled height {hr:.2f}")
+    assert wr >= 0.55, (wr, s_mid)
+    assert hr >= 1.5, (hr, s_asm, s_mid)
+    worst = wowkit.seek_safe(proj, t_mid)
+    print(f"seek_safe({t_mid}) = {worst}")
+    assert worst <= 1.0
+    print("strip:", wowkit.strip(proj, at, end, 0.25))
 
 
 def test_globe_panel_and_scene(tmp_path, home):
@@ -259,6 +301,12 @@ def test_three_explainers_take_light_panel(tmp_path, home):
     orange = int(_hue_mask(sides, 15, 30, sat=0.5).sum())
     print(f"orange px in the exploded label columns: {orange}")
     assert orange >= 150, (orange, s_x)
+    # no white haze over the object: it keeps its contrast against the light panel (bloom / glow wash it out)
+    ob = _object_box(_img(s_x), BOX, (0xef, 0xec, 0xe7))
+    reg = _img(s_x)[int(ob[1]):int(ob[3]), int(ob[0]):int(ob[2])].astype(np.float32)
+    lum = reg @ np.array([0.2126, 0.7152, 0.0722], dtype=np.float32)
+    print(f"light panel object box {ob}: luminance mean {lum.mean():.1f}, std {lum.std():.1f}")
+    assert lum.std() >= 35 and lum.mean() <= 205, (lum.mean(), lum.std(), s_x)
     g = _img(s_g)
     for (x, y, front), k in zip(_arc_mids(_globe_spec(BOX, ga, ge, True), t_g), TO):
         win = g[int(BOX[1] + y) - 12:int(BOX[1] + y) + 13, int(BOX[0] + x) - 12:int(BOX[0] + x) + 13]

@@ -5,8 +5,8 @@ ROOT .gl-glow { position: absolute; inset: 0; }
 /* the atmosphere: a DOM halo behind the canvas (a transparent WebGL glow is sRGB-encoded without its alpha) */
 ROOT .gl-halo { position: absolute; left: 0; top: 0; width: 100px; height: 100px; border-radius: 50%; opacity: 0;
   background: radial-gradient(circle closest-side, transparent 0%, transparent 76%,
-    color-mix(in srgb, var(--accent, #7dd3fc) 62%, transparent) 79%, color-mix(in srgb, var(--accent, #7dd3fc) 22%, transparent) 86%,
-    color-mix(in srgb, var(--accent, #7dd3fc) 6%, transparent) 93%, transparent 100%); }
+    color-mix(in srgb, var(--accent, #7dd3fc) 48%, transparent) 78.5%, color-mix(in srgb, var(--accent, #7dd3fc) 16%, transparent) 83%,
+    color-mix(in srgb, var(--accent, #7dd3fc) 5%, transparent) 91%, transparent 100%); }
 ROOT .gl-stage { position: absolute; inset: 0; }
 ROOT svg.gl-lines { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
 ROOT .gl-labels { position: absolute; inset: 0; }
@@ -123,7 +123,10 @@ const ISO = (v) => String(v || "").trim().toUpperCase();
 const fromIso = ISO(P.from) || "PL";
 const toIso = (Array.isArray(P.to) ? P.to : P.to ? [P.to] : []).map(ISO).filter((c) => c && c !== fromIso).slice(0, 6);
 const box = root.querySelector(".gl");
-const s = Math.min(P.w / 1000, P.h / 880);
+// type size: a panel item ~40 px at 1000 x 880; a full-frame scene / side ~50 px per 1080 px of the shorter side
+const labelPx = P.panel ? 40 * Math.min(P.w / 1000, P.h / 880) : 50 * Math.min(P.w, P.h) / 1080;
+const titlePx = P.panel ? 60 * Math.min(P.w / 1000, P.h / 880) : 84 * Math.min(P.w, P.h) / 1080;
+const s = labelPx / 31;
 box.style.setProperty("--s", s);
 const lightPanel = U.panelLight(box);
 if (lightPanel) box.style.setProperty("--pi", "var(--ink, #0f172a)");
@@ -248,7 +251,7 @@ const ready = U.three({ el: root.querySelector(".gl-stage"), camera: { fov: 30, 
   if (P.title) {
     titleEl.textContent = String(P.title);
     const bar = document.createElement("span"); bar.className = "bar"; titleEl.appendChild(bar);
-    let fs = 64 * s; titleEl.style.fontSize = fs + "px";
+    let fs = titlePx; titleEl.style.fontSize = fs + "px";
     if (titleEl.scrollWidth > P.w * 0.86) { fs *= (P.w * 0.86) / titleEl.scrollWidth; titleEl.style.fontSize = fs + "px"; }
     titleEl.style.top = Math.round(P.h * 0.045) + "px";
   } else titleEl.remove();
@@ -266,6 +269,8 @@ const ready = U.three({ el: root.querySelector(".gl-stage"), camera: { fov: 30, 
     const chip = document.createElement("span"); chip.className = "n"; chip.textContent = i ? String(i) : origin;
     const tx = document.createElement("span"); tx.textContent = names[i];
     el.appendChild(chip); el.appendChild(tx); root.querySelector(".gl-labels").appendChild(el);
+    // the text box keeps the final text's width while it decodes (scramble glyphs are wider than most letters)
+    Object.assign(tx.style, { display: "inline-block", width: Math.ceil(tx.getBoundingClientRect().width) + 1 + "px", overflow: "hidden" });
     const w = el.offsetWidth, h = el.offsetHeight;
     const line = document.createElementNS(NS, "line");
     line.setAttribute("stroke", accentCss); line.setAttribute("stroke-width", String(3 * s)); line.setAttribute("stroke-linecap", "round");
@@ -292,7 +297,7 @@ const ready = U.three({ el: root.querySelector(".gl-stage"), camera: { fov: 30, 
     const hd = (2 * pose.R) / 0.78;                                    // the halo's 78 % stop sits on the limb
     halo.style.width = halo.style.height = hd.toFixed(1) + "px";
     halo.style.transform = "translate(" + (pose.cx - hd / 2).toFixed(1) + "px," + (pose.cy - hd / 2).toFixed(1) + "px)";
-    halo.style.opacity = String(on ? smooth(P.at, P.at + B.tIn, t) * gone * (lightPanel ? 0.8 : 1) : 0);
+    halo.style.opacity = String(on ? smooth(P.at + 0.5 * B.tIn, P.at + 1.4 * B.tIn, t) * gone * (lightPanel ? 0.8 : 1) : 0);   // after the spin-in
     if (P.title) {
       const ti = out3(clamp(a / 0.45));
       titleEl.style.opacity = String(on ? ti * gone : 0);
