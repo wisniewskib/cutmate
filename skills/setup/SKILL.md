@@ -31,7 +31,7 @@ If `${CUTMATE_HOME:-$HOME/.cutmate}/config.json` exists and the CLI runs:
   moved, the venv still points at the old copy) → run detect (step 1) and re-run step 4's `setup.sh` with the same
   flags as before (`--gpu <gpu.kind>` from detect, `--local` when config `transcription` is `local`; Windows:
   `setup.ps1 -Gpu … -Local`), then go on.
-- **Vendor libraries:** `$CM doctor` → `vendor`. Not `ok` (e.g. `gsap missing — run cutmate vendor`) → run
+- **Vendor libraries:** `$CM doctor` → `vendor`. Not `ok` (e.g. `gsap missing — run cutmate vendor (in Claude Code: "$CM" vendor) or /cutmate:setup`) → run
   `"$CM" vendor` (it downloads gsap into the cutmate home, sha-checked; safe to repeat), check `vendor` is `ok` now. A
   download error → tell the user to check the connection and run it again; renders need it.
 - **Finished?** Setup is finished ⇔ the smoke render exists: `${CUTMATE_HOME:-$HOME/.cutmate}/smoke/rec/out/final.mp4`

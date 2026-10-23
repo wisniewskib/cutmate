@@ -75,7 +75,8 @@ def _guard(fn, default):
 def _vendor() -> str:
     from . import vendor
     gone = vendor.missing()
-    return "ok" if not gone else f"{', '.join(g.split('@')[0] for g in gone)} missing — run cutmate vendor"
+    return "ok" if not gone else (f"{', '.join(g.split('@')[0] for g in gone)} missing — "
+                                  'run cutmate vendor (in Claude Code: "$CM" vendor) or /cutmate:setup')
 
 
 def doctor() -> dict:

@@ -84,7 +84,7 @@ def test_doctor_vendor_missing_and_ok(tmp_path, monkeypatch):
     (tmp_path / "bundled").mkdir()
     (tmp_path / "bundled" / "MANIFEST.json").write_text(
         (paths.vendor_dir() / "MANIFEST.json").read_text(encoding="utf-8"), encoding="utf-8")
-    assert dr.doctor()["vendor"] == "gsap missing — run cutmate vendor"
+    assert dr.doctor()["vendor"] == 'gsap missing — run cutmate vendor (in Claude Code: "$CM" vendor) or /cutmate:setup'
     for e in vendor.fetched_entries():
         for rel in e["files"]:
             src = paths.vendor_dir() / f"{e['name']}@{e['version']}" / rel

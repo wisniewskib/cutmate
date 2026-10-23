@@ -99,7 +99,7 @@ def vendor_root(folder: str) -> Path:
         if (base / folder).is_dir():
             return base / folder
     raise CutmateError(f"vendored library {folder} not found (looked in {vendor_dir()} and {home() / 'vendor'}) — "
-                       'run "$CM" vendor (or /cutmate:setup)')
+                       'run cutmate vendor (in Claude Code: "$CM" vendor) or /cutmate:setup')
 
 
 def vendor_files(texts: list[str]) -> list[str]:
