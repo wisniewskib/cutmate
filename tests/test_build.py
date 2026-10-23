@@ -1524,3 +1524,83 @@ def test_wow_effects_get_the_caption_band(tmp_path, monkeypatch):
     proj = wowkit.project(tmp_path / "c", {"graphics": [{"type": "custom", "name": "globe", "from": 0.5, "to": 3.5,
                                                          "params": globe}]}, fmt="16:9", dur=5.0)
     assert "caption_band" not in _built_P(proj)["globe"][0]
+
+
+# ---- burst-out hooks: hit at an anchor, the speaker cut-out inside a bg effect, shake hosts ----
+
+def _fake_cut(calls):
+    def fake(aroll, a, b, media):
+        calls.append((a, b))
+        name = f"bgcut-{int(a * 1000)}-{int(b * 1000)}.webm"
+        (media / name).write_bytes(b"w")
+        return name
+    return fake
+
+
+def test_hits_use_hit_anchor(out, theme):
+    write_plan(out, {"graphics": [{"type": "title", "at": "S2:minus", "until": "S2:</script>", "text": "X",
+                                   "hit": "S2:Claude'a"}]})
+    html = (B.build(out, theme=theme)["project"] / "index.html").read_text(encoding="utf-8")
+    hits = cfg_of(html)["hits"]
+    assert len(hits) == 1 and hits[0][0] == 2.75
+    name = B._theme_meta(paths.theme_dir(theme))["hit_sfx"][0]
+    file = json.loads((paths.assets_dir() / "sfx" / "manifest.json").read_text(encoding="utf-8"))[name]["file"]
+    starts = [float(s) for s in re.findall(rf'src="assets/sfx/{re.escape(file)}" data-start="([\d.]+)"', html)]
+    assert starts == [2.75]                                                     # the hit sound moves with the shake
+
+
+def test_bg_effect_gets_cut_tag(out, theme, monkeypatch):
+    calls = []
+    monkeypatch.setattr(B, "bg_cutout", lambda aroll, a, b, media: (calls.append((a, b)), (media / "bgcut-1000-3000.webm")
+                                                                    .write_bytes(b"w"), "bgcut-1000-3000.webm")[-1])
+    write_plan(out, {"graphics": [{"type": "bg", "from": "S2:minus", "to": "S2:Claude'a", "effect": "burst-out",
+                                   "hit": "S2:75%"}]})
+    proj = B.build(out, theme=theme)["project"]
+    fx = (proj / "compositions" / "gx-01-custom.html").read_text(encoding="utf-8")
+    bg = (proj / "compositions" / "gx-02-bg.html").read_text(encoding="utf-8")
+    assert 'class="clip"' in fx and 'src="assets/media/bgcut-1000-3000.webm"' in fx
+    assert "bgcut-1000-3000.webm" not in bg and calls == [(2.1, 3.1)]
+    P = json.loads(re.search(r"const P = (\{.*?\});?\n", fx).group(1))
+    assert P["hit_at"] == 0.55                                                  # local: 2.35 - host start (2.1 - LEAD)
+    assert P["face"] == [540.0, 768.0]                                          # FACE_DEFAULT in region px
+    assert (proj / "assets" / "media" / "bgcut-1000-3000.webm").exists()
+    calls.clear()
+    write_plan(out, {"graphics": [{"type": "bg", "from": "S2:minus", "to": "S2:Claude'a", "effect": "energy-ball"}]})
+    proj = B.build(out, theme=theme)["project"]
+    fx = (proj / "compositions" / "gx-01-custom.html").read_text(encoding="utf-8")
+    bg = (proj / "compositions" / "gx-02-bg.html").read_text(encoding="utf-8")
+    assert "bgcut-1000-3000.webm" not in fx and 'src="assets/media/bgcut-1000-3000.webm"' in bg and calls == [(2.1, 3.1)]
+    P = json.loads(re.search(r"const P = (\{.*?\});?\n", fx).group(1))
+    assert "face" not in P and "hit_at" not in P                                # non-WOW effects: unchanged
+
+
+def test_shake_hosts_marked(out, theme, monkeypatch):
+    monkeypatch.setattr(B, "bg_cutout", _fake_cut([]))
+    write_plan(out, {"graphics": [{"type": "bg", "from": "S2:minus", "to": "S2:Claude'a", "effect": "burst-out",
+                                   "hit": "S2:75%"}]})
+    html = (B.build(out, theme=theme)["project"] / "index.html").read_text(encoding="utf-8")
+    hosts = re.findall(r'<div id="(gx-[^"]+)-slot"( class="[^"]*")? data-composition-id', html)
+    assert [(c, k) for c, k in hosts] == [("gx-01-custom", ' class="clip cm-shake"'), ("gx-02-bg", ' class="clip cm-shake"')]
+    cfg = cfg_of(html)
+    assert cfg["shake_hosts"] is True and cfg["hits"] == [[2.35, 1.0, 0]]
+
+
+FIXTURE_BG_HIT = Path(__file__).parent / "fixtures" / "build_bg_hit"   # built by the pre-burst-out code (HEAD 5ce13a0)
+BG_HIT_PLAN = {"graphics": [{"type": "bg", "from": "S2:minus", "to": "S2:Claude'a", "effect": "orb", "hit": True},
+                            {"type": "stamp", "at": "S1:Mówić", "text": "NIE", "hit": True}]}
+
+
+def test_no_wow_no_change(out, theme, monkeypatch):
+    """Review Focus 5: a bg + hit plan whose effect has no {{cut_tag}} builds exactly what it built before burst-out: no
+    cm-shake hosts, no shake_hosts key, byte-identical index.html and compositions."""
+    monkeypatch.setattr(B, "bg_cutout", _fake_cut([]))
+    _fx(out)
+    write_plan(out, BG_HIT_PLAN)
+    proj = B.build(out, theme=theme)["project"]
+    html = (proj / "index.html").read_text(encoding="utf-8")
+    assert "cm-shake" not in html and "shake_hosts" not in cfg_of(html)
+    built = sorted(["index.html"] + [p.name for p in (proj / "compositions").glob("gx-*.html")])
+    assert built == sorted(p.name for p in FIXTURE_BG_HIT.iterdir())
+    assert html == (FIXTURE_BG_HIT / "index.html").read_text(encoding="utf-8")
+    for f in FIXTURE_BG_HIT.glob("gx-*.html"):
+        assert (proj / "compositions" / f.name).read_text(encoding="utf-8") == f.read_text(encoding="utf-8"), f.name

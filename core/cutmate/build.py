@@ -28,7 +28,7 @@ from .layout import CLASSIC, SPLIT_DEFAULTS, theme_layout
 from .media import duration, run
 from .music import carve, pick_source, prepare_music
 from .paths import assets_dir, plugin_root, theme_dir, web_dir
-from .plan import PLATE, SCENE_FADE, Graphic, load_plan, panel_box, panel_summary, plate_chapters
+from .plan import PLATE, SCENE_FADE, Graphic, _expanded_pair, load_plan, panel_box, panel_summary, plate_chapters
 from .tracks import pick_hand
 
 CHAPTER_LABEL = {"pl": "ROZDZIAŁ", "en": "CHAPTER"}
@@ -279,7 +279,7 @@ def hits_for(graphics: list[Graphic], cam: list[list[float]], timed: list[dict],
     for g in graphics:
         if not g.hit:
             continue
-        t = g.start
+        t = g.params.get("_hit_at", g.start)            # "hit": "<anchor>" shakes at that word
         nxt = next((c for c in cuts if c > t + 1e-9), end)
         punch = min(0.5, nxt - (t + 0.12) - 0.02)
         if any(a - 1e-9 <= t < b for a, b in bgs):
@@ -420,12 +420,13 @@ def _media_tag(cid: str, g: Graphic, P: dict) -> str:
 
 def subcomp(cid: str, g: Graphic, host_start: float, theme: Path, assets: Path, media_map: dict, lang: str,
             size: tuple = (1080, 1920), extra_tags: dict | None = None, comp_path: Path | None = None,
-            tracks: dict | None = None, assets_url: str | None = None, screen=None, caption_band: list | None = None) -> str:
+            tracks: dict | None = None, assets_url: str | None = None, screen=None, caption_band: list | None = None,
+            face: list | None = None) -> str:
     sec = _sections(comp_path or theme / "components" / f"{g.type}.html")
     W, H = size
     screen = screen or (lambda x, y, t: (round(x * W, 1), round(y * H, 1)))  # noqa: E731  tracked point -> screen px
     loc = lambda t: round(max(0.0, t - host_start), 3)  # noqa: E731
-    P = {k: v for k, v in g.params.items()}
+    P = {k: v for k, v in g.params.items() if k != "_hit_at"}
     P.update(at=loc(g.start), end=loc(g.end), lang=lang)
     if g.type == "list":
         P["items"] = [{"text": it["text"], "at": loc(it["at"])} for it in g.params["items"]]
@@ -465,6 +466,10 @@ def subcomp(cid: str, g: Graphic, host_start: float, theme: Path, assets: Path, 
             P["follow"] = follow                         # meant to follow: no samples → the effect stays hidden
         if assets_url:
             P["assets"] = assets_url
+        if "_hit_at" in g.params:                        # "hit": "<anchor>": the impact time (local s)
+            P["hit_at"] = loc(g.params["_hit_at"])
+        if face:                                         # the bg segment's face (plan.face) in region px
+            P["face"] = [round(face[0] * W - rx, 1), round(face[1] * H - ry, 1)]
         if caption_band:                                 # the burned captions in region px (only where they cross it)
             y0, y1 = max(0, caption_band[0] - ry), min(rh, caption_band[1] - ry)
             if y1 > y0:
@@ -662,6 +667,14 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
         if g.type == "custom" and g.params["name"] not in found:
             found[g.params["name"]] = find_effect(g.params["name"], out, theme)
             lint_effect(found[g.params["name"]])
+    # bg pre-pass: each bg range is cut once; a bg effect whose markup has {{cut_tag}} draws the cut-out itself (so it
+    # can put things behind the speaker) and its bg host gets none. A hit in such a pair shakes both hosts with #shake
+    bg_of = {id(c): b for c in items for b in items if c.type == "custom" and b.type == "bg" and _expanded_pair(c, b)}
+    cuts = {id(b): bg_cutout(A / "aroll.mp4", b.start, b.end, A / "media") for b in items if b.type == "bg"}
+    cut_in_fx = {id(b) for c, b in ((c, bg_of[id(c)]) for c in items if id(c) in bg_of)
+                 if "{{cut_tag}}" in _sections(found[c.params["name"]]).get("markup", "")}
+    shake = {id(c) for c in items if id(c) in bg_of and id(bg_of[id(c)]) in cut_in_fx and bg_of[id(c)].hit}
+    shake |= {id(b) for b in items if b.type == "bg" and id(b) in cut_in_fx and b.hit}
     frame_hosts, scene_hosts, rest = [], [], 0
     for i, g in enumerate(items):
         cid = f"gx-{i + 1:02d}-{g.type}"
@@ -682,18 +695,24 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
             loc_at = round(g.start - hs, 3)
             extra = {"face_tag": f'<video id="{cid}-f" class="clip" data-hf-media-start-basis="local" data-start="{loc_at}" '
                                  f'data-duration="{round(g.end - g.start, 3)}" src="assets/media/{name}" muted playsinline></video>'}
-        if g.type == "bg":
-            name = bg_cutout(A / "aroll.mp4", g.start, g.end, A / "media")
+        cut_bg = g if g.type == "bg" else bg_of.get(id(g)) if id(bg_of.get(id(g))) in cut_in_fx else None
+        if g.type == "bg" and id(g) in cut_in_fx:
+            extra = {"cut_tag": ""}                    # drawn by its effect
+        elif cut_bg is not None:
+            name = cuts[id(cut_bg)]
             keep_media.add(name)
             loc_at = round(g.start - hs, 3)
             extra = {"cut_tag": f'<video id="{cid}-c" class="clip" data-hf-media-start-basis="local" data-start="{loc_at}" '
                                 f'data-duration="{round(g.end - g.start, 3)}" src="assets/media/{name}" muted playsinline></video>'}
         assets_url = None
+        face = None
         if g.type == "custom":
             comp_path = found[g.params["name"]]
+            wow = effect_meta(comp_path).get("kind") == "wow"
             # WOW effects only (other effects keep their output byte-identical): where the burned captions are
-            band = (caption_band(fmt, mode, (g.start + g.end) / 2, pn, cap_dy)
-                    if effect_meta(comp_path).get("kind") == "wow" else None)
+            band = caption_band(fmt, mode, (g.start + g.end) / 2, pn, cap_dy) if wow else None
+            if wow and id(items[i]) in bg_of:            # a WOW bg effect: where the speaker's face is (P.face)
+                face = plan.face.get(_seg_at(timed, g.start), FACE_DEFAULT)
             effect_texts.append(comp_path.read_text(encoding="utf-8"))
             folder = comp_path.parent / g.params["name"]     # the effect's own files (Lottie JSON, textures…)
             if folder.is_dir():
@@ -705,7 +724,7 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
             comp_path = _component(th, g.type, theme, warned)
         (proj / "compositions" / f"{cid}.html").write_text(
             subcomp(cid, g, hs, th, A, media_map, language, size=(W, H), extra_tags=extra, comp_path=comp_path,
-                    tracks=tr, assets_url=assets_url, screen=screen, caption_band=band), encoding="utf-8")
+                    tracks=tr, assets_url=assets_url, screen=screen, caption_band=band, face=face), encoding="utf-8")
         scene = bool(g.params.get("_scene"))
         if g.type == "panel":
             track = 1                                  # under every graphic, over the A-roll
@@ -722,8 +741,9 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
         if id(items[i]) in item_end:                   # (items[i]: the planned graphic, g: its host-length copy)
             spans.append((max(hs, g.end - HANDOFF - 0.02), HANDOFF + 0.02, None, 0))
         hide += [[f"#{cid}-slot", *h] for h in hide_spans(spans)]
+        shake_cls = ' class="clip cm-shake"' if id(items[i]) in shake else ""
         (scene_hosts if scene else frame_hosts if g.type == "panel" else hosts).append(
-            f'      <div id="{cid}-slot" data-composition-id="{cid}" data-composition-src="compositions/{cid}.html" '
+            f'      <div id="{cid}-slot"{shake_cls} data-composition-id="{cid}" data-composition-src="compositions/{cid}.html" '
             f'data-start="{hs}" data-duration="{round(g.end - hs, 3)}" data-track-index="{track}" '
             f'data-width="{W}" data-height="{H}"></div>')
         cues += _sfx_cues(g, meta)
@@ -755,6 +775,8 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
     cues += [(hit_name, h[0], hit_vol) for h in hits]
     pages = caption_pages(words, end, plan.captions["key"], plan.captions["max_words"])
     cfg = {"end": end, "pages": pages if mode in ("burn", "both") else [], "cam": cam, "hits": hits, "splits": splits}
+    if shake:
+        cfg["shake_hosts"] = True                      # hits shake "#shake, .cm-shake" (the bg pair with the cut-out)
     if sides:
         cfg["sides"] = sides
     if hide:

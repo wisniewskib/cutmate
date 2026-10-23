@@ -29,16 +29,20 @@ from cutmate.sheet import contact_sheet  # noqa: E402
 
 
 def project(tmp_path: Path, plan: dict, fmt: str = "9:16", dur: float = 6.0, theme: str = "clean",
-            tracks: dict | None = None) -> Path:
+            tracks: dict | None = None, aroll: Path | None = None) -> Path:
     """A built composition (out/composition) for `plan` over a synthetic `dur`-second A-roll (testsrc2) with test_build's
     words; segment S2 runs to `dur`. `tracks`: the tracks.json content ({"tracks": {...}} or just the tracks dict,
-    samples [t, x, y, ...] in 0–1 frame units), written after the A-roll so it is fresh."""
+    samples [t, x, y, ...] in 0–1 frame units), written after the A-roll so it is fresh. `aroll`: an own A-roll file
+    (`dur` s, the format's size) instead of the synthetic one."""
     if dur < TIMED[-1]["end"]:
         raise ValueError(f"dur must be >= {TIMED[-1]['end']} s (the test words run to it)")
     W, H = size_of(fmt)
     out = Path(tmp_path) / "rec" / "out"
     (out / "work").mkdir(parents=True, exist_ok=True)
-    make_clip(out / "aroll.mp4", dur=dur, size=f"{W}x{H}", gaps=())
+    if aroll is not None:
+        shutil.copyfile(aroll, out / "aroll.mp4")
+    else:
+        make_clip(out / "aroll.mp4", dur=dur, size=f"{W}x{H}", gaps=())
     timed = [dict(s) for s in TIMED]
     timed[-1]["end"] = float(dur)
     (out / "work" / "aligned_words.json").write_text(json.dumps(WORDS, ensure_ascii=False), encoding="utf-8")

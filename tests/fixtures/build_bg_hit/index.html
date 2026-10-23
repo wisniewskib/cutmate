@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="pl" class="f916">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1080, height=1920" />
+    <title>cutmate</title>
+    <script src="assets/vendor/gsap@3.14.2/dist/gsap.min.js"></script>
+    <script src="assets/effects.js"></script>
+    <link rel="stylesheet" href="assets/tokens.css" />
+    <link rel="stylesheet" href="assets/theme.css" />
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="4.0" data-width="1080" data-height="1920">
+      <div id="split"><div id="cam"><div id="shake"><video id="aroll" src="assets/aroll.mp4" data-start="0" data-duration="4.0" data-media-start="0" data-track-index="0" playsinline data-has-audio="true"></video></div></div></div>
+      <div id="gx-01-stamp-slot" data-composition-id="gx-01-stamp" data-composition-src="compositions/gx-01-stamp.html" data-start="0.0" data-duration="2.05" data-track-index="2" data-width="1080" data-height="1920"></div>
+      <div id="gx-02-custom-slot" data-composition-id="gx-02-custom" data-composition-src="compositions/gx-02-custom.html" data-start="1.8" data-duration="1.3" data-track-index="3" data-width="1080" data-height="1920"></div>
+      <div id="gx-03-bg-slot" data-composition-id="gx-03-bg" data-composition-src="compositions/gx-03-bg.html" data-start="1.8" data-duration="1.3" data-track-index="2" data-width="1080" data-height="1920"></div>
+      <div id="flash"></div>
+      <div id="captions" class="clip" data-start="0" data-duration="4.0" data-track-index="5"></div>
+      <audio id="sfx-1" src="assets/sfx/impact.mp3" data-start="0.1" data-duration="0.696" data-track-index="10" data-volume="0.4" data-audio-group="sfx"></audio>
+      <audio id="sfx-2" src="assets/sfx/swell.mp3" data-start="1.9" data-duration="0.984" data-track-index="10" data-volume="0.3" data-audio-group="sfx"></audio>
+      <audio id="sfx-3" src="assets/sfx/impact.mp3" data-start="2.1" data-duration="0.696" data-track-index="11" data-volume="0.3" data-audio-group="sfx"></audio>
+    </div>
+    <script src="assets/cutmate.js"></script>
+    <script>
+      const CFG = {"end": 4.0, "pages": [{"start": 0.06, "end": 0.86, "words": [["Mówić", 0.06, ""], ["krótko,", 0.41, ""]]}, {"start": 0.86, "end": 1.9, "words": [["mniej", 0.86, ""]]}, {"start": 2.06, "end": 2.71, "words": [["minus", 2.06, ""], ["75%", 2.31, "num"]]}, {"start": 2.71, "end": 3.16, "words": [["Claude'a", 2.71, ""]]}, {"start": 3.16, "end": 3.99, "words": [["<\/script>", 3.16, ""]]}], "cam": [[0.0, 1.0], [2.0, 1.12], [2.1, 1.0], [3.1, 1.12]], "hits": [[0.1, 1.0, 0.5], [2.1, 1.0, 0]], "splits": []};
+      const tl = gsap.timeline({ paused: true });
+      Cutmate.build(tl, CFG);
+      window.__timelines["main"] = tl;
+    </script>
+  </body>
+</html>

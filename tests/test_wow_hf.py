@@ -13,7 +13,7 @@ from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).parent))
 import wowkit  # noqa: E402
-from test_effects_js import _countries, _wow  # noqa: E402
+from test_effects_js import _burst, _countries, _wow  # noqa: E402
 
 from cutmate import paths  # noqa: E402
 from cutmate.hf import check  # noqa: E402
@@ -351,3 +351,95 @@ def test_three_explainers_take_light_panel(tmp_path, home):
         n = int(_hue_mask(win, 15, 30, sat=0.3, val=0.4).sum())
         print(f"arc PL-{k} apex: {n} orange px")
         assert n >= 6, (k, n, s_g)
+
+
+# ---- burst-out: a 3D object bursts from behind the speaker (bg effect drawing the cut-out) ----
+
+FACE = (400, 700)                      # the drawn speaker's face centre (px, 1080x1920)
+SKIN, SHIRT = (196, 150, 122), (38, 58, 92)
+
+
+def _speaker(tmp_path: Path, dur: float = 6.0) -> tuple:
+    """A person-like A-roll (testsrc2 + a drawn head and torso) and its transparent cut-out (VP9 alpha WebM, what
+    `hyperframes remove-background` gives), both from one silhouette PNG so they line up to the pixel. Returns
+    (aroll.mp4, bgcut.webm, head mask, torso mask)."""
+    from PIL import ImageDraw
+    from conftest import make_clip
+    from cutmate.media import run
+    W, H = 1080, 1920
+    sil = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    d = ImageDraw.Draw(sil)
+    fx, fy = FACE
+    d.rounded_rectangle((fx - 330, 905, fx + 330, H + 40), radius=170, fill=SHIRT + (255,))     # shoulders + torso
+    d.rectangle((fx - 62, 800, fx + 62, 930), fill=SKIN + (255,))                               # neck
+    d.ellipse((fx - 118, fy - 150, fx + 118, fy + 150), fill=SKIN + (255,))                     # head
+    png = tmp_path / "speaker.png"
+    sil.save(png)
+    plain = make_clip(tmp_path / "plain.mp4", dur=dur, size=f"{W}x{H}", gaps=())
+    aroll, cut = tmp_path / "speaker.mp4", tmp_path / "bgcut.webm"
+    r = run(["ffmpeg", "-nostdin", "-v", "error", "-y", "-i", plain, "-i", png, "-filter_complex", "[0:v][1:v]overlay=0:0",
+             "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "copy", aroll])
+    assert r.returncode == 0, r.stderr
+    r = run(["ffmpeg", "-nostdin", "-v", "error", "-y", "-loop", "1", "-framerate", "30", "-i", png, "-t", str(dur),
+             "-c:v", "libvpx-vp9", "-pix_fmt", "yuva420p", "-auto-alt-ref", "0", "-b:v", "1M", cut])
+    assert r.returncode == 0, r.stderr
+    a = np.asarray(sil)[..., 3] > 0
+    yy, xx = np.mgrid[0:H, 0:W]
+    head = ((xx - fx) / 108.0) ** 2 + ((yy - fy) / 140.0) ** 2 <= 1          # a little inside the drawn ellipse
+    torso = a & (yy > 960) & (yy < 1270) & (np.abs(xx - fx) < 300)            # above the caption band
+    return aroll, cut, head, torso
+
+
+def test_burst_out_renders(tmp_path, home, monkeypatch):
+    """9:16 bg + burst-out, hit on "mniej" (S1 word 3): at 0.6 s the object is behind the speaker (his silhouette is
+    untouched), just after the hit it is in front over his body and bright, at the hold it sits beside him and his face
+    is clear; seek-safe at the hold. READ the snapshots and the 0.1 s strip around the hit."""
+    from cutmate import build as B
+    aroll, cut, head, torso = _speaker(tmp_path)
+
+    def fake_cut(src, a, b, media):
+        name = f"bgcut-{int(a * 1000)}-{int(b * 1000)}.webm"
+        shutil.copyfile(cut, media / name)
+        return name
+    monkeypatch.setattr(B, "bg_cutout", fake_cut)
+    plan = {"face": {"S1": [FACE[0] / 1080, FACE[1] / 1920]},
+            "graphics": [{"type": "bg", "from": "S1:Mówić", "to": "S2:</script>", "effect": "burst-out", "hit": "S1:mniej",
+                          "params": {"label": "Gotowe!"}}]}
+    proj = wowkit.project(tmp_path, plan, dur=6.0, aroll=aroll)
+    _check_ok(proj)
+    P = _P(proj, "burst-out")
+    hit = 0.90                                                    # the word's start (global s)
+    host = 0.10 - P["at"]
+    assert abs(P["hit_at"] + host - hit) < 1e-6 and P["face"] == [float(FACE[0]), float(FACE[1])]
+    hold = round(host + (P["at"] + P["end"]) / 2 + 0.6, 2)
+    s_behind, s_hit, s_hold = wowkit.snap(proj, 0.6), wowkit.snap(proj, hit + 0.1), wowkit.snap(proj, hold)
+    print(f"snapshot behind 0.6: {s_behind}\nsnapshot hit+0.1 {hit + 0.1:.2f}: {s_hit}\nsnapshot hold {hold}: {s_hold}")
+    a = _img(s_behind)
+    off_head = np.abs(a[head] - np.array(SKIN)).mean()
+    off_torso = np.abs(a[torso] - np.array(SHIRT)).mean()
+    print(f"behind: head off {off_head:.2f}, torso off {off_torso:.2f}")
+    assert off_head < 10 and off_torso < 10, "the object (or its rays) shows over the speaker before the hit"
+    b = _img(s_hit)
+    o = _burst(P, [], [hit + 0.1 - host])["path"][0]                # where the effect puts the object (pure path)
+    yy, xx = np.mgrid[0:1920, 0:1080]
+    disk = ((xx - o["x"]) ** 2 + (yy - o["y"]) ** 2 <= (0.6 * o["r"]) ** 2) & torso
+    bright = (np.abs(b[disk] - np.array(SHIRT)).max(axis=1) > 60) & (b[disk].mean(axis=1) > 140)
+    print(f"hit+0.1: object at ({o['x']:.0f}, {o['y']:.0f}) r {o['r']:.0f}: {int(disk.sum())} px over the torso, "
+          f"{bright.mean() if disk.any() else 0:.2f} of them bright")
+    assert disk.sum() >= 3000, "the object is not over the speaker's body just after the hit"
+    assert bright.mean() >= 0.8, "the object is not in front of the speaker (or not bright) just after the hit"
+    c = _img(s_hold)
+    off_face = np.abs(c[head] - np.array(SKIN)).mean()
+    side = c[700:1280, 600:1080]
+    lit = int(((side.max(axis=2) - side.min(axis=2)) > 60).sum())
+    print(f"hold: face off {off_face:.2f}, {lit} coloured px beside him")
+    assert off_face < 10, "the object covers the face at the hold"
+    h = _burst(P, [], [hold - host])["path"][0]
+    ring = c[int(h["y"] - 0.5 * h["r"]):int(h["y"] + 0.5 * h["r"]), int(h["x"] - 0.5 * h["r"]):int(h["x"] + 0.5 * h["r"])]
+    print(f"hold: object at ({h['x']:.0f}, {h['y']:.0f}) r {h['r']:.0f}, mean {ring.mean():.0f}")
+    assert h["r"] >= 150 and ring.mean() > 150, "the held object is not big and bright beside him"
+    worst = wowkit.seek_safe(proj, hold)
+    print(f"seek_safe({hold}) = {worst}")
+    assert worst <= 1.0
+    print("strip hit:", wowkit.strip(proj, hit - 0.3, hit + 0.5, 0.1))
+    print("strip:", wowkit.strip(proj, 0.1, 3.6, 0.25))

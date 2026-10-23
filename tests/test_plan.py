@@ -1032,3 +1032,29 @@ def test_wow_caps_join_plan_warnings(tmp_path):
     (out / "work" / "edl_timed.json").write_text(json.dumps(
         [{"id": "S1", "start": 0.0, "end": 3.5}, {"id": "S2", "start": 3.5, "end": 40.0}]), encoding="utf-8")
     assert "WARN wow effects: 3 in 40 s (cap 2)" in load_plan(out).warnings
+
+
+def test_hit_anchor(tmp_path):
+    """"hit": "<anchor>" shakes at that word (params["_hit_at"], global s) and must lie inside the graphic; "hit": true is
+    unchanged (shake at the start, no _hit_at). A bg's anchor reaches its expanded effect too (for P.hit_at)."""
+    out = make_out(tmp_path, {"graphics": [
+        {"type": "custom", "name": "orb", "from": "S1:Mówić", "to": "S1:mniej#2", "hit": "S1:mniej"},
+        {"type": "stamp", "at": "S2:minus", "text": "X", "hit": True}]})
+    gs = load_plan(out).graphics
+    g = next(x for x in gs if x.type == "custom")
+    assert g.hit is True and g.params["_hit_at"] == 0.90
+    st = next(x for x in gs if x.type == "stamp")
+    assert st.hit is True and "_hit_at" not in st.params
+    out = make_out(tmp_path / "b", {"graphics": [
+        {"type": "custom", "name": "orb", "from": "S1:Mówić", "to": "S1:mniej", "hit": "S2:minus"}]})
+    with pytest.raises(PlanError, match=r"hit .* is outside the graphic"):
+        load_plan(out)
+    out = make_out(tmp_path / "c", {"graphics": [
+        {"type": "bg", "from": "S1:Mówić", "to": "S1:mniej#2", "effect": "burst-out", "hit": "S1:mniej#2"}]})
+    gs = load_plan(out).graphics
+    fx, bg = gs
+    assert (fx.type, bg.type) == ("custom", "bg") and bg.hit is True and fx.hit is False
+    assert bg.params["_hit_at"] == fx.params["_hit_at"] == 1.50
+    out = make_out(tmp_path / "d", {"graphics": [
+        {"type": "stamp", "at": "S1:Mówić", "text": "X", "hit": 0.2}]})
+    assert load_plan(out).graphics[0].params["_hit_at"] == 0.2          # seconds work as an anchor too

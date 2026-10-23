@@ -264,7 +264,11 @@ def _graphic(i: int, g, words: list[dict], end: float, rec: Path, fmt: str = "9:
             stop = resolve_anchor(u, words, end)[1]
         if stop <= start:
             raise PlanError(f"{where}: \"until\" is before the start")
-    return Graphic(t, round(start, 3), stop, params, bool(g.get("hit", False)), g.get("sfx"), i)
+    h = g.get("hit", False)
+    if not isinstance(h, bool) and h is not None:     # "hit": "<anchor>" (word / seconds): shake at that time
+        params["_hit_at"] = round(resolve_anchor(h, words, end)[0], 3)
+        h = True
+    return Graphic(t, round(start, 3), stop, params, bool(h), g.get("sfx"), i)
 
 
 def panel_box(ratio: float) -> list[int]:
@@ -575,6 +579,8 @@ def _expand(gs: list[Graphic]) -> list[Graphic]:
             p = {"name": g.params["effect"], "_fade": FADE[g.type]}
             if "params" in g.params:
                 p["params"] = g.params["params"]
+            if "_hit_at" in g.params:                   # the effect times its impact on the bg's hit (P.hit_at)
+                p["_hit_at"] = g.params["_hit_at"]
             if g.type == "side":
                 p["region"] = list(SIDE_PANEL[g.params["speaker"]])
             out.append(Graphic("custom", g.start, g.end, p, False, False, g.index))
@@ -774,6 +780,11 @@ def load_plan(out_dir: Path, factcheck: bool = False, layout: Layout | None = No
         g.end = round(max(min(g.end, end - 0.05), min(g.start + 0.3, end - 0.05)), 3)
         if g.end <= g.start:
             raise PlanError(f"graphic #{g.index + 1} ({g.type}) starts at {g.start:.2f}s, too close to the end ({end:.2f}s)")
+    for g in gs:
+        h = g.params.get("_hit_at")
+        if h is not None and not g.start - 1e-6 <= h <= g.end + 1e-6:
+            raise PlanError(f"graphic #{g.index + 1} ({g.type}): hit {graphics_list[g.index]['hit']!r} is outside the graphic "
+                            f"({g.start:.2f}–{g.end:.2f}s) — anchor it on a word inside the span")
     chapters = _chapters(raw, words, end)
     face = _face(raw, words)
     if tr:

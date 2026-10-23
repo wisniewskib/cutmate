@@ -747,3 +747,107 @@ def test_safe_box_avoids_the_caption_band():
     assert t["y"] > 300 and abs(t["y"] + t["h"] - 880) < 1e-6                  # the bigger side: below
     e = d["edge"]
     assert e["y"] == 0 and 820 < e["h"] < 840
+
+
+HITS = """
+global.window = {};
+global.document = { getElementById: () => ({ appendChild: (c) => c }), createElement: () => ({ appendChild: (c) => c }) };
+const calls = [];
+const tl = {};
+for (const m of ["set", "to", "fromTo"]) tl[m] = (t, a, b, c) => { calls.push([m, t, m === "fromTo" ? b : a]); return tl; };
+require(%s);
+const out = {};
+for (const [k, cfg] of Object.entries(%s)) {
+  calls.length = 0;
+  window.Cutmate.build(tl, cfg);
+  out[k] = calls.filter(([m, t, v]) => m === "to" && v && v.keyframes).map(([, t]) => t)
+    .concat(calls.filter(([m, t, v]) => m === "set" && v && "rotation" in v).map(([, t]) => t));
+}
+console.log(JSON.stringify(out));
+"""
+
+
+def test_hits_shake_hosts():
+    """cfg.shake_hosts (a bg effect drawing the speaker cut-out): every hit shakes "#shake, .cm-shake"; otherwise "#shake"."""
+    base = {"end": 4.0, "pages": [], "cam": [[0, 1.0]], "hits": [[1.0, 1.0, 0]], "splits": []}
+    d = _node(HITS, json.dumps(str(web_dir() / "cutmate.js")),
+              json.dumps({"hosts": {**base, "shake_hosts": True}, "plain": base}))
+    assert d["hosts"] == ["#shake, .cm-shake", "#shake, .cm-shake"]
+    assert d["plain"] == ["#shake", "#shake"]
+
+
+# burst-out: the effect script as in a bg composition (root > .bo-gl canvas layer, the cut-out .clip video in its own
+# layer), U.three stubbed (no WebGL in node); every tl.set recorded, so the layer order is read at any time
+BURST = """
+global.window = {};
+require(%(fx)s);
+class El {
+  constructor(tag, cls) { this.tagName = tag; this.cls = new Set((cls || "").split(" ").filter(Boolean)); this.children = [];
+    this.parentNode = null; this.style = { setProperty() {} }; this.attrs = {}; this._text = "";
+    const self = this; this.classList = { add: (c) => self.cls.add(c), contains: (c) => self.cls.has(c), remove: (c) => self.cls.delete(c) }; }
+  appendChild(c) { c.parentNode = this; this.children.push(c); return c; }
+  remove() {} setAttribute(k, v) { this.attrs[k] = v; }
+  get textContent() { return this._text; } set textContent(v) { this._text = String(v); }
+  all() { return this.children.reduce((a, c) => a.concat([c], c.all()), []); }
+  querySelectorAll(sel) { const c = sel.replace(/^[a-z]*\\./, ""); return this.all().filter((e) => e.cls.has(c)); }
+  querySelector(sel) { return this.querySelectorAll(sel)[0] || null; }
+}
+global.document = { createElement: (t) => new El(t), documentElement: new El("html") };
+global.getComputedStyle = () => ({ getPropertyValue: () => "", color: "" });
+const sets = [];
+const tl = { to() { return tl; }, fromTo() { return tl; }, set(t, v, pos) { sets.push([t, v, pos]); return tl; } };
+const root = new El("div");
+const bo = root.appendChild(new El("div", "bo"));
+const gl = bo.appendChild(new El("div", "bo-gl"));
+const cut = bo.appendChild(new El("div", "bo-cut"));
+const video = cut.appendChild(new El("video", "clip"));
+bo.appendChild(new El("div", "bo-label")).appendChild(new El("span", "bo-k"));
+const P = %(params)s;
+const U = Object.assign(window.CutmateFX.make(tl, root, "c1", P), { el(tag, cls, text, parent) { const e = new El(tag, cls);
+  if (text != null) e.textContent = text; (parent || root).appendChild(e); return e; } });
+U.three = () => new Promise(() => {});
+U.post = () => new Promise(() => {});
+%(script)s
+const z = (el, T) => { let v; sets.filter(([t, s, pos]) => t === el && "zIndex" in s && pos <= T + 1e-9)
+  .sort((a, b) => a[2] - b[2]).forEach(([, s]) => { v = s.zIndex; }); return v; };
+const layer = (el, T) => { for (let e = el; e; e = e.parentNode) { const v = z(e, T); if (v !== undefined) return v; } };
+const W = window.CutmateFX.wow;
+const o = W.burstSpec(P);
+console.log(JSON.stringify({ gl: %(times)s.map((T) => layer(gl, T)), cut: %(times)s.map((T) => layer(video, T)),
+  path: %(path_times)s.map((T) => W.burstPath(o, T)), spec: o }));
+"""
+
+
+def _burst(params: dict, times: list, path_times: list) -> dict:
+    from cutmate.build import _sections
+    sec = _sections(plugin_root() / "themes" / "clean" / "components" / "custom" / "burst-out.html")
+    assert "{{cut_tag}}" in sec["markup"] and sec["markup"].index('class="bo-gl"') < sec["markup"].index("{{cut_tag}}")
+    js = BURST % {"fx": json.dumps(str(web_dir() / "effects.js")), "params": json.dumps(params), "script": sec["script"],
+                  "times": json.dumps(times), "path_times": json.dumps(path_times)}
+    r = subprocess.run(["node", "-e", js], capture_output=True, text=True, encoding="utf-8")
+    assert r.returncode == 0, r.stderr[-3000:]
+    return json.loads(r.stdout.strip().splitlines()[-1])
+
+
+def test_burst_out_layers():
+    """The canvas is under the cut-out until P.hit_at and above it from then on; the object lands on the side away from
+    the face and never covers it (nor the caption band) from 1.2 s on."""
+    P = {"at": 0.2, "end": 3.6, "hit_at": 1.0, "dur": 3.6, "w": 1080, "h": 1920, "lang": "pl", "face": [380, 700],
+         "caption_band": [1295, 1455], "label": "Gotowe"}
+    ts = [round(1.2 + 0.1 * i, 2) for i in range(int((3.6 - 1.2) / 0.1))]
+    d = _burst(P, [0.3, 0.9, 1.05, 2.0], ts)
+    gl, cut = d["gl"], d["cut"]
+    assert gl[0] < cut[0] and gl[1] < cut[1]                                 # behind the speaker before the hit
+    assert gl[2] > cut[2] and gl[3] > cut[3]                                 # in front of him after it
+    hr = d["spec"]["head"]
+    for p in d["path"]:
+        assert p["x"] > 540, p                                               # face x < W/2 -> the right side
+        if p["s"] > 0.05:
+            r = p["r"]
+            assert ((p["x"] - 380) ** 2 + (p["y"] - 700) ** 2) ** 0.5 >= r + hr, p    # clear of the face
+            assert p["y"] + r <= 1295, p                                     # clear of the burned captions
+    P2 = dict(P, face=[760, 700])                                            # face on the right -> the left side
+    d = _burst(P2, [0.3], ts)
+    assert all(p["x"] < 540 for p in d["path"])
+    d = _burst({k: v for k, v in P.items() if k != "hit_at"}, [0.3, 1.15, 1.25], [])   # default hit: at + 1.0
+    assert d["gl"][1] < d["cut"][1] and d["gl"][2] > d["cut"][2]

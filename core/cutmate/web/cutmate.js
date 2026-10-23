@@ -32,7 +32,10 @@
 
   function hits(tl, cfg) {
     tl.set("#flash", { opacity: 0 }, 0);
-    tl.set("#shake", { x: 0, y: 0, rotation: 0 }, 0);
+    // a bg effect that draws the speaker cut-out itself: its hosts (.cm-shake) shake with the A-roll, so the cut-out
+    // never ghosts against it
+    const shake = cfg.shake_hosts ? "#shake, .cm-shake" : "#shake";
+    tl.set(shake, { x: 0, y: 0, rotation: 0 }, 0);
     (cfg.hits || []).forEach(([t, base, punch]) => {
       tl.fromTo("#flash", { opacity: 0.8 }, { opacity: 0, duration: 0.22, ease: "power2.out", immediateRender: false }, t);
       const amp = 24, steps = Math.round(0.35 / 0.033), pts = [];
@@ -41,7 +44,7 @@
         pts.push({ x: Math.sin(i * 2.7) * k, y: Math.cos(i * 3.9) * k * 0.8, rotation: Math.sin(i * 1.9) * k * 0.04, duration: 0.033, ease: "none" });
       }
       pts[pts.length - 1] = { x: 0, y: 0, rotation: 0, duration: 0.033, ease: "none" };
-      tl.to("#shake", { keyframes: pts }, t);
+      tl.to(shake, { keyframes: pts }, t);
       if (punch > 0) {
         tl.fromTo("#cam", { scale: base }, { scale: base * 1.18, duration: 0.12, ease: "expo.out", immediateRender: false }, t);
         tl.fromTo("#cam", { scale: base * 1.18 }, { scale: base, duration: punch, ease: "power2.inOut", immediateRender: false }, t + 0.12);

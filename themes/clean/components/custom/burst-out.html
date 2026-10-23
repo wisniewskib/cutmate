@@ -1,0 +1,302 @@
+<style>
+ROOT .bo { position: absolute; inset: 0; overflow: hidden; }
+ROOT .bo-gl { position: absolute; inset: 0; z-index: 1; }
+ROOT .bo-cut { position: absolute; inset: 0; z-index: 2; }
+ROOT .bo-cut video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+ROOT .bo-label { position: absolute; left: 0; top: 0; z-index: 4; opacity: 0; white-space: nowrap; text-align: center;
+  color: var(--text, #ffffff); font-family: var(--font-display, var(--font)); font-weight: 900; font-synthesis: none;
+  letter-spacing: -0.02em; line-height: 1.05; text-shadow: 0 4px 22px rgba(0, 0, 0, 0.55), 0 1px 3px rgba(0, 0, 0, 0.6);
+  will-change: transform, opacity; }
+ROOT .bo-label .bar { display: block; margin: 0.18em auto 0; width: 1.6em; height: 0.14em; border-radius: 0.07em;
+  background: var(--accent, #7dd3fc); box-shadow: 0 0 18px var(--accent, #7dd3fc); transform-origin: center; }
+</style>
+<markup><div class="bo"><div class="bo-gl"></div><div class="bo-cut">{{cut_tag}}</div><div class="bo-label"><span class="bo-k"></span><i class="bar"></i></div></div></markup>
+<script>
+// burst-out (bg effect, draws the speaker cut-out itself): a 3D object starts small behind the speaker's head with god
+// rays streaming out from behind it, arcs up over his head and flies at the camera. At P.hit_at (the impact word; the
+// main timeline shakes the A-roll and both bg hosts there) the canvas jumps above the cut-out, a chromatic-aberration
+// pulse, a spark burst and a shockwave fire and the rays fade; it holds big beside him (on the side away from P.face,
+// never over the face, above the burned captions), then spins out over the last 0.35 s.
+// Layers: .bo-gl (canvas) under .bo-cut ({{cut_tag}}: the transparent speaker) until the hit, above it after.
+
+// ---- pure helpers (window.CutmateFX.wow, registered once) ----
+const BO_ZB = -6, BO_ZF = 2.5, BO_CAMZ = 10, BO_FOV = 35, BO_UHIT = 0.72, BO_EXIT = 0.35;
+// where things go (region px): the face clearance `head`, the side away from the face, the hold circle (cx, cy, R)
+// — close beside the face over his shoulder, as big as fits with the label under it and clear of the caption band —
+// and the beats
+function burstSpec(P) {
+  const w = P.w, h = P.h, m = Math.min(w, h);
+  const face = Array.isArray(P.face) && P.face.length === 2 ? [Number(P.face[0]), Number(P.face[1])] : [w / 2, 0.4 * h];
+  const at = Number(P.at) || 0, end = Math.max(at + 1.0, Number(P.end) || at + 4);
+  let hit = P.hit_at != null && isFinite(Number(P.hit_at)) ? Number(P.hit_at) : at + 1.0;
+  hit = Math.min(Math.max(hit, at + 0.05), end - BO_EXIT - 0.1);
+  const head = 0.16 * m, side = face[0] <= w / 2 ? 1 : -1, pad = 0.035 * m;
+  const sb = window.CutmateFX.pure.safeBox(P);
+  const labelPx = 54 * m / 1080, lab = P.label ? labelPx * 1.9 + 0.02 * m : 0;
+  let best = null;
+  for (let R = 0.21 * m; R >= 0.08 * m && !best; R *= 0.95) {
+    // close beside the face, overlapping his shoulder (held in front of him: the depth reads all the time)
+    const cx = side > 0 ? Math.min(w - R - pad, face[0] + head + 0.85 * R) : Math.max(R + pad, face[0] - head - 0.85 * R);
+    const dx = Math.abs(cx - face[0]), need = head + R + pad;
+    let cy = face[1] + 0.02 * h;
+    if (dx < need) cy = Math.max(cy, face[1] + Math.sqrt(need * need - dx * dx));
+    if (cy + R <= sb.y + sb.h - pad - lab && cy - R >= sb.y + pad) best = { R, cx, cy };
+  }
+  if (!best) {                                     // no room beside him: small, in the far corner above the band
+    const R = 0.08 * m;
+    best = { R, cx: side > 0 ? w - R - pad : R + pad, cy: Math.max(sb.y + R + pad, Math.min(face[1], sb.y + sb.h - R - pad - lab)) };
+  }
+  return { w, h, m, face, at, end, hit, head, side, pad, labelPx, R: best.R, cx: best.cx, cy: best.cy, low: sb.y + sb.h - 0.1 * m,
+           settle: Math.min(0.9, Math.max(0.2, (end - BO_EXIT - hit) * 0.5)) };
+}
+const bez = (a, b, c, d, u) => { const v = 1 - u; return v * v * v * a + 3 * v * v * u * b + 3 * v * u * u * c + u * u * u * d; };
+// the object at local t: screen centre (x, y px), depth z, scale s (0.2 behind → 1 held → 0 out), on-screen radius r
+// (px, with perspective), extra spin. One cubic bezier from the head (z −6) to the hold point (z 2.5): it slips out
+// from behind the head's edge, swings down past his shoulder and, at the hit (u 0.72), is in front of his chest, then
+// rises to the hold beside the face. power3.in up to the hit, expo.out after it, a slow float while held
+function burstPath(o, t) {
+  const fx = o.face[0], fy = o.face[1];
+  const A = [fx, fy, BO_ZB], C1 = [fx + o.side * o.head * 1.7, fy - o.head * 0.4, -3],
+        C2 = [fx + o.side * o.head * 0.5, Math.min(fy + o.head * 3.0, o.low), 2.0], B = [o.cx, o.cy, BO_ZF];
+  let u;
+  if (t <= o.at) u = 0;
+  else if (t < o.hit) { const p = (t - o.at) / Math.max(1e-3, o.hit - o.at); u = BO_UHIT * p * p * p; }
+  else { const q = Math.min(1, (t - o.hit) / o.settle); u = BO_UHIT + (1 - BO_UHIT) * (q >= 1 ? 1 : 1 - Math.pow(2, -10 * q)); }
+  let x = bez(A[0], C1[0], C2[0], B[0], u), y = bez(A[1], C1[1], C2[1], B[1], u);
+  const z = bez(A[2], C1[2], C2[2], B[2], u);
+  const held = Math.min(1, Math.max(0, (t - o.hit - o.settle * 0.5) / o.settle));
+  y += Math.sin((t - o.hit) * 2.2) * 0.012 * o.m * held;
+  x += Math.cos((t - o.hit) * 1.6) * 0.006 * o.m * held;
+  const e = Math.min(1, Math.max(0, (t - (o.end - BO_EXIT)) / BO_EXIT));
+  const s = (0.2 + 0.8 * u) * (1 - e * e);
+  return { x, y, z, s, u, r: o.R * s * (BO_CAMZ - BO_ZF) / (BO_CAMZ - z), spin: e * e * 9, vis: t >= o.at && t < o.end && s > 0.001 };
+}
+const WOW = (window.CutmateFX.wow = window.CutmateFX.wow || {});
+if (!WOW.burstPath) Object.assign(WOW, { burstSpec, burstPath });
+
+// ---- layers and label (synchronous: the timeline holds them before any WebGL exists) ----
+const sp = burstSpec(P);
+const box = root.querySelector(".bo"), glEl = root.querySelector(".bo-gl"), cutEl = root.querySelector(".bo-cut");
+const labelEl = root.querySelector(".bo-label");
+tl.set(glEl, { zIndex: 1 }, 0);
+tl.set(cutEl, { zIndex: 2 }, 0);
+tl.set(glEl, { zIndex: 3 }, sp.hit);                 // behind the speaker → in front of him, on the impact word
+const clamp = (v) => Math.min(1, Math.max(0, v));
+if (P.label) {
+  labelEl.style.fontSize = sp.labelPx + "px";
+  U.scramble(labelEl.querySelector(".bo-k"), String(P.label), { from: sp.hit + 0.22, dur: 0.45, seed: 5 });
+  let lw = 0;
+  U.ready(U.fonts([900], U.token("--font-display", "") || undefined).then(() => { lw = labelEl.offsetWidth || 0; }));
+  U.clock((t) => {
+    const a = clamp((t - sp.hit - 0.2) / 0.25), out = clamp((t - (sp.end - BO_EXIT)) / (BO_EXIT * 0.7));
+    const p = burstPath(sp, Math.min(t, sp.end - BO_EXIT));
+    const width = lw || sp.labelPx * String(P.label).length * 0.62;
+    let x0 = Math.min(Math.max(p.x - width / 2, sp.pad), sp.w - sp.pad - width);
+    if (sp.side > 0) x0 = Math.max(x0, Math.min(sp.face[0] + sp.head, sp.w - sp.pad - width));   // never over the face
+    else x0 = Math.min(x0, Math.max(sp.face[0] - sp.head - width, sp.pad));
+    const y0 = sp.cy + sp.R + 0.02 * sp.m;
+    const k = 0.6 + 0.4 * (1 - Math.pow(1 - a, 3)) + 0.08 * Math.sin(Math.PI * a);
+    labelEl.style.opacity = String(a * (1 - out));
+    labelEl.style.transform = "translate(" + x0.toFixed(1) + "px," + (y0 + (1 - a) * 30).toFixed(1) + "px) scale(" + k.toFixed(3) + ")";
+  });
+}
+
+// ---- the 3D scene ----
+const SHAPES = ["gem", "cube", "knot", "sphere", "logo"];
+const shape = SHAPES.includes(P.shape) ? P.shape : "gem";
+const rays = P.rays !== false;
+const ready = U.three({ el: glEl, camera: { fov: BO_FOV, z: BO_CAMZ } }).then(async (S) => {
+  const { THREE, scene, camera, renderer } = S;
+  // theme colours: any CSS colour → THREE.Color through a probe element
+  const probe = document.createElement("i");
+  box.appendChild(probe);
+  const col = (v) => {
+    probe.style.color = ""; probe.style.color = String(v || "");
+    const c = String(getComputedStyle(probe).color || "");
+    const mm = c.match(/[\d.]+/g) || ["255", "255", "255"];
+    const k = /^color\(/.test(c) ? 1 : 255;
+    return new THREE.Color().setRGB(mm[0] / k, mm[1] / k, mm[2] / k, THREE.SRGBColorSpace);
+  };
+  const ACC = col(P.color || U.token("--accent", "#7dd3fc")), MUT = col(U.token("--muted", "#475569"));
+  probe.remove();
+  const WHITE = new THREE.Color(1, 1, 1);
+  // additive light that adds colour only: three's AdditiveBlending also adds alpha, and the composite rebuilds the
+  // canvas alpha from it, so fading sparks / glows would leave dark specks over the video
+  const ADD = { blending: THREE.CustomBlending, blendEquation: THREE.AddEquation, blendSrc: THREE.SrcAlphaFactor,
+                blendDst: THREE.OneFactor, blendSrcAlpha: THREE.ZeroFactor, blendDstAlpha: THREE.OneFactor,
+                transparent: true, depthWrite: false };
+  const lum = (c) => 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
+  const hot = ACC.clone().multiplyScalar(2.4 / Math.max(0.05, lum(ACC)));        // HDR accent: blooms alike for any accent
+
+  const { RoomEnvironment } = await import("three/addons/environments/RoomEnvironment.js");
+  const pm = new THREE.PMREMGenerator(renderer);
+  scene.environment = pm.fromScene(new RoomEnvironment(), 0.04).texture; scene.environmentIntensity = 0.9;
+  scene.add(new THREE.HemisphereLight(0xffffff, MUT.clone().multiplyScalar(0.4), 0.6));
+  const key = new THREE.DirectionalLight(0xffffff, 2.2); key.position.set(-4, 5, 6); scene.add(key);
+  const rim = new THREE.DirectionalLight(ACC.clone().lerp(WHITE, 0.3), 5); rim.position.set(3, 2, -6); scene.add(rim);
+  const back = new THREE.PointLight(ACC.clone().lerp(WHITE, 0.5), 60, 14, 2);    // the rays' light, at the head
+  back.position.copy(S.toWorld(sp.face[0], sp.face[1], BO_ZB + 0.5)); scene.add(back);
+
+  // the light disc behind the head: only the god-rays source (never drawn in the scene, so never over the face). Its
+  // texture is a hot core with seeded spokes: the radial blur turns the gaps between them into separate rays
+  const wpp = (z) => 2 * (BO_CAMZ - z) * Math.tan((BO_FOV / 2) * Math.PI / 180) / sp.h;   // world units per px at z
+  const spokes = (() => {
+    const c = document.createElement("canvas"); c.width = c.height = 256;
+    const g = c.getContext("2d"), r = U.seed(17);
+    g.translate(128, 128);
+    const core = g.createRadialGradient(0, 0, 0, 0, 0, 70);
+    core.addColorStop(0, "rgba(255,255,255,1)"); core.addColorStop(0.6, "rgba(255,255,255,0.7)"); core.addColorStop(1, "rgba(255,255,255,0)");
+    g.fillStyle = core; g.beginPath(); g.arc(0, 0, 70, 0, Math.PI * 2); g.fill();
+    for (let i = 0; i < 26; i++) {
+      const a = (i / 26) * Math.PI * 2 + (r() - 0.5) * 0.18, wdt = 0.025 + r() * 0.06, len = 80 + r() * 46;
+      g.fillStyle = "rgba(255,255,255," + (0.45 + r() * 0.55).toFixed(2) + ")";
+      g.beginPath(); g.moveTo(0, 0); g.lineTo(Math.cos(a - wdt) * len, Math.sin(a - wdt) * len);
+      g.lineTo(Math.cos(a + wdt) * len, Math.sin(a + wdt) * len); g.closePath(); g.fill();
+    }
+    return new THREE.CanvasTexture(c);
+  })();
+  const disc = new THREE.Mesh(new THREE.PlaneGeometry(2, 2),
+    new THREE.MeshBasicMaterial({ map: spokes, color: ACC.clone().lerp(WHITE, 0.4).multiplyScalar(0.85), transparent: true, depthWrite: false }));
+  disc.position.copy(S.toWorld(sp.face[0], sp.face[1] - 0.1 * sp.head, BO_ZB));
+  disc.scale.setScalar(sp.head * 1.15 * wpp(BO_ZB));
+  // the head occludes the light: a cleared ellipse just in front of the disc (rgba 0, so the rays stream out AROUND
+  // the head and leave the face dark — it stays clear when the canvas jumps in front of the speaker)
+  const occ = new THREE.Mesh(new THREE.CircleGeometry(1, 48), new THREE.MeshBasicMaterial({ color: 0x000000,
+    blending: THREE.CustomBlending, blendSrc: THREE.ZeroFactor, blendDst: THREE.ZeroFactor,
+    blendSrcAlpha: THREE.ZeroFactor, blendDstAlpha: THREE.ZeroFactor }));
+  occ.position.set(0, 0.1 * sp.head / (sp.head * 1.15), 0.02);
+  occ.scale.set(0.78 / 1.15, 1.0 / 1.15, 1);
+  disc.add(occ);
+  disc.updateMatrix();                             // not in the scene: GodRaysEffect reads its matrix as is
+
+  // the object (bounding radius ~1, scaled to the held px radius)
+  const glowTex = (() => {
+    const c = document.createElement("canvas"); c.width = c.height = 128;
+    const g = c.getContext("2d"), gr = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+    gr.addColorStop(0, "rgba(255,255,255,1)"); gr.addColorStop(0.25, "rgba(255,255,255,0.55)"); gr.addColorStop(1, "rgba(255,255,255,0)");
+    g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
+    const tx = new THREE.CanvasTexture(c); return tx;
+  })();
+  const mat = new THREE.MeshStandardMaterial({ color: ACC, metalness: 0.5, roughness: 0.14, flatShading: true,
+                                               emissive: ACC, emissiveIntensity: 0.28, envMapIntensity: 1.0 });
+  const obj = new THREE.Group();
+  let geo;
+  if (shape === "cube") geo = new THREE.BoxGeometry(1.25, 1.25, 1.25);
+  else if (shape === "knot") geo = new THREE.TorusKnotGeometry(0.6, 0.21, 180, 22);
+  else if (shape === "sphere") geo = new THREE.IcosahedronGeometry(0.92, 2);
+  else if (shape === "logo") {
+    const s = 0.78, r = 0.24, sh = new THREE.Shape();
+    sh.moveTo(-s + r, -s); sh.lineTo(s - r, -s); sh.quadraticCurveTo(s, -s, s, -s + r); sh.lineTo(s, s - r);
+    sh.quadraticCurveTo(s, s, s - r, s); sh.lineTo(-s + r, s); sh.quadraticCurveTo(-s, s, -s, s - r); sh.lineTo(-s, -s + r);
+    sh.quadraticCurveTo(-s, -s, -s + r, -s);
+    geo = new THREE.ExtrudeGeometry(sh, { depth: 0.2, bevelEnabled: true, bevelThickness: 0.05, bevelSize: 0.05, bevelSegments: 2, curveSegments: 10 });
+    geo.translate(0, 0, -0.1);
+  } else {                                         // gem: a faceted brilliant (crown, girdle, pavilion)
+    const pts = [[0.001, -1.0], [0.98, 0.08], [0.64, 0.46], [0.001, 0.46]].map(([x, y]) => new THREE.Vector2(x, y));
+    geo = new THREE.LatheGeometry(pts, 9);
+    geo.translate(0, 0.25, 0);
+  }
+  const mesh = new THREE.Mesh(geo, shape === "logo" ? mat.clone() : mat);
+  if (shape === "logo") { mesh.material.flatShading = false; mesh.material.color = ACC.clone().lerp(new THREE.Color(0.05, 0.05, 0.07), 0.55); }
+  obj.add(mesh);
+  const edges = new THREE.LineSegments(new THREE.EdgesGeometry(geo, shape === "sphere" ? 8 : 20),
+    new THREE.LineBasicMaterial({ color: hot, transparent: true, opacity: 0.9 }));
+  if (shape !== "knot") obj.add(edges);
+  if (shape === "sphere") {                        // an orbit ring around the orb
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(1.3, 0.035, 8, 96), new THREE.MeshBasicMaterial({ color: hot }));
+    ring.rotation.x = 1.2; obj.add(ring);
+  }
+  if (shape === "logo" && P.media) {
+    const tex = await new THREE.TextureLoader().loadAsync(P.media).catch(() => null);
+    if (tex) {
+      tex.colorSpace = THREE.SRGBColorSpace;
+      const asp = tex.image && tex.image.width ? tex.image.width / tex.image.height : 1;
+      const fw = asp >= 1 ? 1.2 : 1.2 * asp, fh = asp >= 1 ? 1.2 / asp : 1.2;
+      const face = new THREE.Mesh(new THREE.PlaneGeometry(fw, fh), new THREE.MeshBasicMaterial({ map: tex, transparent: true }));
+      face.position.z = 0.16; obj.add(face);
+    }
+  }
+  const halo = new THREE.Sprite(new THREE.SpriteMaterial(Object.assign({ map: glowTex, color: ACC.clone().lerp(WHITE, 0.2),
+                                                                         opacity: 0.55 }, ADD)));
+  halo.scale.setScalar(1.7); halo.renderOrder = -1;
+  obj.add(halo);
+  scene.add(obj);
+
+  // impact: a shockwave ring and a spark burst from where the object is at the hit (pure functions of t - hit)
+  const wave = new THREE.Mesh(new THREE.RingGeometry(0.965, 1, 96),
+    new THREE.MeshBasicMaterial(Object.assign({ color: hot }, ADD)));
+  scene.add(wave);
+  const N = 260, LIFE = 0.9, rnd = U.seed(41);
+  const sparks = Array.from({ length: N }, () => {
+    const a = (rnd() - 0.5) * Math.PI * 0.95, sp0 = 0.35 + rnd() * 0.65;  // a fan away from the face
+    return { dx: sp.side * Math.cos(a) * sp0, dy: Math.sin(a) * sp0, dz: (rnd() - 0.2) * 0.6, life: LIFE * (0.55 + rnd() * 0.45),
+             size: 0.5 + rnd() };
+  });
+  const sPos = new Float32Array(N * 3), sCol = new Float32Array(N * 3);
+  const sGeo = new THREE.BufferGeometry();
+  sGeo.setAttribute("position", new THREE.BufferAttribute(sPos, 3));
+  sGeo.setAttribute("color", new THREE.BufferAttribute(sCol, 3));
+  const sMat = new THREE.PointsMaterial(Object.assign({ size: 0.13, map: glowTex, vertexColors: true, sizeAttenuation: true }, ADD));
+  const points = new THREE.Points(sGeo, sMat);
+  scene.add(points);
+  const hitP = burstPath(sp, sp.hit);
+  const hitW = S.toWorld(hitP.x, hitP.y, hitP.z);
+  const spread = sp.R * 3.2 * wpp(1.5);
+  const sparkHot = ACC.clone().lerp(WHITE, 0.45).multiplyScalar(2.2);
+
+  const post = await U.post(S, { bloom: { intensity: 1.0, threshold: 0.75, radius: 0.42 },
+                                 godrays: rays ? { source: disc, weight: 0.6, density: 0.9, decay: 0.95, samples: 60 } : null,
+                                 chroma: { offset: 0 } });
+  const fx = post.effects;
+  if (fx.godrays) {
+    fx.godrays.godRaysMaterial.exposure = 0.42;
+    // the rays start from the light alone: scene alpha copied into the light buffer would be smeared into dark streaks
+    // (the composite rebuilds alpha from it)
+    fx.godrays.copyPass.fullscreenMaterial.channelWeights.set(0, 0, 0, 0);
+  }
+  const tmp = new THREE.Vector3();
+  U.clock((t) => {
+    const p = burstPath(sp, t);
+    const on = t >= sp.at && t < sp.end;
+    obj.visible = on && p.vis;
+    if (obj.visible) {
+      obj.position.copy(S.toWorld(p.x, p.y, p.z));
+      obj.scale.setScalar(Math.max(1e-4, sp.R * p.s * wpp(BO_ZF)));
+      const a = t - sp.at;
+      obj.rotation.set(0.32 + 0.22 * Math.sin(a * 1.3), a * 1.1 + p.spin + (1 - p.u) * 2.2, -0.12 * sp.side + 0.1 * Math.sin(a * 0.9));
+    }
+    const dt = t - sp.hit;
+    // god rays: full until the hit, gone 0.3 s after it; chroma 0.006 → 0 over 0.25 s at the hit; bloom kick
+    if (fx.godrays) fx.godrays.godRaysMaterial.weight = on ? (dt < 0 ? 0.6 : 0.6 * (1 - clamp(dt / 0.3))) : 0;
+    const ch = dt >= 0 && dt < 0.25 ? 0.006 * (1 - dt / 0.25) : 0;
+    fx.chroma.offset.set(ch, ch * 0.5);
+    fx.bloom.intensity = 1.0 + (dt >= 0 ? 0.9 * Math.exp(-dt * 9) : 0);
+    halo.material.opacity = 0.32 + (dt >= 0 ? 0.4 * Math.exp(-dt * 8) : 0);
+    edges.material.opacity = 0.9;
+    back.intensity = on ? (dt < 0 ? 60 : 60 * (1 - clamp(dt / 0.4)) + 8) : 0;
+    // shockwave
+    const wk = dt >= 0 ? dt / 0.4 : -1;
+    wave.visible = on && wk >= 0 && wk < 1;
+    if (wave.visible) {
+      wave.position.copy(hitW);
+      wave.scale.setScalar(sp.R * wpp(hitP.z) * (0.75 + 0.6 * (1 - Math.pow(1 - wk, 3))));
+      wave.material.opacity = 0.7 * (1 - wk) * (1 - wk);
+    }
+    // sparks: out from the hit point, slowing down, fading
+    points.visible = on && dt >= 0 && dt < LIFE;
+    if (points.visible) {
+      for (let i = 0; i < N; i++) {
+        const q = sparks[i], k = clamp(dt / q.life), d = (1 - Math.pow(1 - k, 2.2)) * spread;
+        tmp.set(hitW.x + q.dx * d, hitW.y + q.dy * d - 0.25 * spread * k * k, hitW.z + q.dz * d);
+        sPos[i * 3] = tmp.x; sPos[i * 3 + 1] = tmp.y; sPos[i * 3 + 2] = tmp.z;
+        const f = (1 - k) * (1 - k) * q.size;
+        sCol[i * 3] = sparkHot.r * f; sCol[i * 3 + 1] = sparkHot.g * f; sCol[i * 3 + 2] = sparkHot.b * f;
+      }
+      sGeo.attributes.position.needsUpdate = true;
+      sGeo.attributes.color.needsUpdate = true;
+    }
+    post.render();
+  });
+});
+U.ready(ready);
+</script>
