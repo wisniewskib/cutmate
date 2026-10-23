@@ -222,7 +222,7 @@
     "params": {
       "card": "{\"title\": the point being made (short), \"lines\": up to 3 short lines, \"media\"?: image} — the card that unfolds from the open palm",
       "sparks": "\"tips\" (default: sparks from the extended fingertips) or \"off\"",
-      "hand": "\"auto\" (default: the hand with the most open-palm time), \"left\" or \"right\" (the speaker's own hand)",
+      "hand": "\"auto\" (default: the raised open palm — open-palm time weighted by how high the palm is), \"left\" or \"right\" (the speaker's own hand: with an unmirrored camera \"right\" is on the screen's left)",
       "colors": "optional spark colours [white-hot core, hot body, glow] (default: white, the theme's --spark / --spark-glow or warm amber and orange)",
       "media": "optional card image (a file next to the recording; same as card.media)"
     },

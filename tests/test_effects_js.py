@@ -1017,6 +1017,35 @@ console.log(JSON.stringify(out));
     assert face["cx"] > 900 and x0 >= 60 and x1 <= 1860 and y0 >= 60               # the hand's side, inside SAFE
 
 
+def test_auto_hand_is_the_raised_open_palm():
+    """hand "auto" (test clip 22.7–26 s): the speaker's left palm is raised (y 0.69·H) and open for 40 samples, the
+    right one hangs low at the bottom edge (y 0.85·H) and reads "open" for more samples (44) — auto takes the raised
+    open palm, not the one with the most samples; an explicit "right" still wins; a low hand never beats a raised one
+    that is open for half as long."""
+    from cutmate.build import _sections
+    sec = _sections(plugin_root() / "themes" / "clean" / "components" / "custom" / "hand-control.html")
+    ts = [round(0.075 * i, 3) for i in range(56)]
+
+    def side(n, x, y):
+        return {"tips": [[[t, x, y - 120, 1.0] for t in ts[:n]]] * 5, "open": [[t, 1] for t in ts[:n]],
+                "palm": [[t, x, y] for t in ts[:n]]}
+    lo, hi = side(44, 490, 0.85 * 1080), side(40, 1250, 0.69 * 1080)
+    P = {"at": 0.2, "end": 3.8, "dur": 3.8, "w": 1920, "h": 1080, "lang": "pl", "lift": 54.0, "card": {"title": "K"},
+         "tips": {"right": lo["tips"], "left": hi["tips"]}, "palm_open": {"right": lo["open"], "left": hi["open"]},
+         "palms": {"right": lo["palm"], "left": hi["palm"]}}
+    js = HAND.split("const seek = ")[0] + """
+const W = window.CutmateFX.wow, half = JSON.parse(JSON.stringify(P));
+half.palm_open.left = half.palm_open.left.map((q, i) => [q[0], i < 22 ? 1 : 0]);
+console.log(JSON.stringify({ auto: W.hcSide(P), right: W.hcSide(Object.assign({}, P, { hand: "right" })),
+                             explicitAuto: W.hcSide(Object.assign({}, P, { hand: "auto" })), half: W.hcSide(half) }));
+"""
+    r = subprocess.run(["node", "-e", js % {"fx": json.dumps(str(web_dir() / "effects.js")), "markup": json.dumps(sec["markup"]),
+                                            "params": json.dumps(P), "script": sec["script"], "times": "[]"}],
+                       capture_output=True, text=True, encoding="utf-8")
+    assert r.returncode == 0, r.stderr[-3000:]
+    d = json.loads(r.stdout.strip().splitlines()[-1])
+    assert d == {"auto": "left", "right": "right", "explicitAuto": "left", "half": "left"}, d
+
 def test_flick_burst_and_edge_sparks():
     """A finger flicking out (ext 0 -> 1 at 1.0 s) fires a radial burst from that tip only, gone after 0.45 s; the sparks
     are bold (core 4–8 px, glow 12–20 px at 1080) with 90–140 ms tails; an open card spills sparks from its bottom edge

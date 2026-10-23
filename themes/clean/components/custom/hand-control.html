@@ -31,15 +31,18 @@ ROOT .hc-line i { flex: none; border-radius: 50%; background: var(--accent, #7dd
 // ---- pure helpers (window.CutmateFX.wow, registered once) ----
 const HC_N = 55, HC_LIFE = 0.42, HC_HOLD = 0.25, HC_BURST = 24, HC_BURST_LIFE = 0.45, HC_EDGE = 60, HC_EDGE_LIFE = 0.6;
 const hcClamp = (v, a, b) => Math.min(b, Math.max(a, v));
-// the hand the effect uses: params.hand "left" / "right" when tracked, else the side with the most open-palm samples
-// (then the most samples; ties: right). null when no hand was tracked at all
+// the hand the effect uses: params.hand "left" / "right" when tracked, else ("auto") the raised open palm: every
+// open-palm sample counts by the palm's height above the frame bottom, squared ((h - y) / h)², so a palm held up
+// beats a hand hanging low that the model also reads as open (then the most samples; ties: right). null when no hand
 function hcSide(P) {
   const has = (s) => (P.palms && P.palms[s] && P.palms[s].length) || (P.tips && P.tips[s] && P.tips[s].some((x) => x && x.length));
   const sides = ["right", "left"].filter(has);
   if (!sides.length) return null;
   if ((P.hand === "left" || P.hand === "right") && sides.includes(P.hand)) return P.hand;
-  const score = (s) => { const po = (P.palm_open && P.palm_open[s]) || [];
-    return [po.filter((p) => p[1] >= 0.5).length, po.length + (((P.palms || {})[s]) || []).length]; };
+  const h = P.h || 1080, FX = window.CutmateFX.pure;
+  const score = (s) => { const po = (P.palm_open && P.palm_open[s]) || [], palm = ((P.palms || {})[s]) || [];
+    const up = (t) => { const p = palm.length ? FX.trackAt(palm, t) : null; return p ? hcClamp((h - p[1]) / h, 0, 1) ** 2 : 0.25; };
+    return [po.filter((p) => p[1] >= 0.5).reduce((a, p) => a + up(p[0]), 0), po.length + palm.length]; };
   return sides.reduce((a, b) => { const x = score(a), y = score(b); return y[0] > x[0] || (y[0] === x[0] && y[1] > x[1]) ? b : a; });
 }
 // a fingertip at t: [x, y, ext] (position interpolated, ext of the latest sample), null outside the track (+0.25 s)
