@@ -77,6 +77,7 @@ class Plan:
     tracks: dict | None = None          # tracks.json when it is fresh (not older than aroll.mp4), else None
     panel: dict | None = None           # {"start", "end", "ratio", "open_at_zero", "stays", "items"} when plan.json has a panel
     layout: Layout | None = None        # the theme layout load_plan was given (None = split-panel defaults for validation)
+    chapter_fx: str | None = None       # plan.json "chapter_fx": the custom effect the chapter plates (chapters 2+) become
 
 
 def norm(word: str) -> str:
@@ -786,6 +787,9 @@ def load_plan(out_dir: Path, factcheck: bool = False, layout: Layout | None = No
             raise PlanError(f"graphic #{g.index + 1} ({g.type}): hit {graphics_list[g.index]['hit']!r} is outside the graphic "
                             f"({g.start:.2f}–{g.end:.2f}s) — anchor it on a word inside the span")
     chapters = _chapters(raw, words, end)
+    chapter_fx = raw.get("chapter_fx")
+    if chapter_fx is not None and not (isinstance(chapter_fx, str) and NAME_RE.match(chapter_fx)):
+        raise PlanError(f'{p}: "chapter_fx" must be an effect name like "topic-change" (got {chapter_fx!r})')
     face = _face(raw, words)
     if tr:
         for s in timed:
@@ -816,4 +820,4 @@ def load_plan(out_dir: Path, factcheck: bool = False, layout: Layout | None = No
         if (not isinstance(music, dict) or not ({"volume", "src"} & music.keys()) or ("volume" in music and (isinstance(v, bool) or not isinstance(v, (int, float)) or not 0 <= v <= 2))
                 or ("src" in music and not isinstance(music["src"], str))):
             raise PlanError(f"{p}: \"music\" must be an object with an optional numeric \"volume\" (0–2) and an optional string \"src\"")
-    return Plan(gs, captions, music, end, warnings, chapters, face, fmt, tr, panel, layout)
+    return Plan(gs, captions, music, end, warnings, chapters, face, fmt, tr, panel, layout, chapter_fx)

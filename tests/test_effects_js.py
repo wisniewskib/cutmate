@@ -1,4 +1,5 @@
 import json
+import math
 import re
 import subprocess
 
@@ -1043,3 +1044,163 @@ console.log(JSON.stringify(out));
         if 0.09 <= p["age"] <= 0.15:                                             # young streaks: 60+ px long
             assert ((p["x"] - p["tx"]) ** 2 + (p["y"] - p["ty"]) ** 2) ** 0.5 > 60, p
     assert d["1.6"]["edge"] and d["1.1"]["edge"]
+
+
+# the A-roll glitch on the main timeline (cutmate.js glitch(), cfg.glitch): every tl call recorded as
+# [method, target, vars (the "to" vars of a fromTo), position]
+GLITCH = """
+global.window = {};
+global.document = { getElementById: () => ({ appendChild: (c) => c }), createElement: () => ({ appendChild: (c) => c }) };
+const calls = [];
+const tl = {};
+for (const m of ["set", "to", "fromTo"]) tl[m] = (t, a, b, c) => { calls.push([m, t, m === "fromTo" ? b : a, m === "fromTo" ? c : b]); return tl; };
+require(%s);
+const out = {};
+for (const [k, cfg] of Object.entries(%s)) {
+  calls.length = 0;
+  window.Cutmate.build(tl, cfg);
+  out[k] = JSON.parse(JSON.stringify(calls));
+}
+console.log(JSON.stringify(out));
+"""
+
+
+def _glitch_calls(cfgs: dict) -> dict:
+    return _node(GLITCH, json.dumps(str(web_dir() / "cutmate.js")), json.dumps(cfgs))
+
+
+def test_glitch_runtime():
+    """cfg.glitch [[t, dur, kind]]: #split gets the SVG filter at t and loses it at t + dur; the R / B feOffset dx steps
+    from ±18 px down to exactly 0 by t + dur (kind glitch), the displacement scale 60 -> 0 (kind wave); #shake jitters in
+    deterministic steps. No cfg.glitch -> none of it."""
+    base = {"end": 6.0, "pages": [], "cam": [[0, 1.0]], "hits": [], "splits": []}
+    d = _glitch_calls({"g": {**base, "glitch": [[4, 0.6, "glitch"]]}, "g2": {**base, "glitch": [[4, 0.6, "glitch"]]},
+                       "w": {**base, "glitch": [[4, 0.6, "wave"]]}, "none": base})
+    g = d["g"]
+    filt = [(c[3], c[2]["filter"]) for c in g if c[1] == "#split" and "filter" in (c[2] or {})]
+    assert (4, "url(#cm-rgb)") in filt and (4.6, "none") in filt and (0, "none") in filt
+    assert all(f in ("none", "url(#cm-rgb)") for _, f in filt)
+
+    def end(c):
+        v = c[2] or {}
+        return c[3] + (sum(k.get("duration", 0) for k in v["keyframes"]) if "keyframes" in v else v.get("duration", 0))
+
+    def last_attr(c, key):
+        v = c[2] or {}
+        return (v["keyframes"][-1] if "keyframes" in v else v)["attr"][key]
+    for ch in ("cm-r", "cm-b"):
+        off = [c for c in g if str(c[1]).startswith("#cm-rgb feOffset") and ch in str(c[1]) and c[3] >= 4 - 1e-9]
+        assert off, ch
+        vals = [last_attr(c, "dx") for c in off if end(c) < 4.6 - 1e-9]
+        assert len(set(vals)) >= 4 and max(abs(v) for v in vals) == pytest.approx(18, abs=0.01), (ch, vals)
+        final = max(off, key=end)
+        assert end(final) == pytest.approx(4.6) and last_attr(final, "dx") == 0, (ch, final)
+    shakes = [c for c in g if c[1] == "#shake" and c[0] == "to" and "keyframes" in (c[2] or {}) and c[3] == 4]
+    assert shakes and any(abs(k["x"]) > 3 for k in shakes[0][2]["keyframes"]) and shakes[0][2]["keyframes"][-1]["x"] == 0
+    assert end(shakes[0]) == pytest.approx(4.6, abs=0.04)
+    assert d["g"] == d["g2"]                                                          # deterministic
+    w = d["w"]
+    filt = [(c[3], c[2]["filter"]) for c in w if c[1] == "#split" and "filter" in (c[2] or {})]
+    assert (4, "url(#cm-wave)") in filt and (4.6, "none") in filt
+    disp = [c for c in w if str(c[1]).startswith("#cm-wave feDisplacementMap") and c[3] >= 4 - 1e-9]
+    assert disp and end(max(disp, key=end)) == pytest.approx(4.6) and last_attr(max(disp, key=end), "scale") == 0
+    assert max(last_attr(c, "scale") for c in w if str(c[1]).startswith("#cm-wave feDisplacementMap")
+               and c[0] == "fromTo") == 0 and any(c[0] == "fromTo" for c in disp)
+    assert not any(str(c[1]).startswith("#cm-") or (c[1] == "#split" and "filter" in (c[2] or {})) for c in d["none"])
+
+
+# topic-change in a DOM harness: the real effect script with a recording tl; the clock is seeked by hand
+_ONE_EL = """const m = %(markup)s.match(/class="([^"]+)"/);
+if (m) root.appendChild(new El("div")).className = m[1];"""
+# the whole markup as a tree (tags with an optional class; text placeholders already filled in)
+_TREE = """{ const stack = [root];
+  for (const [, close, tag, cls, text] of %(markup)s.matchAll(/<(\\/?)(\\w+)(?:\\s+class="([^"]*)")?[^>]*>|([^<]+)/g)) {
+    if (text !== undefined) { stack[stack.length - 1].textContent = text; continue; }
+    if (close) { stack.pop(); continue; }
+    const e = stack[stack.length - 1].appendChild(new El(tag)); if (cls) e.className = cls; stack.push(e);
+  } }"""
+assert _ONE_EL in DOM
+TOPIC = DOM.split("const out = {};")[0].replace(_ONE_EL, _TREE) + """
+const res = [];
+for (const t of %(times)s) {
+  seek(t);
+  res[res.length] = root.querySelectorAll(".tc-rgb").map((e) => ({ text: e.textContent, tr: e.style.transform || "" }));
+}
+console.log(JSON.stringify(res));
+"""
+
+
+def _topic(params: dict, times: list) -> list:
+    from cutmate.build import _sections
+    sec = _sections(plugin_root() / "themes" / "clean" / "components" / "custom" / "topic-change.html")
+    markup = sec.get("markup", "").replace("{{title}}", params.get("title", ""))
+    js = TOPIC.replace("%(times)s", json.dumps(times)) % {
+        "fx": json.dumps(str(web_dir() / "effects.js")), "markup": json.dumps(markup),
+        "params": json.dumps(params), "script": sec["script"], "probes": "[]"}
+    r = subprocess.run(["node", "-e", js], capture_output=True, text=True, encoding="utf-8")
+    assert r.returncode == 0, r.stderr[-3000:]
+    return json.loads(r.stdout.strip().splitlines()[-1])
+
+
+def _offset(tr: str) -> float:
+    nums = [abs(float(v)) for v in re.findall(r"-?[\d.]+(?=px)", tr)]
+    return max(nums) if nums else 0.0
+
+
+@pytest.mark.parametrize("style", ["glitch", "wave"])
+def test_topic_change_title_resolves(style):
+    """The title (three RGB copies) is still scrambled and split at P.at + 0.1 and final, every copy at offset 0, by
+    P.at + 0.7."""
+    title = "Druga sprawa: koszty"
+    P = {"title": title, "kicker": "ROZDZIAŁ 02", "style": style, "at": 0.3, "end": 1.9, "dur": 1.9, "w": 1080,
+         "h": 1920, "lang": "pl", "caption_band": [1295, 1455]}
+    d = _topic(P, [0.4, 1.0, 1.4])
+    early, final, hold = d
+    assert len(early) == 3
+    assert all(c["text"] != title for c in early), early
+    assert max(_offset(c["tr"]) for c in early) >= 4, early
+    assert all(c["text"] == title for c in final + hold), final
+    assert all(_offset(c["tr"]) == 0 for c in final + hold), final
+
+
+# kinetic-word's pure helpers (window.CutmateFX.wow): the effect script runs with fonts never loading (no build)
+KINETIC = """
+global.window = {};
+require(%s);
+const tl = { to() { return tl; }, set() { return tl; }, fromTo() { return tl; } };
+const stub = () => new Proxy(function () {}, { get: (o, k) => (k === Symbol.toPrimitive ? () => "" : stub()), apply: () => stub(),
+                                               set: () => true });
+global.document = stub();
+const U = window.CutmateFX.make(tl, {}, "c1", { dur: 4 });
+U.fonts = () => new Promise(() => {});
+new Function("tl", "root", "P", "U", %s)(tl, stub(), { text: "+300%%", at: 0.3, end: 3.8, dur: 4, w: 1080, h: 1920, lang: "pl" }, U);
+const W = window.CutmateFX.wow;
+console.log(JSON.stringify((function () { %s })()));
+"""
+
+
+def test_kinetic_word_targets():
+    """gridStart: n points of a centred grid inside the frame (cols = ceil(sqrt(n·W/H))); assignTargets: n targets from
+    the glyph points, the same for the same seed, another order for another seed, every one a glyph point (inside the
+    text box); repeats wrap when n > points."""
+    from cutmate.build import _sections
+    src = _sections(plugin_root() / "themes" / "clean" / "components" / "custom" / "kinetic-word.html")["script"]
+    d = _node(KINETIC, json.dumps(str(web_dir() / "effects.js")), json.dumps(src), """
+      const pts = [];
+      for (let y = 800; y <= 1000; y += 10) for (let x = 100; x <= 980; x += 10) if ((x + y) % 30) pts.push([x, y]);
+      return { grid: W.gridStart(600, 1080, 1920), grid169: W.gridStart(600, 1920, 1080), pts,
+               a: W.assignTargets(pts, 600, 7), b: W.assignTargets(pts, 600, 7), c: W.assignTargets(pts, 600, 8),
+               few: W.assignTargets(pts.slice(0, 50), 600, 7) };
+    """)
+    for grid, (w, h) in ((d["grid"], (1080, 1920)), (d["grid169"], (1920, 1080))):
+        assert len(grid) == 600
+        assert all(0 <= x <= w and 0 <= y <= h for x, y in grid)
+        xs, ys = sorted({round(x, 3) for x, _ in grid}), sorted({round(y, 3) for _, y in grid})
+        assert len(xs) == math.ceil(math.sqrt(600 * w / h))                          # cols = ceil(sqrt(n·W/H))
+        cx, cy = sum(x for x, _ in grid) / 600, sum(y for _, y in grid) / 600
+        assert abs(cx - w / 2) < w * 0.03 and abs(cy - h / 2) < h * 0.05            # centred
+    assert d["a"] == d["b"] and d["a"] != d["c"] and len(d["a"]) == 600
+    pts = {tuple(p) for p in d["pts"]}
+    assert all(tuple(p) in pts for p in d["a"])                                      # inside the text box
+    assert len({tuple(p) for p in d["a"]}) == min(600, len(pts))
+    assert len(d["few"]) == 600 and len({tuple(p) for p in d["few"]}) == 50           # repeats wrap

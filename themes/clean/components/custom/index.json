@@ -228,5 +228,43 @@
     },
     "follow": false,
     "place": false
+  },
+  {
+    "name": "topic-change",
+    "kind": "wow",
+    "modes": [
+      "overlay",
+      "scene",
+      "chapter"
+    ],
+    "aroll_fx": {
+      "dur": 0.6
+    },
+    "description": "Topic change / new chapter: the A-roll itself glitches for 0.6 s (RGB split, or a wave with style \"wave\") while slice bars of the frame tint jump on it, scanlines and a scrim in the panel colour come up, the title decodes in big display type out of an RGB-split triple that snaps together and the kicker types in in --accent over an accent rule; it holds, glitches out and hard-cuts with a 2-frame white flash. 1.2–2.0 s. Long-form chapters: plan.json \"chapter_fx\": \"topic-change\" (every chapter 2+ plate becomes it: title = the chapter title, kicker = ROZDZIAŁ 02). In a short: {\"type\": \"custom\", \"name\": \"topic-change\", \"from\", \"to\", \"params\": {\"title\": \"<the next topic>\"}} on \"a teraz…\", \"przejdźmy do\", \"druga sprawa\"; a scene in split-panel.",
+    "params": {
+      "title": "the next topic, ≤ 40 characters (decodes in --font-display)",
+      "kicker": "optional small label above it in --accent (chapter plates: \"ROZDZIAŁ 02\")",
+      "style": "\"glitch\" (default: RGB split of the A-roll and the title) or \"wave\" (a displacement wave; the title copies swing)"
+    },
+    "follow": false,
+    "place": false
+  },
+  {
+    "name": "kinetic-word",
+    "kind": "wow",
+    "modes": [
+      "scene",
+      "overlay"
+    ],
+    "description": "Full-screen anime.js punch for THE key word or number of the video: ~600 themed shapes (squares, dots, dashes in --accent / --text / --muted) pop in as a grid that ripples out from the centre, burst outward and fly into the letterforms of the word (sampled from --font-display); it lands with a camera punch while a ring and an underline draw on, a starburst grows and morphs behind it and the kicker decodes; the letters breathe while it holds, then everything shatters out. 2.5–6 s (3–4 s reads best). Split-panel: a scene {\"effect\": \"kinetic-word\", \"params\": {\"text\": \"+300%\"}}; classic: {\"type\": \"custom\", \"name\": \"kinetic-word\", \"from\", \"to\", \"params\": {\"text\"}} full frame (bg \"none\": over the video). Use on \"wystartowało\", a growth / launch moment, THE number or key phrase (\"+300%\", \"ZA DARMO\", \"Claude Code\"); once per short; a number needs a ✅ line in factcheck.md.",
+    "params": {
+      "text": "the word / number, ≤ 14 characters taken from the sentence (one or two words, or a number with prefix / suffix: \"+300%\")",
+      "kicker": "optional small label above the word in --accent (decodes on landing)",
+      "count": "number of shapes, 300–900 (default 600)",
+      "shapes": "\"mixed\" (default), \"squares\", \"dots\" or \"dashes\"",
+      "bg": "\"panel\" (default: the theme's --panel-bg, full frame) or \"none\" (transparent overlay over the video)"
+    },
+    "follow": false,
+    "place": false
   }
 ]

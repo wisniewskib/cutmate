@@ -104,7 +104,7 @@ INDEX = """<!doctype html>
   </head>
   <body>
     <div id="root" data-composition-id="main" data-start="0" data-duration="{end}" data-width="{w}" data-height="{h}">
-      <div id="split"><div id="cam"><div id="shake"><video id="aroll" src="assets/aroll.mp4" data-start="0" data-duration="{vdur}" data-media-start="0" data-track-index="0" playsinline data-has-audio="true"></video></div></div></div>
+      <div id="split"><div id="cam"><div id="shake"><video id="aroll" src="assets/aroll.mp4" data-start="0" data-duration="{vdur}" data-media-start="0" data-track-index="0" playsinline data-has-audio="true"></video></div></div></div>{fx_svg}
 {hosts}
       <div id="flash"></div>
       <div id="captions" class="clip" data-start="0" data-duration="{end}" data-track-index="5"></div>
@@ -120,6 +120,26 @@ INDEX = """<!doctype html>
   </body>
 </html>
 """
+
+
+# the A-roll glitch filters (cfg.glitch, cutmate.js glitch()): #cm-rgb splits R / G / B (the R and B feOffset dx are
+# stepped from ±18 px to 0), #cm-wave displaces the frame by a seeded turbulence (scale 60 -> 0). Only with a glitch
+FX_SVG = """
+      <svg id="cm-fx" width="0" height="0" aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden">
+        <filter id="cm-rgb" x="-2%" y="0" width="104%" height="100%" color-interpolation-filters="sRGB">
+          <feColorMatrix in="SourceGraphic" type="matrix" values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0" result="r" />
+          <feOffset class="cm-r" in="r" dx="0" dy="0" result="ro" />
+          <feColorMatrix in="SourceGraphic" type="matrix" values="0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 1 0" result="g" />
+          <feColorMatrix in="SourceGraphic" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0" result="b" />
+          <feOffset class="cm-b" in="b" dx="0" dy="0" result="bo" />
+          <feBlend in="ro" in2="g" mode="screen" result="rg" />
+          <feBlend in="rg" in2="bo" mode="screen" />
+        </filter>
+        <filter id="cm-wave" x="-5%" y="-5%" width="110%" height="110%" color-interpolation-filters="sRGB">
+          <feTurbulence type="fractalNoise" seed="7" baseFrequency="0.004 0.03" numOctaves="2" result="n" />
+          <feDisplacementMap in="SourceGraphic" in2="n" scale="0" xChannelSelector="R" yChannelSelector="G" />
+        </filter>
+      </svg>"""
 
 
 def _fx_head(effect_texts: list[str]) -> str:
@@ -586,7 +606,8 @@ def _sfx_cues(g: Graphic, meta: dict) -> list[tuple]:
         return []
     if isinstance(g.sfx, str):
         return [(g.sfx, g.start, 0.35)]
-    cues = [(n, g.start + off, vol) for n, off, vol in meta["sfx"].get(g.type, [])]
+    kind = "chapter" if g.params.get("_chapter") else g.type    # a chapter_fx plate keeps the chapter sound
+    cues = [(n, g.start + off, vol) for n, off, vol in meta["sfx"].get(kind, [])]
     if g.type == "list":
         cues += [(n, it["at"] + off, vol) for it in g.params["items"] for n, off, vol in meta["sfx"].get("list.item", [])]
     return cues
@@ -616,11 +637,20 @@ def sfx_tags(cues: list[tuple], end: float, assets: Path) -> list[str]:
 
 
 def chapter_plates(plan, end: float, lang: str) -> list[Graphic]:
-    """Full-screen plates for chapters 2+ (chapter 1 is the start of the video)."""
+    """Full-screen plates for chapters 2+ (chapter 1 is the start of the video): the theme's chapter.html, or with
+    plan.json "chapter_fx" that custom effect over the same span (params title / kicker / num, marked `_chapter`: it
+    never counts toward the WOW caps)."""
     word = CHAPTER_LABEL.get(lang, CHAPTER_LABEL["en"])
-    return [Graphic("chapter", c["start"], round(min(c["start"] + PLATE, end - 0.05), 3),
-                    {"num": c["num"], "title": c["title"], "label": f"{word} {c['num']:02d}"}, False, None, -1)
-            for c in plate_chapters(plan.chapters, end)]
+    fx = getattr(plan, "chapter_fx", None)
+    out = []
+    for c in plate_chapters(plan.chapters, end):
+        s, e, label = c["start"], round(min(c["start"] + PLATE, end - 0.05), 3), f"{word} {c['num']:02d}"
+        if fx:
+            out.append(Graphic("custom", s, e, {"name": fx, "params": {"title": c["title"], "kicker": label, "num": c["num"]},
+                                                "_chapter": True}, False, None, -1))
+        else:
+            out.append(Graphic("chapter", s, e, {"num": c["num"], "title": c["title"], "label": label}, False, None, -1))
+    return out
 
 
 def checkpoint(g: Graphic) -> float:
@@ -642,6 +672,8 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
         raise CutmateError(f"unknown caption mode {mode!r} for {fmt} (use {', '.join(CAPTION_MODES)})")
     th = theme_dir(theme)
     meta = _theme_meta(th)
+    if plan.chapter_fx:                                # the chapter plates' effect: found and linted before any file
+        lint_effect(find_effect(plan.chapter_fx, out, theme))
     if not (out / "aroll.mp4").exists():
         raise CutmateError(f"{out / 'aroll.mp4'} not found — run `cutmate cut` first")
     proj = out / "composition"
@@ -835,6 +867,17 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
     cues += [(hit_name, h[0], hit_vol) for h in hits]
     pages = caption_pages(words, end, plan.captions["key"], plan.captions["max_words"])
     cfg = {"end": end, "pages": pages if mode in ("burn", "both") else [], "cam": cam, "hits": hits, "splits": splits}
+    # an effect whose index.json has "aroll_fx" (topic-change) glitches the A-roll at its start: [t, dur, kind]
+    glitch = []
+    for g in items:
+        fx_meta = effect_meta(found[g.params["name"]]).get("aroll_fx") if g.type == "custom" else None
+        if isinstance(fx_meta, dict):
+            style = ((g.params.get("params") or {}).get("style"))
+            dur = fx_meta.get("dur")
+            dur = float(dur) if isinstance(dur, (int, float)) and not isinstance(dur, bool) and dur > 0 else 0.6
+            glitch.append([round(g.start, 3), round(min(dur, g.end - g.start), 3), "wave" if style == "wave" else "glitch"])
+    if glitch:
+        cfg["glitch"] = glitch
     if shake:
         cfg["shake_hosts"] = True                      # hits shake "#shake, .cm-shake" (the bg pair with the cut-out)
     if sides:
@@ -875,7 +918,7 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
     vdur = round(min(end, duration(A / "aroll.mp4")), 3)
     (proj / "index.html").write_text(INDEX.format(lang=language, fcls="f169" if fmt == "16:9" else "f916", w=W, h=H, end=round(end, 3), vdur=vdur,
                                                   hosts="\n".join(hosts), audio="\n".join(audio), cfg=_js(cfg),
-                                                  fx_head=_fx_head(effect_texts)),
+                                                  fx_head=_fx_head(effect_texts), fx_svg=FX_SVG if glitch else ""),
                                      encoding="utf-8")
     if src and not carve(proj):
         half = round(vol * 0.5, 3)

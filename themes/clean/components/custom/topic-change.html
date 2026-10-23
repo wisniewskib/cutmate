@@ -1,0 +1,129 @@
+<style>
+ROOT .tc { position: absolute; inset: 0; overflow: hidden; visibility: hidden; }
+ROOT .tc-scrim { position: absolute; inset: 0; background: var(--panel-bg, #0b0b0f); opacity: 0; }
+ROOT .tc-bars, ROOT .tc-lines, ROOT .tc-flash { position: absolute; inset: 0; pointer-events: none; }
+ROOT .tc-bar { position: absolute; left: 0; will-change: transform; visibility: hidden; }
+ROOT .tc-bar.tint { background: var(--panel-bg, #0b0b0f); opacity: 0.86; }
+ROOT .tc-bar.hot { background: var(--accent, #7dd3fc); mix-blend-mode: difference; }
+ROOT .tc-lines { opacity: 0; background: repeating-linear-gradient(to bottom, rgba(0, 0, 0, 0.26) 0 2px, transparent 2px 5px); }
+ROOT .tc-flash { background: #ffffff; opacity: 0; }
+ROOT .tc-box { position: absolute; left: 0; right: 0; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 30px; }
+ROOT .tc-kicker { display: flex; align-items: center; gap: 18px; font-family: var(--font, sans-serif); font-weight: 800;
+  font-size: 46px; letter-spacing: 0.32em; color: var(--accent, #7dd3fc); white-space: nowrap; opacity: 0; }
+ROOT .tc-kicker i { display: block; width: 22px; height: 22px; background: var(--accent, #7dd3fc); }
+ROOT .tc-title { position: relative; max-width: 86%; font-family: var(--font-display, var(--font, sans-serif));
+  font-weight: 900; font-synthesis: none; font-size: 112px; line-height: 1.02; letter-spacing: -0.02em; text-align: center;
+  text-wrap: balance; color: var(--text, #ffffff); }
+ROOT .tc-sizer { visibility: hidden; }
+ROOT .tc-rgb { position: absolute; inset: 0; white-space: pre; will-change: transform; }
+ROOT .tc-a { color: var(--glitch-a, #ff0000); mix-blend-mode: screen; }
+ROOT .tc-b { color: var(--glitch-b, #00ffff); mix-blend-mode: screen; }
+ROOT .tc.light .tc-title { color: var(--ink, #0f172a); }
+ROOT .tc.light .tc-a, ROOT .tc.light .tc-b { mix-blend-mode: multiply; }
+ROOT .tc-rule { width: 38%; height: 10px; background: var(--accent, #7dd3fc); transform-origin: 0 50%; transform: scaleX(0); }
+html.f169 ROOT .tc-title { font-size: 132px; max-width: 80%; }
+html.f169 ROOT .tc-kicker { font-size: 44px; }
+html.f169 ROOT .tc-rule { width: 22%; }
+</style>
+<markup><div class="tc"><div class="tc-scrim"></div><div class="tc-bars" data-layout-allow-overflow></div><div class="tc-lines"></div><div class="tc-box"><div class="tc-kicker"><i></i><span class="tc-k"></span></div><div class="tc-title" data-layout-allow-overlap><span class="tc-sizer">{{title}}</span><span class="tc-rgb tc-a" data-layout-ignore></span><span class="tc-rgb tc-b" data-layout-ignore></span><span class="tc-rgb tc-base"></span></div><div class="tc-rule"></div></div><div class="tc-flash"></div></div></markup>
+<script>
+// topic-change (WOW: overlay / scene / chapter; index.json "aroll_fx" {"dur": 0.6}: the build glitches the A-roll itself
+// on the main timeline — RGB split or wave — over the first 0.6 s). Over that glitch: 8 horizontal slice bars of the
+// frame tint / accent jumping on seeded offsets every 2 frames, scanlines, a scrim in the panel colour, the title in
+// --font-display as three copies (two coloured ghosts in screen blend — multiply on a light panel — and the text-colour
+// base) whose offsets fall to 0 while it decodes (U.scramble), the kicker in --accent and an accent rule. It holds, glitches
+// out for 0.3 s and hard-cuts with one 2-frame white flash. style "wave": the copies swing on a sine instead of jumping.
+// Everything is a pure function of t (U.seed per 2-frame step), so any frame renders the same alone.
+const tc = root.querySelector(".tc");
+const tcBox = root.querySelector(".tc-box"), tcTitle = root.querySelector(".tc-title");
+const tcCopies = Array.from(root.querySelectorAll(".tc-rgb"));
+const tcScrim = root.querySelector(".tc-scrim"), tcLines = root.querySelector(".tc-lines"), tcFlash = root.querySelector(".tc-flash");
+const tcKick = root.querySelector(".tc-kicker"), tcRule = root.querySelector(".tc-rule");
+const TC_IN = 0.6, TC_OUT = 0.3, TC_STEP = 1 / 15, TC_FLASH = 2 / 30;
+const tcAt = P.at || 0, tcEnd = Math.max(tcAt + 0.9, P.end || tcAt + 1.5), tcWave = P.style === "wave";
+const tcTxt = String(P.title || "").slice(0, 40);
+if (U.panelLight()) tc.classList.add("light");
+// the title / kicker block sits in the free part of the frame above / below the burned captions
+const tcSafe = U.safeBox();
+tcBox.style.top = tcSafe.y + "px";
+tcBox.style.height = tcSafe.h + "px";
+if (!P.kicker) tcKick.style.display = "none";
+// the title fits its width: no word wider than the block (Polish long words), measured once the font is in; the copies
+// then get the sizer's own line breaks, so a scrambled line never wraps differently from the final one
+let tcLaid = tcTxt;
+U.ready(U.fonts([800, 900], U.token("--font-display", "Inter")).then(() => {
+  const max = 0.86 * (P.w || 1080), sizer = root.querySelector(".tc-sizer");
+  let fs = parseFloat(getComputedStyle(tcTitle).fontSize) || 112;
+  const longest = tcTxt.split(/\s+/).reduce((a, b) => (b.length > a.length ? b : a), "");
+  const probe = document.createElement("span");
+  probe.textContent = longest;
+  probe.style.cssText = "position:absolute;visibility:hidden;white-space:nowrap";
+  tcTitle.appendChild(probe);
+  for (let i = 0; i < 40 && fs > 44 && probe.offsetWidth > max; i++) { fs -= 4; tcTitle.style.fontSize = fs + "px"; }
+  probe.remove();
+  if (sizer.offsetHeight > 0.62 * tcSafe.h) tcTitle.style.fontSize = Math.max(44, fs * 0.62 * tcSafe.h / sizer.offsetHeight) + "px";
+  const words = tcTxt.split(/\s+/).filter(Boolean);
+  sizer.textContent = "";
+  const spans = words.map((w, i) => { const e = document.createElement("span");
+    e.textContent = i < words.length - 1 ? w + " " : w; sizer.appendChild(e); return e; });
+  const lines = [];
+  spans.forEach((e, i) => { const top = Math.round(e.offsetTop);
+    if (!lines.length || Math.abs(lines[lines.length - 1].top - top) > 4) lines.push({ top, words: [] });
+    lines[lines.length - 1].words.push(words[i]); });
+  tcLaid = lines.map((l) => l.words.join(" ")).join("\n") || tcTxt;
+}));
+
+// 8 slice bars: rows, heights, widths and kind from U.seed(7); per 2-frame step an x offset and an on / off flag
+const tcR = U.seed(7), W = P.w || 1080, H = P.h || 1920, TC_STEPS = 48;
+const tcBars = Array.from({ length: 8 }, (_, i) => {
+  const el = U.el("div", "tc-bar " + (i % 3 === 1 ? "hot" : "tint"), null, root.querySelector(".tc-bars"));
+  const y = tcR() * 0.94 * H, h = (0.012 + tcR() * 0.06) * H, w = (0.35 + tcR() * 0.75) * W;
+  Object.assign(el.style, { top: y.toFixed(1) + "px", height: h.toFixed(1) + "px", width: w.toFixed(1) + "px" });
+  const off = [], on = [];
+  for (let k = 0; k < TC_STEPS; k++) { off.push(((tcR() - 0.5) * 1.1 * W - (w - W) / 2).toFixed(1)); on.push(tcR() < 0.62); }
+  return { el, off, on };
+});
+
+const tcVis = (el, v) => { const s = v ? "visible" : "hidden"; if (el.style.visibility !== s) el.style.visibility = s; };
+U.clock((t) => {
+  const u = t - tcAt;
+  // the glitch envelope: 1 -> 0 over the first TC_IN s, 0 -> 1 over the last TC_OUT s (before the flash)
+  const gin = u >= 0 && u < TC_IN ? Math.pow(1 - u / TC_IN, 1.5) : 0;
+  const gout = t >= tcEnd - TC_OUT && t < tcEnd ? Math.min(1, (t - (tcEnd - TC_OUT)) / (TC_OUT - TC_FLASH)) : 0;
+  const g = Math.max(gin, gout), k = Math.floor(Math.max(0, t) / TC_STEP + 1e-6);
+  const r = U.seed(9001 + k);
+  const j = [0.55 + 0.45 * r(), 0.55 + 0.45 * r(), r() - 0.5, r() - 0.5, r() - 0.5];
+  const sh = tcWave
+    ? [[g * 30 * Math.sin(k * 0.8), 0, g * 14 * Math.sin(k * 0.8 + 1)], [-g * 30 * Math.sin(k * 0.8 + 0.6), 0, -g * 14 * Math.sin(k * 0.8 + 1.6)], [g * 8 * Math.sin(k * 0.8 + 2), 0, 0]]
+    : [[g * 30 * j[0], g * 10 * j[2], 0], [-g * 30 * j[1], g * 10 * j[3], 0], [g * 12 * j[4], 0, 0]];
+  tcCopies.forEach((el, i) => {
+    const [dx, dy, sk] = sh[i].map((v) => Math.round(v * 10) / 10 || 0);
+    const s = `translate(${dx}px, ${dy}px) skewX(${sk}deg)`;
+    if (el.style.transform !== s) el.style.transform = s;
+  });
+  tcBars.forEach((b) => {
+    const live = g > 0.04 && b.on[k % TC_STEPS];
+    tcVis(b.el, live);
+    if (live) b.el.style.transform = `translateX(${(b.off[k % TC_STEPS] * Math.min(1, 0.4 + g)).toFixed(1)}px)`;
+  });
+  tcLines.style.opacity = u < 0 ? "0" : (0.3 + 0.55 * g).toFixed(3);
+});
+// the title decodes in every copy (each its own seed: coloured noise while it decodes, one text when final)
+const tcScr = window.CutmateFX.pure.scrambleAt;
+U.clock((t) => {
+  const p = Math.min(1, Math.max(0, (t - tcAt - 0.04) / 0.5)), fr = Math.floor(t * 30 + 1e-6);
+  tcCopies.forEach((el, i) => { const s = tcScr(tcLaid, p, fr, 3 + 2 * i); if (el.textContent !== s) el.textContent = s; });
+});
+if (P.kicker) U.scramble(root.querySelector(".tc-k"), String(P.kicker), { from: tcAt + 0.12, dur: 0.4, seed: 11 });
+
+tl.set(tc, { autoAlpha: 1 }, tcAt);                    // hidden before by its CSS
+tl.fromTo(tcScrim, { opacity: 0 }, { opacity: 0.8, duration: 0.42, ease: "steps(6)", immediateRender: false }, tcAt + 0.12);
+tl.fromTo(tcKick, { opacity: 0, x: -24 }, { opacity: 1, x: 0, duration: 0.3, ease: "power3.out", immediateRender: false }, tcAt + 0.12);
+tl.fromTo(tcRule, { scaleX: 0 }, { scaleX: 1, duration: 0.45, ease: "expo.out", immediateRender: false }, tcAt + 0.42);
+tl.to(tcRule, { scaleX: 0, transformOrigin: "100% 50%", duration: 0.22, ease: "power2.in", immediateRender: false }, tcEnd - TC_OUT);
+// hard cut: everything off for the last 2 frames, one white flash in their place
+tl.set([tcBox, tcScrim, tcLines, root.querySelector(".tc-bars")], { autoAlpha: 0 }, tcEnd - TC_FLASH);
+tl.set(tcFlash, { opacity: 0.9 }, tcEnd - TC_FLASH);
+tl.set(tcFlash, { opacity: 0 }, tcEnd);
+</script>

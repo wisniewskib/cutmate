@@ -1,0 +1,300 @@
+<style>
+ROOT .kw { position: absolute; inset: 0; overflow: hidden; visibility: hidden; }
+ROOT .kw-bg { position: absolute; inset: 0; background: var(--panel-bg, #0b0b0f); }
+ROOT .kw.none .kw-bg { display: none; }
+ROOT .kw-scrim { position: absolute; opacity: 0; border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(0, 0, 0, 0.72), rgba(0, 0, 0, 0.5) 55%, transparent); }
+ROOT .kw-glow { position: absolute; opacity: 0; border-radius: 50%;
+  background: radial-gradient(closest-side, var(--accent, #7dd3fc), transparent); }
+ROOT .kw-stage { position: absolute; inset: 0; will-change: transform; }
+ROOT .kw-stage canvas, ROOT .kw-stage svg { position: absolute; left: 0; top: 0; overflow: visible; }
+ROOT .kw-star { fill: var(--accent, #7dd3fc); stroke: var(--accent, #7dd3fc); stroke-linejoin: round; }
+ROOT .kw-ring, ROOT .kw-under { fill: none; stroke: var(--accent, #7dd3fc); stroke-linecap: round; }
+ROOT .kw-kicker { position: absolute; left: 0; right: 0; text-align: center; opacity: 0; white-space: nowrap;
+  font-family: var(--font, sans-serif); font-weight: 800; letter-spacing: 0.32em; color: var(--accent, #7dd3fc); }
+ROOT .kw.none .kw-k { padding: 0.18em 0.3em 0.18em 0.62em; border-radius: 0.4em; background: rgba(0, 0, 0, 0.66); }
+</style>
+<markup><div class="kw"><div class="kw-bg"></div><div class="kw-scrim"></div><div class="kw-glow"></div><div class="kw-stage"></div><div class="kw-kicker"><span class="kw-k"></span></div></div></markup>
+<script>
+// kinetic-word (WOW: scene / overlay; anime.js 4 over plain objects + one 2D canvas + SVG). THE key word or number of
+// the video built out of ~600 themed shapes (squares, dots, dashes; 70 % --accent, 20 % --text — --ink on a light
+// panel — 10 % --muted):
+//   1. the shapes pop in as a grid that ripples out from the centre (stagger(40, {grid, from: "center"}));
+//   2. they burst outward (outExpo) and fly into the letterforms of `text` (inOutQuart, staggered by the target's
+//      distance from the word centre) — targets sampled from the text drawn in --font-display on an offscreen canvas;
+//   3. landing: a camera punch and slow push, an SVG ring and underline draw on (svg.createDrawable), a starburst
+//      grows and morphs (svg.morphTo), the kicker decodes; the letters breathe in a sweep while it holds;
+//   4. they shatter out along their own directions (inExpo); gone by P.end.
+// anime.js only moves numbers ({x, y, s, r, a} per shape, the SVG paths); one U.clock draws the shapes (with motion
+// streaks: positions one frame back) onto the canvas. The timeline (autoplay off) is seeked by U.anime, so every frame
+// is a pure function of t. bg "panel" (default): --panel-bg full frame; "none": a transparent overlay.
+
+// ---- pure helpers (window.CutmateFX.wow) ----
+const KW = (window.CutmateFX.wow = window.CutmateFX.wow || {});
+// n points of a grid centred in W x H: cols = ceil(sqrt(n·W/H)) columns, rows filled left to right, top to bottom
+KW.gridStart = function (n, W, H) {
+  const cols = Math.max(1, Math.ceil(Math.sqrt((n * W) / H))), rows = Math.max(1, Math.ceil(n / cols));
+  const sp = Math.min(W / cols, H / rows);
+  const x0 = (W - (cols - 1) * sp) / 2, y0 = (H - (rows - 1) * sp) / 2;
+  return Array.from({ length: n }, (_, i) => [x0 + (i % cols) * sp, y0 + Math.floor(i / cols) * sp]);
+};
+KW.gridSize = function (n, W, H) {
+  const cols = Math.max(1, Math.ceil(Math.sqrt((n * W) / H))), rows = Math.max(1, Math.ceil(n / cols));
+  return { cols, rows, sp: Math.min(W / cols, H / rows) };
+};
+// n targets from the glyph points: a seeded Fisher–Yates shuffle (the same seed gives the same targets), repeats wrap
+// when n > points
+KW.assignTargets = function (points, n, seed) {
+  if (!points || !points.length) return [];
+  const r = window.CutmateFX.pure.seed((seed || 1) * 7919 + 13);
+  const idx = points.map((_, i) => i);
+  for (let i = idx.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); const v = idx[i]; idx[i] = idx[j]; idx[j] = v; }
+  return Array.from({ length: n }, (_, i) => points[idx[i % idx.length]].slice());
+};
+// a star path: n spikes, outer / inner radius, rotated by rot (rad)
+KW.star = function (cx, cy, n, ro, ri, rot) {
+  let d = "";
+  for (let i = 0; i < n * 2; i++) {
+    const a = rot + (i * Math.PI) / n, rr = i % 2 ? ri : ro;
+    d += (i ? "L" : "M") + (cx + Math.cos(a) * rr).toFixed(1) + " " + (cy + Math.sin(a) * rr).toFixed(1);
+  }
+  return d + "Z";
+};
+
+const kw = root.querySelector(".kw"), kwStage = root.querySelector(".kw-stage");
+const kwW = P.w || 1080, kwH = P.h || 1920;
+const kwAt = P.at || 0, kwEnd = Math.max(kwAt + 1.5, P.end || kwAt + 3.5), kwD = kwEnd - kwAt;
+const kwN = Math.round(Math.min(900, Math.max(300, Number(P.count) || 600)));
+const kwText = String(P.text == null ? "" : P.text).slice(0, 14);
+const kwNone = P.bg === "none";
+if (kwNone) kw.classList.add("none");
+const kwLight = !kwNone && U.panelLight();
+const kwCanvas = document.createElement("canvas");
+kwCanvas.width = kwW; kwCanvas.height = kwH;
+const NS = "http://www.w3.org/2000/svg";
+const kwSvg = (cls) => { const s = document.createElementNS(NS, "svg"); s.setAttribute("class", cls);
+  s.setAttribute("width", kwW); s.setAttribute("height", kwH); s.setAttribute("viewBox", `0 0 ${kwW} ${kwH}`); return s; };
+const kwBack = kwSvg("kw-back"), kwFront = kwSvg("kw-front");
+kwStage.appendChild(kwBack); kwStage.appendChild(kwCanvas); kwStage.appendChild(kwFront);
+let K = null;                                          // the built scene (after the font is in)
+
+// the word: one line, or two at the space nearest the middle when that makes it clearly bigger ("ZA / DARMO"); as big
+// as 0.86·W allows and 40 % of the free height (above / below the burned captions)
+function kwLayout(fam) {
+  const sb = U.safeBox();
+  const g = document.createElement("canvas").getContext("2d");
+  g.font = `900 100px ${fam}`;
+  const fit = (lines) => {
+    const ms = lines.map((l) => g.measureText(l));
+    const w100 = Math.max(1, ...ms.map((m) => m.width));
+    const asc = Math.max(1, ...ms.map((m) => m.actualBoundingBoxAscent || 72)), desc = Math.max(0, ...ms.map((m) => m.actualBoundingBoxDescent || 0));
+    const lh100 = asc + desc, gap100 = 0.22 * lh100, bh100 = lines.length * lh100 + (lines.length - 1) * gap100;
+    return { lines, w100, asc, lh100, gap100, bh100, size: 100 * Math.min((0.86 * kwW) / w100, (0.4 * sb.h) / bh100) };
+  };
+  let F = fit([kwText]);
+  const sp = [...kwText].map((c, i) => (c === " " ? i : -1)).filter((i) => i > 0);
+  if (sp.length) {
+    const cut = sp.reduce((a, b) => (Math.abs(b - kwText.length / 2) < Math.abs(a - kwText.length / 2) ? b : a));
+    const two = fit([kwText.slice(0, cut), kwText.slice(cut + 1)]);
+    if (two.size > 1.25 * F.size) F = two;
+  }
+  const k = F.size / 100, bw = F.w100 * k, bh = F.bh100 * k;
+  const cx = kwW / 2, cy = sb.y + sb.h / 2 + (P.kicker ? 0.03 * sb.h : 0);
+  return { sb, lines: F.lines, size: F.size, fam, cx, cy, bw, bh, x0: cx - bw / 2, y0: cy - bh / 2, asc: F.asc * k,
+           lh: F.lh100 * k, gap: F.gap100 * k };
+}
+function kwDrawText(g, L, ox, oy) {
+  g.font = `900 ${L.size.toFixed(2)}px ${L.fam}`;
+  g.textAlign = "center"; g.textBaseline = "alphabetic";
+  L.lines.forEach((l, i) => g.fillText(l, L.cx - ox, L.y0 - oy + L.asc + i * (L.lh + L.gap)));
+}
+// glyph points on a square grid: first step = sqrt(text box area / (count·1.6)), then refined once so the points are
+// about `count` (every shape gets its own cell: an LED-like letter with small gaps)
+function kwSample(L, count) {
+  const pad = 8, ox = Math.floor(L.x0) - pad, oy = Math.floor(L.y0) - pad;
+  const cw = Math.ceil(L.bw) + 2 * pad, ch = Math.ceil(L.bh) + 2 * pad;
+  const c = document.createElement("canvas"); c.width = cw; c.height = ch;
+  const g = c.getContext("2d");
+  g.fillStyle = "#ffffff";
+  kwDrawText(g, L, ox, oy);
+  const A = g.getImageData(0, 0, cw, ch).data;
+  const at = (step) => { const pts = [];
+    for (let y = step / 2; y < ch; y += step) for (let x = step / 2; x < cw; x += step) {
+      if (A[(Math.floor(y) * cw + Math.floor(x)) * 4 + 3] >= 128) pts.push([ox + x, oy + y]); }
+    return pts; };
+  let step = Math.sqrt((L.bw * L.bh) / (count * 1.6)), pts = at(step);
+  for (let i = 0; i < 2 && pts.length && Math.abs(pts.length - count) > 0.06 * count; i++) {
+    step = Math.max(3, step * Math.sqrt(pts.length / count));
+    pts = at(step);
+  }
+  return { pts, step };
+}
+
+function kwBuild() {
+  const A = window.anime, fam = U.token("--font-display", "Inter");
+  const L = kwLayout(fam), S = kwSample(L, kwN);
+  const col = { a: U.token("--accent", "#7dd3fc"), t: kwLight ? U.token("--ink", "#0f172a") : U.token("--text", "#ffffff"),
+                m: U.token("--muted", "#475569") };
+  const grid = KW.gridStart(kwN, kwW, kwH), gs = KW.gridSize(kwN, kwW, kwH);
+  const R = U.seed(41);
+  const tgt = KW.assignTargets(S.pts, kwN, 7);
+  const shapes = P.shapes === "squares" || P.shapes === "dots" || P.shapes === "dashes" ? P.shapes : "mixed";
+  const T0 = kwAt * 1000, k = Math.min(1, kwD / 3.5), ms = (v) => v * k;
+  const big = 0.42 * gs.sp, ts = S.step;
+  const objs = [], meta = [];
+  const fx = kwW / 2, fy = kwH / 2, reach = Math.min(kwW, kwH);
+  let far = 1;
+  grid.forEach(([x, y], i) => {
+    const rk = R(), rc = R(), ang = Math.atan2(y - fy, x - fx) + (R() - 0.5) * 0.8;
+    const kind = shapes === "mixed" ? (rk < 0.5 ? 0 : rk < 0.8 ? 1 : 2) : { squares: 0, dots: 1, dashes: 2 }[shapes];
+    const burst = (0.1 + 0.26 * R()) * reach * (0.6 + Math.hypot(x - fx, y - fy) / reach);
+    const t = tgt[i] || [x + Math.cos(ang) * burst, y + Math.sin(ang) * burst];
+    const out = Math.atan2(t[1] - L.cy, t[0] - L.cx) + (R() - 0.5) * 1.1, fly = (0.35 + 0.5 * R()) * Math.max(kwW, kwH);
+    meta.push({ kind, c: rc < 0.7 ? col.a : rc < 0.9 ? col.t : col.m,
+      bx: x + Math.cos(ang) * burst, by: y + Math.sin(ang) * burst, tx: t[0], ty: t[1],
+      sx: t[0] + Math.cos(out) * fly, sy: t[1] + Math.sin(out) * fly, spin: (R() < 0.5 ? -1 : 1) * (180 + 360 * R()) });
+    far = Math.max(far, Math.hypot(t[0] - L.cx, t[1] - L.cy));
+    objs.push({ x, y, s: 0, r: 0, a: 0 });
+  });
+  // beats (ms, local time; k compresses a scene shorter than 3.5 s)
+  const gridSt = A.stagger(ms(40), { grid: [gs.cols, gs.rows], from: "center" });
+  const maxGrid = Math.hypot((gs.cols - 1) / 2, (gs.rows - 1) / 2) * ms(40);
+  const tBurst = T0 + ms(600), tAsm = T0 + ms(960), dAsm = ms(560), stAsm = ms(110);
+  const tLand = tAsm + dAsm + stAsm, tShat = T0 + kwD * 1000 - ms(480), dShat = ms(460);
+  const tSize = Math.max(tAsm, T0 + maxGrid + ms(430) + 10);
+  const tl2 = A.createTimeline({ autoplay: false });
+  tl2.add(objs, { a: [0, 1], duration: ms(140), ease: "linear", delay: gridSt }, T0)
+    .add(objs, { s: [{ to: big * 1.9, duration: ms(170), ease: "outQuad" }, { to: big, duration: ms(260), ease: "inOutSine" }],
+                 r: [{ to: 225, duration: ms(430), ease: "inOutSine" }], delay: gridSt }, T0)
+    .add(objs, { x: (o, i) => meta[i].bx, y: (o, i) => meta[i].by, duration: ms(340), ease: "outExpo" }, tBurst)
+    .add(objs, { x: (o, i) => meta[i].tx, y: (o, i) => meta[i].ty, duration: dAsm, ease: "inOutQuart",
+                 delay: (o, i) => stAsm * Math.hypot(meta[i].tx - L.cx, meta[i].ty - L.cy) / far }, tAsm)
+    .add(objs, { s: ts, r: 0, duration: Math.max(120, tLand - tSize), ease: "inOutQuart" }, tSize);
+  // the hold: the letters breathe in sweeps left to right, as many as fit before the shatter
+  for (let t = tLand + 260; t + 560 + 420 <= tShat; t += 900) {
+    tl2.add(objs, { s: [{ to: ts * 1.32, duration: 170, ease: "outQuad" }, { to: ts, duration: 330, ease: "inOutSine" }],
+                    delay: (o, i) => 420 * Math.max(0, Math.min(1, (meta[i].tx - L.x0) / Math.max(1, L.bw))) }, t);
+  }
+  tl2.add(objs, { x: (o, i) => meta[i].sx, y: (o, i) => meta[i].sy, r: (o, i) => meta[i].spin, s: ts * 0.6,
+                  duration: dShat, ease: "inExpo" }, tShat)
+    .add(objs, { a: 0, duration: ms(150), ease: "linear", delay: dShat - ms(170) }, tShat);
+
+  // SVG: starburst behind the shapes (grows, turns, morphs), ring and underline in front (drawn on, then off)
+  const sr = Math.min(0.5 * Math.max(L.bw, L.bh * 2), 0.56 * kwW);
+  const starA = document.createElementNS(NS, "path"), starB = document.createElementNS(NS, "path");
+  starA.setAttribute("d", KW.star(L.cx, L.cy, 12, sr, sr * 0.56, -Math.PI / 2));
+  starB.setAttribute("d", KW.star(L.cx, L.cy, 12, sr * 1.06, sr * 0.84, -Math.PI / 2 + Math.PI / 12));
+  starB.setAttribute("visibility", "hidden");
+  const starG = document.createElementNS(NS, "g"), starOn = document.createElementNS(NS, "g");
+  starG.setAttribute("class", "kw-star");
+  starG.style.transformBox = "fill-box"; starG.style.transformOrigin = "center";
+  starA.setAttribute("fill-opacity", kwLight ? "0.05" : "0.07");
+  starA.setAttribute("stroke-opacity", kwLight ? "0.4" : "0.36");
+  starA.setAttribute("stroke-width", Math.max(2, 0.0028 * kwW).toFixed(1));
+  starG.appendChild(starA); starOn.appendChild(starG); kwBack.appendChild(starOn); kwBack.appendChild(starB);
+  // the ring orbits the word behind the shapes (it shows between the letters where it crosses them)
+  const rx = Math.min(kwW * 0.48, L.bw / 2 + 0.07 * kwW), ry = Math.min(L.bh / 2 + 0.45 * L.bh + 30, 0.5 * L.sb.h - 10);
+  const ring = document.createElementNS(NS, "path");
+  ring.setAttribute("class", "kw-ring");
+  ring.setAttribute("d", `M ${L.cx - rx} ${L.cy} A ${rx} ${ry} 0 1 1 ${L.cx + rx} ${L.cy} A ${rx} ${ry} 0 1 1 ${L.cx - rx * 0.96} ${L.cy - ry * 0.12}`);
+  ring.setAttribute("stroke-width", Math.max(4, 0.006 * kwW).toFixed(1));
+  ring.setAttribute("transform", `rotate(-5 ${L.cx} ${L.cy})`);
+  const uy = L.y0 + L.bh + Math.max(14, 0.16 * L.lh);
+  const under = document.createElementNS(NS, "path");
+  under.setAttribute("class", "kw-under");
+  under.setAttribute("d", `M ${L.cx - L.bw * 0.44} ${uy + 6} Q ${L.cx} ${uy + 22} ${L.cx + L.bw * 0.46} ${uy - 8}`);
+  under.setAttribute("stroke-width", Math.max(8, 0.013 * kwW).toFixed(1));
+  kwBack.appendChild(ring); kwFront.appendChild(under);
+  const [ringD] = A.svg.createDrawable(ring), [underD] = A.svg.createDrawable(under);
+  tl2.add(starG, { scale: [0, 1], duration: 380, ease: "outBack(1.6)" }, tLand - 160)
+    .add(starG, { rotate: [0, 24], duration: Math.max(300, tShat - tLand + 160), ease: "linear" }, tLand - 160)
+    .add(starA, { d: A.svg.morphTo(starB), duration: 600, ease: "inOutQuart" }, tLand + 80)
+    .add(starG, { scale: 1.6, opacity: 0, duration: 320, ease: "inQuad" }, tShat)
+    .add(ringD, { draw: ["0 0", "0 1"], duration: 520, ease: "inOutQuart" }, tLand - 80)
+    .add(underD, { draw: ["0 0", "0 1"], duration: 360, ease: "outQuart" }, tLand + 160)
+    .add([ringD, underD], { draw: "1 1", duration: 260, ease: "inQuad" }, tShat);
+  ringD.setAttribute("draw", "0 0"); underD.setAttribute("draw", "0 0");
+  // nothing of the SVG before its own beat (anime renders a tween only from its start)
+  starOn.style.visibility = "hidden"; kwFront.style.visibility = "hidden";
+  tl.set(starOn, { autoAlpha: 1 }, (tLand - 160) / 1000);
+  tl.set(kwFront, { autoAlpha: 1 }, (tLand - 80) / 1000);
+  ring.style.visibility = "hidden";
+  tl.set(ring, { autoAlpha: 1 }, (tLand - 80) / 1000);
+
+  // glow (and a soft dark pool over the video in overlay mode) behind the word; the kicker above it
+  const glow = root.querySelector(".kw-glow"), scrim = root.querySelector(".kw-scrim");
+  const place = (el, w, h) => Object.assign(el.style, { left: (L.cx - w / 2).toFixed(1) + "px", top: (L.cy - h / 2).toFixed(1) + "px",
+                                                        width: w.toFixed(1) + "px", height: h.toFixed(1) + "px" });
+  place(glow, L.bw * 1.25, L.bh * 2.6); place(scrim, Math.min(kwW * 1.3, L.bw * 1.5), L.bh * 3.2);
+  const gl = kwLight ? 0.16 : 0.24, tL = tLand / 1000, tS = tShat / 1000;
+  tl.fromTo(glow, { opacity: 0 }, { opacity: gl, duration: 0.12, ease: "power2.out", immediateRender: false }, tL - 0.05);
+  tl.to(glow, { opacity: gl * 0.55, duration: 0.5, ease: "power2.inOut", immediateRender: false }, tL + 0.1);
+  tl.to(glow, { opacity: 0, duration: 0.25, ease: "power2.in", immediateRender: false }, tS);
+  if (kwNone) {
+    tl.fromTo(scrim, { opacity: 0 }, { opacity: 1, duration: 0.35, ease: "power2.out", immediateRender: false }, tL - 0.35);
+    tl.to(scrim, { opacity: 0, duration: 0.3, ease: "power2.in", immediateRender: false }, tS);
+  }
+  if (P.kicker) {
+    const kk = root.querySelector(".kw-kicker");
+    const fs = Math.round(Math.max(34, Math.min(0.05 * kwW, 0.3 * L.size)));
+    Object.assign(kk.style, { fontSize: fs + "px", top: Math.max(L.sb.y + 6, L.y0 - fs * 2.1 - 0.05 * L.lh).toFixed(1) + "px" });
+    U.scramble(root.querySelector(".kw-k"), String(P.kicker).toUpperCase(), { from: tL - 0.05, dur: 0.4, seed: 5 });
+    tl.fromTo(kk, { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: 0.3, ease: "power3.out", immediateRender: false }, tL - 0.05);
+    tl.to(kk, { opacity: 0, y: -14, duration: 0.22, ease: "power2.in", immediateRender: false }, tS);
+  }
+  kwStage.style.transformOrigin = `${L.cx.toFixed(1)}px ${L.cy.toFixed(1)}px`;
+  K = { tl2, objs, meta, L, prev: objs.map(() => [0, 0]), tL, tS };
+  return tl2;
+}
+
+const kwG = kwCanvas.getContext("2d");
+// the shapes at t: each one (square / dot / dash, turned by r, size s, alpha a) with a motion streak back to where it was
+// one frame earlier (the timeline seeked there and back: still a pure function of t)
+U.anime(U.fonts([900], U.token("--font-display", "Inter")).then(() => ({ timeline: kwBuild() })));
+U.clock((t) => {
+  if (!K) return;
+  const { tl2, objs, meta, prev, L } = K;
+  kwG.setTransform(1, 0, 0, 1, 0, 0);
+  kwG.clearRect(0, 0, kwW, kwH);
+  if (P.debug === "mask") {                            // test aid: the solid word where the shapes assemble
+    kwG.fillStyle = "#ffffff"; kwDrawText(kwG, L, 0, 0); return;
+  }
+  tl2.seek(Math.max(0, t - 1 / 30) * 1000);
+  objs.forEach((o, i) => { prev[i][0] = o.x; prev[i][1] = o.y; });
+  tl2.seek(t * 1000);
+  // camera: a punch on landing, then a slow push; the starburst / ring move with it
+  const u = t - K.tL, span = Math.max(0.3, K.tS - K.tL);
+  const push = u <= 0 ? 0 : 0.055 * Math.min(1, u / span) + 0.04 * Math.exp(-u / 0.14) * Math.min(1, u / 0.05);
+  const st = `scale(${(1 + push).toFixed(4)})`;
+  if (kwStage.style.transform !== st) kwStage.style.transform = st;
+  kwG.lineCap = "round";
+  for (let i = 0; i < objs.length; i++) {
+    const o = objs[i], m = meta[i];
+    if (!(o.a > 0.01) || !(o.s > 0.2)) continue;
+    const dx = o.x - prev[i][0], dy = o.y - prev[i][1], d = Math.hypot(dx, dy);
+    kwG.setTransform(1, 0, 0, 1, 0, 0);
+    if (d > 6) {                                       // motion streak (capped)
+      const f = Math.min(1, 170 / d);
+      kwG.globalAlpha = o.a * 0.42;
+      kwG.strokeStyle = m.c;
+      kwG.lineWidth = Math.max(1.5, o.s * 0.34);
+      kwG.beginPath(); kwG.moveTo(o.x - dx * f, o.y - dy * f); kwG.lineTo(o.x, o.y); kwG.stroke();
+    }
+    kwG.globalAlpha = o.a;
+    kwG.fillStyle = m.c;
+    const a = (o.r * Math.PI) / 180, c = Math.cos(a), s = Math.sin(a);
+    kwG.setTransform(c, s, -s, c, o.x, o.y);
+    if (m.kind === 1) { kwG.beginPath(); kwG.arc(0, 0, o.s * 0.44, 0, Math.PI * 2); kwG.fill(); }
+    else if (m.kind === 2) kwG.fillRect(-o.s * 0.46, -o.s * 0.2, o.s * 0.92, o.s * 0.4);
+    else kwG.fillRect(-o.s * 0.39, -o.s * 0.39, o.s * 0.78, o.s * 0.78);
+  }
+  kwG.setTransform(1, 0, 0, 1, 0, 0);
+  kwG.globalAlpha = 1;
+});
+
+const kwBg = root.querySelector(".kw-bg");
+tl.set(kw, { autoAlpha: 1 }, kwAt);                    // hidden before by its CSS
+tl.fromTo(kwBg, { opacity: 0 }, { opacity: 1, duration: 0.15, ease: "power2.out", immediateRender: false }, kwAt);
+tl.to(kwBg, { opacity: 0, duration: 0.18, ease: "power2.in", immediateRender: false }, kwEnd - 0.18);
+tl.set(kw, { autoAlpha: 0 }, kwEnd);
+</script>

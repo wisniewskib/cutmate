@@ -1058,3 +1058,38 @@ def test_hit_anchor(tmp_path):
     out = make_out(tmp_path / "d", {"graphics": [
         {"type": "stamp", "at": "S1:Mówić", "text": "X", "hit": 0.2}]})
     assert load_plan(out).graphics[0].params["_hit_at"] == 0.2          # seconds work as an anchor too
+
+
+def test_chapter_fx(tmp_path):
+    """"chapter_fx": "<effect>" turns the chapter plates (chapters 2+) into that custom effect over the same PLATE span,
+    with params title / kicker / num and a `_chapter` marker; a bad name is a PlanError; plates never count toward the
+    WOW caps."""
+    from cutmate.build import chapter_plates
+    from cutmate.plan import _wow_warnings
+    chs = [{"at": "S1:Mówić", "title": "Intro"}, {"at": "S2:minus", "title": "Druga sprawa"}]
+    plan = load_plan(make_out(tmp_path, {"chapter_fx": "topic-change", "chapters": chs}))
+    assert plan.chapter_fx == "topic-change"
+    (g,) = chapter_plates(plan, plan.end, "pl")
+    assert (g.type, g.start, g.end) == ("custom", 4.0, 5.5)
+    assert g.params["name"] == "topic-change" and g.params["_chapter"] is True
+    assert g.params["params"] == {"title": "Druga sprawa", "kicker": "ROZDZIAŁ 02", "num": 2}
+    assert chapter_plates(plan, plan.end, "en")[0].params["params"]["kicker"] == "CHAPTER 02"
+    plain = load_plan(make_out(tmp_path / "b", {"chapters": chs}))
+    assert plain.chapter_fx is None and chapter_plates(plain, plain.end, "pl")[0].type == "chapter"
+    for bad in ("Topic Change", 7, "", "../x"):
+        with pytest.raises(PlanError, match="chapter_fx"):
+            load_plan(make_out(tmp_path / f"c{abs(hash(str(bad)))}", {"chapter_fx": bad, "chapters": chs}))
+    # a 5-minute 16:9 video: 5 spread WOW effects (the cap) + 6 chapter plates -> no WOW warning
+    words = [{"seg": "S1", "word": f"w{i}", "start": 10.0 * i + 0.1, "end": 10.0 * i + 0.5} for i in range(30)]
+    graphics = [{"type": "custom", "name": n, "at": 15.0 + 55 * i, "until": 18.0 + 55 * i}
+                for i, n in enumerate(["globe", "burst-out", "globe", "exploded-view", "kinetic-word"])]
+    out = make_out(tmp_path / "long", {"chapter_fx": "topic-change", "graphics": graphics,
+                                      "chapters": [{"at": f"S1:w{5 * i}", "title": f"Rozdział {i + 1}"} for i in range(6)]},
+                   words=words)
+    (out / "work" / "edl_timed.json").write_text(json.dumps([{"id": "S1", "start": 0.0, "end": 300.0}]), encoding="utf-8")
+    (out / "edl.json").write_text(json.dumps({"format": "16:9", "segments": []}), encoding="utf-8")
+    plan = load_plan(out)
+    plates = chapter_plates(plan, plan.end, "pl")
+    assert len(plates) == 5 and all(p.params["_chapter"] for p in plates)
+    assert not any("wow" in w for w in plan.warnings)
+    assert _wow_warnings(plan.graphics + plates, plan.end) == []

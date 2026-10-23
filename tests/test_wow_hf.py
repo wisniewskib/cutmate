@@ -514,3 +514,160 @@ def test_hand_control_renders(tmp_path, home):
     print(f"seek_safe(1.6) = {worst}")
     assert worst <= 1.0
     print("strip:", wowkit.strip(proj, 0.3, 3.8, 0.25))
+
+
+# ---- topic-change (A-roll glitch + scrambled title, chapter_fx) and kinetic-word (anime.js punch scene) ----
+
+def _raw(proj: Path, t: float, tmp: Path) -> np.ndarray:
+    """The A-roll frame at t (no graphics)."""
+    from cutmate.media import run
+    png = tmp / f"raw-{t:.3f}.png"
+    r = run(["ffmpeg", "-nostdin", "-v", "error", "-y", "-ss", f"{t:.3f}", "-i", Path(proj).parent / "aroll.mp4",
+             "-frames:v", "1", png])
+    assert r.returncode == 0, r.stderr
+    return _img(png)
+
+
+def _x_shift(snap_ch: np.ndarray, raw_ch: np.ndarray, reach: int = 40) -> tuple:
+    """The x shift (px) that best maps the raw channel onto the snapshot channel (normalised correlation of the x
+    gradients), with its score."""
+    gs, gr = np.diff(snap_ch.astype(np.float32), axis=1), np.diff(raw_ch.astype(np.float32), axis=1)
+    best = (0, -1.0)
+    for s in range(-reach, reach + 1):
+        x, y = (gs[:, s:], gr[:, :gr.shape[1] - s]) if s >= 0 else (gs[:, :s], gr[:, -s:])
+        c = float((x * y).sum() / np.sqrt((x * x).sum() * (y * y).sum() + 1e-9))
+        if c > best[1]:
+            best = (s, c)
+    return best
+
+
+def test_topic_change_169_chapter(tmp_path, home):
+    """16:9 long-form with "chapter_fx": "topic-change": the chapter 2 plate glitches the A-roll (at +0.15 s its red and
+    blue channels sit >= 4 px apart, measured against the clean A-roll frame) and the title is final at +0.9 s. Seek-safe
+    at both. READ the snapshots and the 0.1 s strip."""
+    plan = {"chapter_fx": "topic-change",
+            "chapters": [{"at": "S1:Mówić", "title": "Wstęp"}, {"at": "S2:minus", "title": "Druga sprawa: koszty"}]}
+    proj = wowkit.project(tmp_path, plan, fmt="16:9", dur=5.0)
+    _check_ok(proj)
+    (at, end), = _spans(proj, "topic-change")
+    assert at == 2.1
+    t1, t2 = round(at + 0.15, 3), round(at + 0.9, 3)
+    s1, s2 = wowkit.snap(proj, t1), wowkit.snap(proj, t2)
+    print(f"snapshot glitch {t1}: {s1}\nsnapshot title {t2}: {s2}")
+    a, raw = _img(s1), _raw(proj, t1, tmp_path)
+    # each channel's x shift against the clean frame (scanlines and the title keep the scores low, ~0.1–0.25; the
+    # peaks are still sharp): green moves only with the #shake jitter, red and blue split away from it on both sides
+    (sr, cr), (sg, cg), (sb, cb) = (_x_shift(a[:, :, c], raw[:, :, c]) for c in range(3))
+    print(f"channel shift at +0.15: R {sr} px ({cr:.2f}), G {sg} px ({cg:.2f}), B {sb} px ({cb:.2f})")
+    assert sr - sg >= 4 and sg - sb >= 4 and min(cr, cg, cb) > 0.05, (sr, sg, sb, cr, cg, cb, s1)
+    b, raw2 = _img(s2), _raw(proj, t2, tmp_path)
+    shifts = [_x_shift(b[:, :, c], raw2[:, :, c])[0] for c in range(3)]
+    print(f"channel shift at +0.9: R / G / B {shifts} px")
+    assert shifts == [0, 0, 0], shifts                                  # the glitch is over
+    mid = b[300:800, 160:1760]
+    white = int((mid.min(axis=2) >= 225).sum())
+    ghosts = int((_hue_mask(mid, 340, 20, sat=0.6, val=0.6) | _hue_mask(mid, 170, 200, sat=0.6, val=0.6)).sum())
+    print(f"title at +0.9: {white} white px, {ghosts} saturated red / cyan px")
+    assert white >= 12000 and ghosts <= 0.05 * white, (white, ghosts, s2)
+    for t in (t1, t2):
+        worst = wowkit.seek_safe(proj, t)
+        print(f"seek_safe({t}) = {worst}")
+        assert worst <= 1.0
+    print("strip:", wowkit.strip(proj, 1.9, 3.7, 0.1))
+
+
+def _kinetic_blobs(a: np.ndarray, accent_hue: float, text_dark: bool = False) -> list:
+    """The small accent / text-colour shapes: connected components (1 px grid) of accent-hue or text-colour pixels, kept
+    when 12–900 px."""
+    m = _hue_mask(a, accent_hue - 22, accent_hue + 22, sat=0.3, val=0.35)
+    m |= (a.max(axis=2) <= 60) & (a.max(axis=2) - a.min(axis=2) < 40) if text_dark else (a.min(axis=2) >= 200)
+    return [b for b in _blobs(m, step=1) if 12 <= b[4] <= 900]
+
+
+def _covered(a: np.ndarray, mask_png: Path, bg) -> tuple:
+    """(share of the glyph mask covered by shape pixels within 1 px, mask px): the mask is the solid word the effect draws
+    with params.debug "mask" at the same place."""
+    mk = _img(mask_png)
+    mask = np.abs(mk - np.array(bg)).max(axis=2) > 100
+    shape = np.abs(a - np.array(bg)).max(axis=2) > 60
+    grown = shape.copy()
+    for dy, dx in ((0, 1), (0, -1), (1, 0), (-1, 0)):
+        grown |= np.roll(np.roll(shape, dy, axis=0), dx, axis=1)
+    return float(grown[mask].mean()) if mask.any() else 0.0, int(mask.sum())
+
+
+def test_kinetic_word_scene_and_overlay(tmp_path, home):
+    """kinetic-word as a 9:16 split-panel scene ("+300%", 3.5 s): at the span's middle the word stands built out of
+    >= 400 small accent / text-colour shapes covering >= 60 % of its glyphs (1 px tolerance), seek-safe, and the project
+    renders. Then as a classic transparent overlay (bg "none") over the A-roll. READ the snapshots and 0.25 s strips."""
+    from cutmate.media import run
+    from cutmate.hf import hf
+    theme = _theme(home, "wowsplit")
+    scene = {"from": 0.5, "to": 4.0, "effect": "kinetic-word", "params": {"text": "+300%"}}
+    proj = wowkit.project(tmp_path, {"scenes": [scene]}, dur=5.0, theme=theme)
+    _check_ok(proj)
+    (at, end), = _spans(proj, "kinetic-word")
+    assert round(end - at, 2) == 3.5
+    mid = round((at + end) / 2, 3)
+    s_mid = wowkit.snap(proj, mid)
+    mask_proj = wowkit.project(tmp_path / "mask", {"scenes": [dict(scene, params={"text": "+300%", "debug": "mask"})]},
+                               dur=5.0, theme=theme)
+    s_mask = wowkit.snap(mask_proj, mid)
+    print(f"snapshot mid {mid}: {s_mid}\nglyph mask: {s_mask}")
+    a = _img(s_mid)
+    bg = (0x0b, 0x0b, 0x0f)
+    assert all(abs(int(c) - e) <= 8 for c, e in zip(a[40, 40], bg)), a[40, 40]          # the panel colour, full frame
+    blobs = _kinetic_blobs(a, _hue_of("#7dd3fc"))
+    share, n_mask = _covered(a, s_mask, bg)
+    print(f"shapes: {len(blobs)} small accent / text blobs; glyph mask {n_mask} px covered {share:.2f}")
+    assert len(blobs) >= 400, (len(blobs), s_mid)
+    assert n_mask >= 40000 and share >= 0.60, (n_mask, share, s_mid)
+    worst = wowkit.seek_safe(proj, mid)
+    print(f"seek_safe({mid}) = {worst}")
+    assert worst <= 1.0
+    print("strip:", wowkit.strip(proj, at, end, 0.25))
+    r = run(hf("render", "--fps", "30", "--quality", "draft", "--format", "mp4", "-o", "../kw-render.mp4"), cwd=proj)
+    video = Path(proj).parent / "kw-render.mp4"
+    assert r.returncode == 0 and video.exists(), (r.stdout + r.stderr)[-2000:]
+    from cutmate.media import duration
+    assert duration(video) >= 4.9
+    print("render:", video)
+    # classic transparent overlay
+    plan = {"graphics": [{"type": "custom", "name": "kinetic-word", "from": 0.5, "to": 4.0,
+                          "params": {"text": "+300%", "bg": "none", "kicker": "wzrost"}}]}
+    ov = wowkit.project(tmp_path / "ov", plan, dur=5.0)
+    _check_ok(ov)
+    (oa, oe), = _spans(ov, "kinetic-word")
+    om = round((oa + oe) / 2, 3)
+    s_ov = wowkit.snap(ov, om)
+    print(f"overlay snapshot mid {om}: {s_ov}")
+    o, raw = _img(s_ov), _raw(ov, om, tmp_path)
+    corner = o[:120, :120].reshape(-1, 3).mean(axis=0)
+    print(f"overlay corner {corner.round(1)} (A-roll red bar), raw {raw[:120, :120].reshape(-1, 3).mean(axis=0).round(1)}")
+    assert corner[0] > 180 and corner[1] < 60 and corner[2] < 60, corner           # the A-roll shows through, no panel
+    n = len(_kinetic_blobs(o, _hue_of("#7dd3fc")))
+    print(f"overlay shapes: {n}")
+    assert n >= 250, (n, s_ov)
+    worst = wowkit.seek_safe(ov, om)
+    print(f"overlay seek_safe({om}) = {worst}")
+    assert worst <= 1.0
+    print("overlay strip:", wowkit.strip(ov, oa, oe, 0.25))
+
+
+def test_kinetic_word_takes_light_panel(tmp_path, home):
+    """Review Focus 3: a light panel and an orange accent — the panel keeps the theme colour, the word is built of orange
+    and dark (--ink, not the white --text) shapes."""
+    theme = _theme(home, "lightkw", {"--panel-bg: #0b0b0f;": "--panel-bg: #efece7;", "--accent: #7dd3fc;": "--accent: #c2501f;"})
+    plan = {"scenes": [{"from": 0.5, "to": 4.0, "effect": "kinetic-word", "params": {"text": "ZA DARMO", "kicker": "cena"}}]}
+    proj = wowkit.project(tmp_path, plan, dur=5.0, theme=theme)
+    (at, end), = _spans(proj, "kinetic-word")
+    mid = round((at + end) / 2, 3)
+    s = wowkit.snap(proj, mid)
+    print(f"light snapshot mid {mid}: {s}")
+    a = _img(s)
+    assert all(abs(int(c) - e) <= 8 for c, e in zip(a[40, 40], (0xef, 0xec, 0xe7))), a[40, 40]
+    orange = int(_hue_mask(a, 8, 32, sat=0.5).sum())
+    dark = int(((a.max(axis=2) <= 70) & (a.max(axis=2) - a.min(axis=2) < 40)).sum())
+    print(f"orange px {orange}, dark px {dark}")
+    assert orange >= 20000 and dark >= 3000, (orange, dark, s)
+    print("strip:", wowkit.strip(proj, at, end, 0.25))

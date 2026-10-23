@@ -1599,6 +1599,7 @@ def test_no_wow_no_change(out, theme, monkeypatch):
     proj = B.build(out, theme=theme)["project"]
     html = (proj / "index.html").read_text(encoding="utf-8")
     assert "cm-shake" not in html and "shake_hosts" not in cfg_of(html)
+    assert "glitch" not in cfg_of(html) and "cm-fx" not in html                  # Task 6: no A-roll glitch either
     built = sorted(["index.html"] + [p.name for p in (proj / "compositions").glob("gx-*.html")])
     assert built == sorted(p.name for p in FIXTURE_BG_HIT.iterdir())
     assert html == (FIXTURE_BG_HIT / "index.html").read_text(encoding="utf-8")
@@ -1736,3 +1737,49 @@ def test_hand_control_in_split_panel_and_169(tmp_path, monkeypatch):
     proj = wowkit.project(tmp_path / "c", {"graphics": [hc]}, fmt="16:9", dur=5.0, tracks=tr)
     P = _built_P(proj)["hand-control"][0]
     assert (P["w"], P["h"]) == (1920, 1080) and P["safe"] == [60, 60, 1800, 800] and len(P["tips"]["right"]) == 5
+
+
+def test_glitch_cfg_from_meta(out, out169, theme):
+    """A custom whose index.json meta has aroll_fx (topic-change: 0.6 s) puts [start, dur, kind] in cfg.glitch (kind from
+    params.style, default "glitch") and one hidden <svg id="cm-fx"> with the two filters into index.html; chapter_fx plates
+    glitch at each plate (with the chapter sound kept)."""
+    write_plan(out, {"graphics": [{"type": "custom", "name": "topic-change", "from": "S2:minus", "to": "S2:</script>",
+                                   "params": {"title": "Druga sprawa"}}]})
+    html = (B.build(out, theme=theme)["project"] / "index.html").read_text(encoding="utf-8")
+    assert cfg_of(html)["glitch"] == [[2.1, 0.6, "glitch"]]
+    assert html.count('id="cm-fx"') == 1 and 'id="cm-rgb"' in html and 'id="cm-wave"' in html
+    assert 'seed="7"' in html and 'baseFrequency="0.004 0.03"' in html and "feDisplacementMap" in html
+    assert html.index('id="cm-fx"') < html.index('id="flash"')
+    write_plan(out, {"graphics": [{"type": "custom", "name": "topic-change", "from": "S2:minus", "to": "S2:</script>",
+                                   "params": {"title": "Druga sprawa", "style": "wave"}}]})
+    html = (B.build(out, theme=theme)["project"] / "index.html").read_text(encoding="utf-8")
+    assert cfg_of(html)["glitch"] == [[2.1, 0.6, "wave"]]
+    write_plan(out, {"graphics": [{"type": "custom", "name": "orb", "from": "S2:minus", "to": "S2:</script>"}]})
+    _fx(out)
+    html = (B.build(out, theme=theme)["project"] / "index.html").read_text(encoding="utf-8")
+    assert "glitch" not in cfg_of(html) and "cm-fx" not in html                    # an effect without aroll_fx
+    write_plan(out169, {"chapter_fx": "topic-change",
+                        "chapters": [{"at": "S1:Mówić", "title": "Intro"}, {"at": "S2:minus", "title": "Dwa"}]})
+    proj = B.build(out169, theme=theme)["project"]
+    html = (proj / "index.html").read_text(encoding="utf-8")
+    assert cfg_of(html)["glitch"] == [[2.1, 0.6, "glitch"]] and 'id="cm-fx"' in html
+    assert not list((proj / "compositions").glob("gx-*-chapter.html"))
+    (sub,) = (proj / "compositions").glob("gx-*-custom.html")
+    P = _P(sub.read_text(encoding="utf-8"))
+    assert (P["name"], P["title"], P["kicker"], P["num"]) == ("topic-change", "Dwa", "ROZDZIAŁ 02", 2)
+    assert re.search(r'id="gx-01-custom-slot"[^>]*data-start="1.8" data-duration="1.8"', html)
+    assert re.search(r'src="assets/sfx/[^"]*swell[^"]*" data-start="1.9"', html)        # the chapter sound stays
+
+
+def test_chapter_fx_effect_found_and_linted(out169, theme):
+    """chapter_fx names an effect that must exist and pass the lint: otherwise a PlanError before any file is written."""
+    chs = [{"at": "S1:Mówić", "title": "Intro"}, {"at": "S2:minus", "title": "Dwa"}]
+    write_plan(out169, {"chapter_fx": "no-such-fx", "chapters": chs})
+    with pytest.raises(B.PlanError, match="effect 'no-such-fx' not found"):
+        B.build(out169, theme=theme)
+    assert not (out169 / "composition").exists()
+    _fx(out169, "bad-fx", FX.replace("U.follow(el, P.track);", "tl.to(el, { x: 1, onComplete: () => {} });"))
+    write_plan(out169, {"chapter_fx": "bad-fx", "chapters": chs})
+    with pytest.raises(B.PlanError, match="onComplete"):
+        B.build(out169, theme=theme)
+    assert not (out169 / "composition").exists()

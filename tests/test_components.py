@@ -420,3 +420,27 @@ def test_hand_control_index_entry():
     assert "U.three(" not in text
     stray = [h for h in re.findall(r"#[0-9a-fA-F]{6}\b", _FALLBACK.sub("", text)) if h.lower() not in ("#000000", "#ffffff")]
     assert not stray, stray
+
+
+def test_full_screen_wow_index_entries():
+    """topic-change (DOM + SVG filters, meta aroll_fx 0.6 s) and kinetic-word (anime.js + canvas 2D): kind wow, their
+    modes, documented params, lint, no WebGL, colour only through theme tokens."""
+    import json
+    idx = {e["name"]: e for e in json.loads((_custom_dir() / "index.json").read_text(encoding="utf-8"))}
+    want = {"topic-change": ({"overlay", "scene", "chapter"}, {"title", "kicker", "style"}),
+            "kinetic-word": ({"scene", "overlay"}, {"text", "kicker", "count", "shapes", "bg"})}
+    for name, (modes, params) in want.items():
+        e = idx[name]
+        assert e["kind"] == "wow" and set(e["modes"]) == modes and not e.get("webgl"), name
+        assert params <= set(e["params"]) and all(isinstance(v, str) and v for v in e["params"].values()), name
+        path = _custom_dir() / f"{name}.html"
+        effects.lint_effect(path)
+        text = path.read_text(encoding="utf-8")
+        assert "U.three(" not in text and "Math.random" not in text, name
+        stray = [h for h in re.findall(r"#[0-9a-fA-F]{6}\b", _FALLBACK.sub("", text)) if h.lower() not in ("#000000", "#ffffff")]
+        assert not stray, (name, stray)
+    assert effects.effect_meta(_custom_dir() / "topic-change.html")["aroll_fx"] == {"dur": 0.6}
+    assert "aroll_fx" not in idx["kinetic-word"]
+    kw = (_custom_dir() / "kinetic-word.html").read_text(encoding="utf-8")
+    assert "U.anime(U.fonts(" in kw and "autoplay: false" in kw and "__hfAnime" not in kw
+    assert effects.vendor_files([kw]) == [effects.VENDOR["gsap"], effects.VENDOR["animejs"]]   # anime only, no extra plugin
