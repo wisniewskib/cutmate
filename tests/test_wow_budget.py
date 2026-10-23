@@ -1,8 +1,13 @@
 """Review Focus 2 (no GPU: a Windows laptop renders WebGL in SwiftShader): every WOW effect, 3 s in its main mode (the
 first of its index.json `modes`; exploded-view and globe also as a full-frame 9:16 scene, their heaviest placement), is
-rendered with `render --no-browser-gpu` on one worker. Each prints `<effect>: <s/frame>` and must stay within
-BUDGET_S_PER_FRAME. The time is the whole render's wall clock (browser start, the 1 s of plain A-roll around the effect
-and the encode included) over the project's frames: an upper bound on the effect's own cost."""
+rendered with `render --no-browser-gpu` on one worker, and so is the same project without it (the same A-roll and
+theme, no graphics: the baseline). The cost of one frame WITH the effect is
+
+    s/frame = baseline / frames + (render - baseline) / effect frames
+
+(a plain frame — browser start and encode spread over the whole render — plus the effect's extra time over only the
+frames it covers). Each case prints `<case>: <s/frame>` and must stay within BUDGET_S_PER_FRAME. Machine load moves both
+renders; run with `uptime` load < 8."""
 import json
 import shutil
 import sys
@@ -53,6 +58,30 @@ def _main_mode(effect: str) -> str:
     return next(e for e in entries if e["name"] == effect)["modes"][0]
 
 
+def _placement(plan: dict) -> str:
+    if "scenes" in plan:
+        return "scene"
+    if "panel" in plan:
+        return "panel"
+    return plan["graphics"][0]["type"]
+
+
+def _render(proj: Path) -> float:
+    """Wall-clock seconds of a software-GL render of `proj`; fails unless it succeeded in SwiftShader."""
+    t0 = time.monotonic()
+    r = run(hf("render", "--no-browser-gpu", "--workers", "1", "--quality", "draft", "--fps", str(FPS),
+               "-o", "budget.mp4"), cwd=proj)
+    took = time.monotonic() - t0
+    log = r.stdout + r.stderr
+    assert r.returncode == 0, " ".join(log.split())[-1500:]
+    assert (Path(proj) / "budget.mp4").stat().st_size > 0
+    assert "swiftshader" in log.lower(), "the render did not run in software GL (SwiftShader)"
+    return took
+
+
+_BASE: dict = {}                                    # (theme, A-roll kind) -> baseline render seconds
+
+
 @pytest.mark.parametrize("case", list(CASES))
 def test_wow_render_budget(case, tmp_path, home, monkeypatch):
     from cutmate import build as B
@@ -69,14 +98,19 @@ def test_wow_render_budget(case, tmp_path, home, monkeypatch):
         monkeypatch.setattr(B, "bg_cutout", fake_cut)
     if effect == "hand-control":
         tracks = _hand_tracks(DUR)
+    key = (split, effect == "burst-out")
+    if key not in _BASE:
+        base_proj = wowkit.project(tmp_path / "base", {"graphics": []}, dur=DUR, theme=theme, aroll=aroll)
+        _BASE[key] = _render(base_proj)
     proj = wowkit.project(tmp_path, plan, dur=DUR, theme=theme, tracks=tracks, aroll=aroll)
     frames = round(wowkit.duration(proj) * FPS)
-    t0 = time.monotonic()
-    r = run(hf("render", "--no-browser-gpu", "--workers", "1", "--quality", "draft", "--fps", str(FPS),
-               "-o", "budget.mp4"), cwd=proj)
-    took = time.monotonic() - t0
-    s_per_frame = took / frames
-    print(f"{case}: {s_per_frame:.3f} s/frame ({took:.1f} s for {frames} frames, main mode {_main_mode(effect)})")
-    assert r.returncode == 0, " ".join((r.stdout + r.stderr).split())[-1500:]
-    assert (Path(proj) / "budget.mp4").stat().st_size > 0
+    span = plan.get("scenes", plan.get("panel", plan.get("graphics")))[0]
+    a = float(span.get("from", span.get("at")))
+    b = float(span.get("to", span.get("until")))
+    fx_frames = round((b - a) * FPS)
+    took = _render(proj)
+    base = _BASE[key]
+    s_per_frame = base / frames + max(0.0, took - base) / fx_frames
+    print(f"{case}: {s_per_frame:.3f} s/frame (render {took:.1f} s, baseline {base:.1f} s, {fx_frames} of {frames} "
+          f"frames with the effect; {_placement(plan)}, main mode {_main_mode(effect)})")
     assert s_per_frame <= BUDGET_S_PER_FRAME, f"{case}: {s_per_frame:.3f} s/frame > {BUDGET_S_PER_FRAME}"
