@@ -586,3 +586,38 @@ def test_anime_promise_waits_ready():
     assert d["afterReady"] == [1500]                                # once it exists: seeked to the clock's current time
     assert d["last"] == 2000
     assert d["afterReady2"] == [1500] and d["last2"] == 2000        # { timeline } form: never awaited
+
+
+ANIME_BAD = """
+global.requestAnimationFrame = () => 1; global.cancelAnimationFrame = () => {};
+global.NodeList = class {}; global.HTMLCollection = class {}; global.SVGElement = class {};
+global.window = { requestAnimationFrame, cancelAnimationFrame };
+global.document = { addEventListener() {}, removeEventListener() {}, hidden: false };
+window.anime = require(%s);
+require(%s);
+const A = window.anime;
+const tl = { to() { return tl; } };
+const res = {};
+const err = (e) => String(e && e.message || e);
+try { window.CutmateFX.make(tl, {}, "c0", { dur: 2 }).anime(42); } catch (e) { res.sync = err(e); }
+const at = A.createTimeline({ autoplay: false });
+window.CutmateFX.make(tl, {}, "c1", { dur: 2 }).anime(Promise.resolve().then(() => at));      // a bare timeline
+window.CutmateFX.make(tl, {}, "c2", { dur: 2 }).anime(Promise.resolve({ nope: 1 }));
+window.CutmateFX.make(tl, {}, "c3", { dur: 2 }).anime(Promise.resolve().then(() => ({ timeline: at })));
+Promise.allSettled(["c1", "c2", "c3"].map((c) => window.__hf.buildReady[c])).then((r) => {
+  res.bare = r[0].status === "rejected" ? err(r[0].reason) : "resolved";
+  res.junk = r[1].status === "rejected" ? err(r[1].reason) : "resolved";
+  res.ok = r[2].status;
+  console.log(JSON.stringify(res));
+});
+"""
+
+
+def test_anime_promise_wrong_value_is_a_one_line_error():
+    """A promise resolving to a bare anime timeline (thenable: it would wait forever for a paused timeline to finish) or to
+    junk rejects buildReady with a one-line error instead of hanging the render."""
+    d = _node(ANIME_BAD, json.dumps(str(ANIME_JS)), json.dumps(str(web_dir() / "effects.js")))
+    assert d["ok"] == "fulfilled"
+    assert "{ timeline: tl }" in d["bare"] and "\n" not in d["bare"]
+    assert "{ timeline: tl }" in d["junk"] and "object" in d["junk"]
+    assert "{ timeline: tl }" in d["sync"]

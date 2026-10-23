@@ -14,7 +14,8 @@ FORBIDDEN = ("Date.now", "Math.random", "performance.now", "requestAnimationFram
              "THREE.Clock", "new Date", "crypto.getRandomValues", "gsap.ticker", ".play(",
              # callbacks fire only when playback crosses a point (a worker seeking straight to a frame skips them);
              # GlitchEffect / ScrambleTextPlugin draw from Math.random inside the library
-             "onComplete", "onRepeat", "onRender", "onBegin", "onLoop", ".restart(", "GlitchEffect", "ScrambleTextPlugin")
+             "onComplete", "onRepeat", "onRender", "onBegin", "onLoop", ".restart(", "GlitchEffect", "ScrambleTextPlugin",
+             "onStart", "onReverseComplete", "onBeforeUpdate")
 _SECTION = re.compile(r"<(style|markup|script)>(.*?)</\1>", re.S)
 VENDOR = {"gsap": "gsap@3.14.2", "three": "three@0.181.2", "postprocessing": "postprocessing@6.39.5",
           "animejs": "animejs@4.5.0", "lottie": "lottie@5.12.2", "katex": "katex@0.19.0", "roughjs": "roughjs@4.6.6",

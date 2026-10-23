@@ -307,7 +307,7 @@ def test_effect_meta(tmp_path):
 
 
 @pytest.mark.parametrize("api", ["onComplete", "onRepeat", "onRender", "onBegin", "onLoop", ".restart(", "GlitchEffect",
-                                 "ScrambleTextPlugin"])
+                                 "ScrambleTextPlugin", "onStart", "onReverseComplete", "onBeforeUpdate"])
 def test_new_forbidden_apis(tmp_path, api):
     assert api in E.FORBIDDEN
     p = tmp_path / "wow.html"
@@ -315,3 +315,14 @@ def test_new_forbidden_apis(tmp_path, api):
                  encoding="utf-8")
     with pytest.raises(PlanError, match=re.escape(f"wow.html: uses {api}")):
         E.lint_effect(p)
+
+
+def test_every_repo_effect_passes_the_extended_lint():
+    """Every stock effect / component script in the repo still lints with the extended FORBIDDEN list."""
+    root = plugin_root()
+    files = [p for p in root.rglob("*.html") if not ({".venv", "node_modules", "vendor", ".git"} & set(p.parts))
+             and "<script>" in p.read_text(encoding="utf-8")]
+    assert len(files) > 20
+    hits = [(p.relative_to(root).as_posix(), api) for p in files for api in E.FORBIDDEN
+            if api in dict(E._SECTION.findall(p.read_text(encoding="utf-8"))).get("script", "")]
+    assert hits == []

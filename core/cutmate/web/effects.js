@@ -76,6 +76,23 @@
     return Math.min(1, Math.max(0, v));
   }
 
+  const ANIME_ERR = "cutmate U.anime: pass an anime.js timeline (autoplay: false) or a promise resolving to { timeline: tl }";
+  // anime.js timers are thenable: then() waits for the end, which a paused (seeked) timeline never reaches, so a promise
+  // resolving to a bare timeline would hang the build silently. Once an effect hands U.anime a promise, awaiting any
+  // anime timer fails with a one-line error instead (nothing in a seeked render may wait for playback to finish)
+  function animeGuard() {
+    const A = typeof window !== "undefined" && window.anime;
+    if (!A || typeof A.createTimeline !== "function") return;
+    let o = Object.getPrototypeOf(A.createTimeline({ autoplay: false }));
+    while (o && !Object.prototype.hasOwnProperty.call(o, "then")) o = Object.getPrototypeOf(o);
+    if (!o || o.then.__cutmate) return;
+    const then = function () {
+      throw new Error("cutmate U.anime: an anime timeline was awaited — resolve the promise to { timeline: tl }, not tl");
+    };
+    then.__cutmate = true;
+    Object.defineProperty(o, "then", { value: then, configurable: true, writable: true });
+  }
+
   function make(tl, root, cid, P) {
     const D = Math.max(0.001, P.dur || 1);
     const U = {};
@@ -353,14 +370,22 @@
     };
     // seeks an anime.js timeline (autoplay: false; never on window.__hfAnime) from the clock. A promise (async setup:
     // fonts, measuring) goes to U.ready and must resolve to { timeline } — an anime timeline is itself thenable and
-    // awaiting a paused one never ends — or to a non-thenable object with seek(ms). Until then the clock does nothing
+    // awaiting a paused one never ends — or to a non-thenable object with seek(ms). Until then the clock does nothing.
+    // Resolving to anything else rejects the build with a one-line error (a bare timeline included: see animeGuard)
     U.anime = function (x) {
       let anim = null, last = 0;
       const pick = (v) => (v && typeof v.seek === "function" ? v : v && v.timeline && typeof v.timeline.seek === "function" ? v.timeline : null);
       anim = pick(x);
       U.clock((t) => { last = t; if (anim) anim.seek(t * 1000); });
       if (!anim && x && typeof x.then === "function") {
-        U.ready(Promise.resolve(x).then((v) => { anim = pick(v); if (anim) anim.seek(last * 1000); }));
+        animeGuard();
+        U.ready(Promise.resolve(x).then((v) => {
+          anim = pick(v);
+          if (!anim) throw new Error(ANIME_ERR + " (got " + (v === null ? "null" : typeof v) + ")");
+          anim.seek(last * 1000);
+        }));
+      } else if (!anim) {
+        throw new Error(ANIME_ERR);
       }
       return x;
     };
