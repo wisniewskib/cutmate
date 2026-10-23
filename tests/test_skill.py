@@ -358,3 +358,10 @@ def test_edit_skill_layout_json_parses():
             assert ("effect" in it) != ("media" in it), it
         for sc in plan.get("scenes", []):
             assert set(sc) <= set(SCENE_KEYS), sc
+
+
+def test_setup_skill_fixes_missing_vendor():
+    t = _skill("setup")
+    assert '`"$CM" vendor`' in t and "`$CM doctor` → `vendor`" in t
+    step0 = t[t.index("## 0. Re-run"):t.index("## 1. Detect")]
+    assert '"$CM" vendor' in step0 and step0.index('"$CM" vendor') < step0.index("**Finished?**")

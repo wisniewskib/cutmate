@@ -8,9 +8,8 @@ modules, writes assets/vendor/<name>@<ver>/<path as on npm>, the licence text of
 (themes/clean/components/custom/globe/land.json + countries.json) from Natural Earth.
 
 --only NAME      one library (gsap, three, ...) or `globe`.
---dest DIR       write the library folders to DIR instead of assets/vendor (install/setup does this for gsap:
-                 `--only gsap --dest "$CUTMATE_HOME/vendor"`); every file is then checked against the committed
-                 MANIFEST.json and nothing else (manifest, licences) is written.
+--dest DIR       only fetch the not-redistributable libraries (gsap) into DIR, sha-checked against MANIFEST.json
+                 (the same code as `cutmate vendor`, which is what users run).
 
 This is the only place cutmate uses the network for libraries; builds and renders never do.
 """
@@ -142,7 +141,7 @@ def write_file(path: Path, data: bytes) -> None:
     path.write_bytes(data)
 
 
-def vendor(only: str | None, dest: Path | None) -> None:
+def vendor(only: str | None) -> None:
     manifest_path = VENDOR / "MANIFEST.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8")) if manifest_path.exists() else []
     by_name = {e["name"]: e for e in manifest}
@@ -156,22 +155,14 @@ def vendor(only: str | None, dest: Path | None) -> None:
                  "files": {p: sha(files[p]) for p in sorted(files)}, "license_file": f"LICENSES/{name}.txt"}
         if spec.get("redistribute") is False:
             entry["redistribute"] = False
-        if dest:                                         # setup fallback: verify against the committed manifest
-            want = by_name.get(name, {}).get("files")
-            if want != entry["files"]:
-                raise SystemExit(f"{name}: downloaded files do not match assets/vendor/MANIFEST.json (sha256) — refusing")
-            for p, data in files.items():
-                write_file(dest / folder / p, data)
-        else:
-            for p, data in files.items():
-                write_file(VENDOR / folder / p, data)
-            write_file(VENDOR / "LICENSES" / f"{name}.txt", lic_text)
-            by_name[name] = entry
+        for p, data in files.items():
+            write_file(VENDOR / folder / p, data)
+        write_file(VENDOR / "LICENSES" / f"{name}.txt", lic_text)
+        by_name[name] = entry
         print(f"{folder}: {len(files)} files, {sum(map(len, files.values())) // 1024} KiB")
-    if not dest:
-        order = list(LIBS)
-        manifest = sorted(by_name.values(), key=lambda e: order.index(e["name"]) if e["name"] in order else 99)
-        write_file(manifest_path, (json.dumps(manifest, ensure_ascii=False, indent=2) + "\n").encode("utf-8"))
+    order = list(LIBS)
+    manifest = sorted(by_name.values(), key=lambda e: order.index(e["name"]) if e["name"] in order else 99)
+    write_file(manifest_path, (json.dumps(manifest, ensure_ascii=False, indent=2) + "\n").encode("utf-8"))
 
 
 def ring_has(ring: list, lng: float, lat: float) -> bool:
@@ -227,9 +218,18 @@ def main(argv: list[str] | None = None) -> int:
     a = ap.parse_args(argv)
     if a.only and a.only not in (*LIBS, "globe"):
         ap.error(f"--only: unknown name {a.only!r}")
+    if a.dest:                                           # the fetch for users: one implementation, in cutmate.vendor
+        sys.path.insert(0, str(ROOT / "core"))
+        from cutmate.errors import CutmateError
+        from cutmate.vendor import fetch
+        try:
+            print("\n".join(fetch(Path(a.dest), a.only)))
+        except CutmateError as e:
+            raise SystemExit(f"cutmate: {e}") from None
+        return 0
     if a.only != "globe":
-        vendor(a.only, Path(a.dest) if a.dest else None)
-    if a.only in (None, "globe") and not a.dest:
+        vendor(a.only)
+    if a.only in (None, "globe"):
         globe_data()
     return 0
 

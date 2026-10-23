@@ -89,3 +89,57 @@ def test_vendor_libs_only_unknown_name_is_usage_error():
         mod.main(["--only", "nope"])
     assert set(mod.LIBS) == set(effects.VENDOR)
     assert {n: f"{n}@{s['version']}" for n, s in mod.LIBS.items()} == effects.VENDOR
+
+
+@pytest.fixture
+def no_net(tmp_path, monkeypatch):
+    """Empty bundled dir with the real manifest, and a fake download that serves the real gsap files."""
+    from cutmate import vendor
+    bundled = tmp_path / "bundled"
+    bundled.mkdir()
+    (bundled / "MANIFEST.json").write_text(MANIFEST.read_text(encoding="utf-8"), encoding="utf-8")
+    monkeypatch.setattr(vendor, "vendor_dir", lambda: bundled)
+    monkeypatch.setenv("CUTMATE_HOME", str(tmp_path / "home"))
+    calls = []
+    monkeypatch.setitem(vendor.__dict__, "_real_get", vendor._get)
+    real = effects.vendor_root("gsap@3.14.2")
+
+    def fake_get(url):
+        calls.append(url)
+        assert url.startswith("https://cdn.jsdelivr.net/npm/gsap@3.14.2/")
+        return (real / url.split("gsap@3.14.2/", 1)[1]).read_bytes()
+    monkeypatch.setattr(vendor, "_get", fake_get)
+    return vendor, tmp_path / "home" / "vendor", calls
+
+
+def test_cutmate_vendor_fetches_idempotently(no_net, capsys):
+    from cutmate.cli import main
+    vendor, dest, calls = no_net
+    assert vendor.missing() == ["gsap@3.14.2"]
+    assert main(["vendor"]) == 0
+    assert "gsap@3.14.2: fetched 5 files" in capsys.readouterr().out
+    assert (dest / "gsap@3.14.2" / "dist" / "gsap.min.js").is_file() and vendor.missing() == [] and len(calls) == 5
+    assert main(["vendor"]) == 0 and "gsap@3.14.2: ok" in capsys.readouterr().out and len(calls) == 5   # nothing re-fetched
+    (dest / "gsap@3.14.2" / "dist" / "gsap.min.js").write_bytes(b"tampered")                              # sha mismatch → repaired
+    assert vendor.missing() == ["gsap@3.14.2"]
+    assert main(["vendor"]) == 0 and vendor.missing() == [] and len(calls) == 10
+
+
+def test_cutmate_vendor_errors_are_one_line(no_net, monkeypatch, capsys):
+    from cutmate.cli import main
+    vendor, dest, _ = no_net
+    real_get = vendor.__dict__["_real_get"]
+    monkeypatch.setattr(vendor, "_get", lambda url: b"not gsap")
+    assert main(["vendor"]) == 2
+    err = capsys.readouterr().err
+    assert err.startswith("cutmate: gsap@3.14.2/dist/") and "does not match" in err and err.count("\n") == 1
+    assert not dest.exists()                                                  # nothing written on a mismatch
+    import urllib.error
+
+    def boom(*a, **k):
+        raise urllib.error.URLError("offline")
+    monkeypatch.setattr(vendor, "_get", real_get)                              # the real downloader, a dead network
+    monkeypatch.setattr("urllib.request.urlopen", boom)
+    assert main(["vendor"]) == 2
+    err = capsys.readouterr().err
+    assert "cannot download" in err and "offline" in err and "cutmate vendor" in err and err.count("\n") == 1

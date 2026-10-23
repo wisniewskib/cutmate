@@ -72,6 +72,12 @@ def _guard(fn, default):
         return default
 
 
+def _vendor() -> str:
+    from . import vendor
+    gone = vendor.missing()
+    return "ok" if not gone else f"{', '.join(g.split('@')[0] for g in gone)} missing — run cutmate vendor"
+
+
 def doctor() -> dict:
     from . import music
     engine = _guard(lambda: LocalBackend.auto().engine, "faster")
@@ -105,6 +111,7 @@ def doctor() -> dict:
         "keys": {k: bool(os.environ.get(k)) for k in KEY_ENVS},
         "carve": bool(_guard(music._carve_script, None)),
         "config": cfg,
+        "vendor": _guard(_vendor, "cannot check — reinstall the plugin"),
         "plugin_root": str(paths.plugin_root()),
     }
 

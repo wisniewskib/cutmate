@@ -31,6 +31,9 @@ If `${CUTMATE_HOME:-$HOME/.cutmate}/config.json` exists and the CLI runs:
   moved, the venv still points at the old copy) → run detect (step 1) and re-run step 4's `setup.sh` with the same
   flags as before (`--gpu <gpu.kind>` from detect, `--local` when config `transcription` is `local`; Windows:
   `setup.ps1 -Gpu … -Local`), then go on.
+- **Vendor libraries:** `$CM doctor` → `vendor`. Not `ok` (e.g. `gsap missing — run cutmate vendor`) → run
+  `"$CM" vendor` (it downloads gsap into the cutmate home, sha-checked; safe to repeat), check `vendor` is `ok` now. A
+  download error → tell the user to check the connection and run it again; renders need it.
 - **Finished?** Setup is finished ⇔ the smoke render exists: `${CUTMATE_HOME:-$HOME/.cutmate}/smoke/rec/out/final.mp4`
   (only step 10 creates it; config.json alone proves nothing — it already holds defaults after step 5).
   - Marker missing (an earlier run stopped, e.g. paused for an API key): `$CM config show`, then run the pending part
@@ -89,7 +92,8 @@ for NVIDIA local). On yes:
 `bash "${CLAUDE_PLUGIN_ROOT}/install/setup.sh" --gpu <gpu.kind>` plus `--local` when transcription is local
 (Windows: `powershell -ExecutionPolicy Bypass -File "${CLAUDE_PLUGIN_ROOT}\install\setup.ps1" -Gpu <gpu.kind>` plus `-Local`).
 It takes minutes: Bash timeout 600000 or run_in_background: true; on timeout re-run — downloads resume. Then set the CLI again (line above) and run
-`$CM doctor`. Report problems in one line each. `carve: false` → tell the user to install the HyperFrames plugin
+`$CM doctor`. Report problems in one line each. `vendor` not `ok` → `"$CM" vendor` (setup.sh / setup.ps1 already tried it;
+a download failure there is only a warning). `carve: false` → tell the user to install the HyperFrames plugin
 (`/plugin install hyperframes@hyperframes`) — it carves the music under the voice.
 
 ## 5. Backend and language

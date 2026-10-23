@@ -129,11 +129,14 @@ def test_setup_sh_dry_run_nvidia(tmp_path):
     assert not (tmp_path / "cm").exists()
 
 
-def test_setup_fetches_gsap_into_home_vendor(tmp_path):
+def test_setup_runs_cutmate_vendor_after_pip(tmp_path):
     r = run_setup(tmp_path, "--gpu", "none", "--dry-run")
-    assert f"tools/vendor_libs.py --only gsap --dest {tmp_path / 'cm' / 'vendor'}" in r.stdout
-    t = (ROOT / "install" / "setup.ps1").read_text(encoding="utf-8")
-    assert "tools\\vendor_libs.py" in t and "'--only', 'gsap', '--dest'" in t and "'vendor'" in t
+    lines = r.stdout.splitlines()
+    assert lines.index(f"+ {tmp_path / 'cm' / 'venv'}/bin/cutmate vendor") > max(i for i, l in enumerate(lines) if "pip install" in l)
+    sh = (ROOT / "install" / "setup.sh").read_text(encoding="utf-8")
+    assert 'WARN: could not fetch gsap' in sh and 'elif ! "$VENV/bin/cutmate" vendor' in sh      # a failure never aborts (set -e)
+    ps = (ROOT / "install" / "setup.ps1").read_text(encoding="utf-8")
+    assert "Scripts\\cutmate.exe" in ps and "& $Cm vendor" in ps and "Write-Warning" in ps and "vendor_libs" not in ps
 
 
 def test_setup_sh_dry_run_api(tmp_path):

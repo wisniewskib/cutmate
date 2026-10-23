@@ -277,7 +277,7 @@ def test_vendor_files_selects_used():
 def test_vendor_root_falls_back_to_home_then_errors(tmp_path, monkeypatch):
     monkeypatch.setattr(E, "vendor_dir", lambda: tmp_path / "bundled")
     monkeypatch.setenv("CUTMATE_HOME", str(tmp_path / "home"))
-    with pytest.raises(CutmateError, match=r"gsap@3.14.2 not found.*tools/vendor_libs.py --only gsap"):
+    with pytest.raises(CutmateError, match=r'gsap@3.14.2 not found.*run "\$CM" vendor \(or /cutmate:setup\)'):
         E.vendor_root("gsap@3.14.2")
     (tmp_path / "home" / "vendor" / "gsap@3.14.2").mkdir(parents=True)
     assert E.vendor_root("gsap@3.14.2") == tmp_path / "home" / "vendor" / "gsap@3.14.2"

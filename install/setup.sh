@@ -65,8 +65,9 @@ if [ "$gpu" = nvidia ] && [ "$local_" = 1 ]; then
   run "$PY" -m pip install nvidia-cublas-cu12 'nvidia-cudnn-cu12==9.*'
 fi
 
-# gsap's licence does not clearly allow redistribution: fetch it (sha-checked against assets/vendor/MANIFEST.json)
-run "$PY" "$ROOT/tools/vendor_libs.py" --only gsap --dest "$HOME_DIR/vendor"
+# gsap's licence does not clearly allow redistribution: fetch it (sha-checked). Not fatal: `cutmate doctor` shows it.
+if [ "$dry" = 1 ]; then echo "+ $VENV/bin/cutmate vendor"
+elif ! "$VENV/bin/cutmate" vendor; then echo "WARN: could not fetch gsap — run: $VENV/bin/cutmate vendor (cutmate doctor shows it)" >&2; fi
 
 echo "venv: $VENV"
 echo "cutmate: $VENV/bin/cutmate"

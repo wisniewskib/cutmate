@@ -33,7 +33,7 @@ def pytest_sessionstart(session):
     from cutmate.effects import VENDOR
     from cutmate.paths import vendor_dir
     if not (vendor_dir() / VENDOR["gsap"]).is_dir():
-        pytest.exit(f"{VENDOR['gsap']} is not in {vendor_dir()} — run once: python tools/vendor_libs.py --only gsap", 2)
+        pytest.exit(f"{VENDOR['gsap']} is not in {vendor_dir()} — run once: .venv/bin/python tools/vendor_libs.py --only gsap (Windows: .venv\\Scripts\\python.exe)", 2)
 
 
 @pytest.fixture(autouse=True)

@@ -80,8 +80,15 @@ if ($Gpu -eq 'nvidia' -and $Local) {
   Run @($Py, '-m', 'pip', 'install', 'nvidia-cublas-cu12', 'nvidia-cudnn-cu12==9.*')
 }
 
-# gsap's licence does not clearly allow redistribution: fetch it (sha-checked against assets/vendor/MANIFEST.json)
-Run @($Py, (Join-Path $Root 'tools\vendor_libs.py'), '--only', 'gsap', '--dest', (Join-Path $HomeDir 'vendor'))
+# gsap's licence does not clearly allow redistribution: fetch it (sha-checked). Not fatal: `cutmate doctor` shows it.
+$Cm = Join-Path $Venv 'Scripts\cutmate.exe'
+if ($DryRun) { Write-Output "+ $Cm vendor" }
+else {
+  $ErrorActionPreference = 'Continue'
+  & $Cm vendor
+  if ($LASTEXITCODE -ne 0) { Write-Warning "WARN: could not fetch gsap - run: $Cm vendor (cutmate doctor shows it)" }
+  $ErrorActionPreference = 'Stop'
+}
 
 Write-Output "venv: $Venv"
 Write-Output "cutmate: $(Join-Path $Venv 'Scripts\cutmate.exe')"

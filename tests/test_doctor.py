@@ -18,7 +18,7 @@ def home(tmp_path, monkeypatch):
 def test_doctor_shape():
     d = dr.doctor()
     assert set(d) == {"python", "venv", "ffmpeg", "node", "packages", "cuda", "models", "keys", "carve", "config",
-                      "plugin_root"}
+                      "vendor", "plugin_root"}
     assert d["plugin_root"] == str(paths.plugin_root())
     assert set(d["packages"]) == {"faster_whisper", "mlx_whisper", "align", "track"}
     assert set(d["models"]) == {"whisper", "align_pl", "align_en", "pose", "hand"}
@@ -76,3 +76,19 @@ def test_download_models_network_error(monkeypatch):
     monkeypatch.setattr(dr, "_snapshot", boom)
     with pytest.raises(CutmateError, match=r"cannot download .*cutmate models"):
         dr.download_models("pl", "local")
+
+
+def test_doctor_vendor_missing_and_ok(tmp_path, monkeypatch):
+    from cutmate import vendor
+    monkeypatch.setattr(vendor, "vendor_dir", lambda: tmp_path / "bundled")      # gsap is not bundled: only home/vendor counts
+    (tmp_path / "bundled").mkdir()
+    (tmp_path / "bundled" / "MANIFEST.json").write_text(
+        (paths.vendor_dir() / "MANIFEST.json").read_text(encoding="utf-8"), encoding="utf-8")
+    assert dr.doctor()["vendor"] == "gsap missing — run cutmate vendor"
+    for e in vendor.fetched_entries():
+        for rel in e["files"]:
+            src = paths.vendor_dir() / f"{e['name']}@{e['version']}" / rel
+            dst = tmp_path / "vendor" / f"{e['name']}@{e['version']}" / rel
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            dst.write_bytes(src.read_bytes())
+    assert dr.doctor()["vendor"] == "ok"

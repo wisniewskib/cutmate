@@ -61,8 +61,8 @@ def vendor_root(folder: str) -> Path:
     for base in (vendor_dir(), home() / "vendor"):
         if (base / folder).is_dir():
             return base / folder
-    raise CutmateError(f"vendored library {folder} not found in {vendor_dir()} or {home() / 'vendor'} — run cutmate setup "
-                       f"(or `python tools/vendor_libs.py --only {folder.split('@')[0]} --dest \"{home() / 'vendor'}\"`)")
+    raise CutmateError(f"vendored library {folder} not found (looked in {vendor_dir()} and {home() / 'vendor'}) — "
+                       'run "$CM" vendor (or /cutmate:setup)')
 
 
 def vendor_files(texts: list[str]) -> list[str]:

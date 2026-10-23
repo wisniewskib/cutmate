@@ -168,6 +168,7 @@ def _parser() -> argparse.ArgumentParser:
     sm.add_argument("--music", type=Path)
     sm.add_argument("--format", choices=list(FORMATS), default="9:16")
     sm.add_argument("--workdir", type=Path)
+    sub.add_parser("vendor", help="fetch the libraries cutmate may not bundle (gsap) into the cutmate home, sha-checked")
     sub.add_parser("doctor", help="health report (JSON): packages, models, GPU, keys, config")
     md = sub.add_parser("models", help="download the local models (alignment, whisper, face/hand tracking)")
     md.add_argument("--language", choices=config.LANGUAGES)
@@ -235,6 +236,10 @@ def _dispatch(args) -> int:
         import json
         from .doctor import doctor
         print(json.dumps(doctor(), indent=2, ensure_ascii=False))
+        return 0
+    if args.cmd == "vendor":
+        from .vendor import fetch
+        print("\n".join(fetch(config.home() / "vendor")))
         return 0
     cfg = config.load()
     language = getattr(args, "language", None) or cfg.language
