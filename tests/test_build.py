@@ -1469,3 +1469,58 @@ def test_vendor_dirs_follow_the_effects_used(out, theme):
     write_plan(out, {"graphics": [{"type": "chip", "at": "S2:minus", "text": "X"}]})
     proj = B.build(out, theme=theme)["project"]
     assert [d.name for d in (proj / "assets" / "vendor").iterdir()] == ["gsap@3.14.2"]   # pruned again
+
+
+def test_caption_band_values():
+    """Where the burned captions are (frame px): 9:16 bottom, 16:9 lower third, the seam while a split panel is up,
+    nothing when captions are not burned in."""
+    assert B.caption_band("9:16", "burn", 2.0) == [1295, 1455]
+    assert B.caption_band("9:16", "both", 2.0) == [1295, 1455]
+    assert B.caption_band("9:16", "srt", 2.0) is None and B.caption_band("9:16", "none", 2.0) is None
+    assert B.caption_band("16:9", "burn", 2.0) == [880, 1000]
+    assert B.caption_band("16:9", "srt", 2.0) is None                    # 16:9 default: srt only
+    pn = {"start": 1.0, "end": 4.0}
+    cap_dy = B.panel_offsets(0.5, 0.4)[1]
+    assert B.caption_band("9:16", "burn", 2.0, pn, cap_dy) == [880, 1040]  # on the seam (y 960)
+    assert B.caption_band("9:16", "burn", 5.0, pn, cap_dy) == [1295, 1455]  # after the panel is gone
+
+
+def _built_P(proj: Path) -> dict:
+    out = {}
+    for f in sorted((Path(proj) / "compositions").glob("*.html")):
+        m = re.search(r"const P = (\{.*?\});?\n", f.read_text(encoding="utf-8"))
+        if m:
+            P = json.loads(m.group(1))
+            out.setdefault(P.get("name"), []).append(P)
+    return out
+
+
+def test_wow_effects_get_the_caption_band(tmp_path, monkeypatch):
+    """P.caption_band (region px) reaches WOW effects only: a classic 9:16 scene gets the bottom band, a split-panel
+    item the part of the seam captions inside its region; other effects stay unchanged; srt-only 16:9 gets none."""
+    import sys
+    sys.path.insert(0, str(Path(__file__).parent))
+    import wowkit
+    home = tmp_path / "home"
+    monkeypatch.setenv("CUTMATE_HOME", str(home))
+    dst = home / "themes" / "split"
+    shutil.copytree(paths.theme_dir("clean"), dst)
+    meta = json.loads((dst / "theme.json").read_text(encoding="utf-8"))
+    meta["layout"] = {"mode": "split-panel"}
+    (dst / "theme.json").write_text(json.dumps(meta), encoding="utf-8")
+    globe = {"from": "PL", "to": ["US"]}
+    proj = wowkit.project(tmp_path / "a", {"scenes": [{"from": 0.5, "to": 3.5, "effect": "globe", "params": globe}],
+                                            "graphics": [{"type": "custom", "name": "headline", "at": 4.0,
+                                                          "params": {"text": "x"}}]}, dur=6.0)
+    P = _built_P(proj)
+    assert P["globe"][0]["caption_band"] == [1295, 1455]
+    assert "caption_band" not in P["headline"][0]
+    proj = wowkit.project(tmp_path / "b", {"panel": [{"at": 0.1, "effect": "exploded-view"},
+                                                      {"at": "S2:minus", "effect": "headline", "params": {"text": "y"}}]},
+                          dur=5.0, theme="split")
+    P = _built_P(proj)
+    assert P["exploded-view"][0]["caption_band"] == [840, 880]       # seam captions 880-1040 in the region 40..920
+    assert "caption_band" not in P["headline"][0]
+    proj = wowkit.project(tmp_path / "c", {"graphics": [{"type": "custom", "name": "globe", "from": 0.5, "to": 3.5,
+                                                         "params": globe}]}, fmt="16:9", dur=5.0)
+    assert "caption_band" not in _built_P(proj)["globe"][0]

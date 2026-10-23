@@ -76,6 +76,16 @@
     return Math.min(1, Math.max(0, v));
   }
 
+  // the largest free rect of a region {w, h, caption_band: [y0, y1]?} above or below the burned captions (region px,
+  // a small pad off the band); the whole region when there is no band. Effects fit their content into it
+  function safeBox(p) {
+    const w = p.w, h = p.h, b = p.caption_band;
+    if (!Array.isArray(b) || b.length < 2 || !(b[1] > b[0])) return { x: 0, y: 0, w, h };
+    const pad = 0.012 * h;
+    const above = Math.max(0, Math.min(h, b[0] - pad)), below = Math.max(0, h - Math.max(0, b[1] + pad));
+    return above >= below ? { x: 0, y: 0, w, h: above } : { x: 0, y: h - below, w, h: below };
+  }
+
   const ANIME_ERR = "cutmate U.anime: pass an anime.js timeline (autoplay: false) or a promise resolving to { timeline: tl }";
   // anime.js timers are thenable: then() waits for the end, which a paused (seeked) timeline never reaches, so a promise
   // resolving to a bare timeline would hang the build silently. Once an effect hands U.anime a promise, awaiting any
@@ -98,6 +108,7 @@
     const U = {};
     U.seed = seed;
     U.trackAt = trackAt;
+    U.safeBox = function (p) { return safeBox(p || P); };
     // the first frame waits for p (fonts, models, measuring): registers / extends window.__hf.buildReady[cid]
     U.ready = function (p) {
       const hf = (window.__hf = window.__hf || {});
@@ -393,6 +404,6 @@
     return U;
   }
 
-  window.CutmateFX = { make, pure: { seed, trackAt, particleState, scrambleAt, openAmount } };
+  window.CutmateFX = { make, pure: { seed, trackAt, particleState, scrambleAt, openAmount, safeBox } };
   if (typeof module !== "undefined") module.exports = window.CutmateFX;
 })();

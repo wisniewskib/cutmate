@@ -72,9 +72,11 @@ function globeBeats(o) {
 function globePose(o, t) {
   const B = globeBeats(o);
   const fov = 12, D = 8;                                             // a long lens: the horizon is ~85° out, not 78°
-  const top = o.title ? 0.15 * o.h : 0;
-  const cx = o.w / 2, cy = top + (o.h - top) / 2;
-  const Rf = Math.min(o.w * 0.41, (o.h - top) * 0.355);
+  // o.safe [y0, y1]: the free band of the region (U.safeBox: off the burned captions); the title sits at its top
+  const s0 = o.safe ? o.safe[0] : 0, s1 = o.safe ? o.safe[1] : o.h;
+  const top = s0 + (o.title ? 0.15 * o.h : 0), room = Math.max(1, s1 - top);
+  const cx = o.w / 2, cy = top + room / 2;
+  const Rf = Math.min(o.w * 0.41, room * 0.355);
   const pts = [o.from, ...(o.to || [])].map((p) => latLngToVec(p[0], p[1], 1));
   // the view direction that faces every point best (the centre of the smallest cap holding them): start at the
   // centroid, then repeatedly lean toward the worst-facing point with a shrinking step — deterministic
@@ -99,7 +101,7 @@ function globePose(o, t) {
   let lng = start[1] + 150 * (1 - out3(uin)) + turn(start[1], view[1]) * m;
   const zoom = 1.12 - 0.12 * m;                                       // close on the origin, then pull back
   const k = backOut(uin) * (1 - in3(clamp((t - B.out) / Math.max(0.05, o.end - B.out))));
-  const R = Math.max(0.001, Math.min(Rf * zoom * k, 0.45 * o.w, 0.45 * (o.h - top)));   // never clipped by the region
+  const R = Math.max(0.001, Math.min(Rf * zoom * k, 0.45 * o.w, 0.45 * room));   // never clipped by the region
   const ta = (R / (o.h / 2)) * Math.tan((fov * DEG) / 2);
   return { lat, lng, r: D * Math.sin(Math.atan(ta)), R, cx, cy, fov, D };
 }
@@ -145,6 +147,8 @@ const ready = U.three({ el: root.querySelector(".gl-stage"), camera: { fov: 30, 
   const origin = known(fromIso) ? fromIso : "PL";
   const ll = (c) => [countries[c].lat, countries[c].lng];
   const O = { from: ll(origin), to: dests.map(ll), w: P.w, h: P.h, at: P.at, end: P.end, panel: !!P.panel, title: P.title || "" };
+  const SB = U.safeBox(P);
+  if (SB.y > 0 || SB.h < P.h) O.safe = [SB.y, SB.y + SB.h];
   const B = globeBeats(O);
   const nA = dests.length;
   const drawDur = nA > 1 ? (B.a1 - B.a0) * 0.5 : (B.a1 - B.a0) * 0.75;
@@ -253,7 +257,7 @@ const ready = U.three({ el: root.querySelector(".gl-stage"), camera: { fov: 30, 
     const bar = document.createElement("span"); bar.className = "bar"; titleEl.appendChild(bar);
     let fs = titlePx; titleEl.style.fontSize = fs + "px";
     if (titleEl.scrollWidth > P.w * 0.86) { fs *= (P.w * 0.86) / titleEl.scrollWidth; titleEl.style.fontSize = fs + "px"; }
-    titleEl.style.top = Math.round(P.h * 0.045) + "px";
+    titleEl.style.top = Math.round(U.safeBox(P).y + P.h * 0.045) + "px";
   } else titleEl.remove();
   const names = places.map((p) => { const e = countries[p.c]; return PL ? e.pl || e.en : e.en; });
   if (Array.isArray(P.labels)) {
@@ -360,7 +364,7 @@ const ready = U.three({ el: root.querySelector(".gl-stage"), camera: { fov: 30, 
     }
     labels.forEach((L, i) => {
       const p = pos[i];
-      const top = Math.min(P.h - margin - L.h, Math.max(margin + (P.title ? 0.14 * P.h : 0), p.cy - L.h / 2));
+      const top = Math.min(SB.y + SB.h - margin - L.h, Math.max(SB.y + margin + (P.title ? 0.14 * P.h : 0), p.cy - L.h / 2));
       const appear = clamp((t - L.from) / 0.22);
       const vis = on ? appear * smooth(-0.04, 0.03, p.front) * gone : 0;   // a place near the limb keeps a solid label
       L.el.style.opacity = String(vis);

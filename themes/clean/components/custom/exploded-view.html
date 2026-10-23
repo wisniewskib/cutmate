@@ -311,6 +311,8 @@ const ready = U.three({ el: root.querySelector(".xv-stage"), camera: { fov: 30 }
   holder.parent.add(flare);
 
   // ---- DOM: title, labels, leader lines ----
+  // the free part of the region: everything (title, object, floor, labels) stays off the burned captions
+  const SB = U.safeBox(P);
   const titleEl = root.querySelector(".xv-title");
   let titleH = 0;
   if (P.title) {
@@ -321,8 +323,8 @@ const ready = U.three({ el: root.querySelector(".xv-stage"), camera: { fov: 30 }
     titleEl.style.fontSize = fs + "px";
     const maxW = P.w * 0.86;
     if (titleEl.scrollWidth > maxW) { fs *= maxW / titleEl.scrollWidth; titleEl.style.fontSize = fs + "px"; }
-    titleEl.style.top = Math.round(P.h * 0.06) + "px";
-    titleH = P.h * 0.06 + titleEl.offsetHeight + 24 * s;
+    titleEl.style.top = Math.round(SB.y + P.h * 0.06) + "px";
+    titleH = SB.y + P.h * 0.06 + titleEl.offsetHeight + 24 * s;
   } else titleEl.remove();
   const svg = root.querySelector("svg.xv-lines");
   svg.setAttribute("width", P.w); svg.setAttribute("height", P.h); svg.setAttribute("viewBox", "0 0 " + P.w + " " + P.h);
@@ -349,7 +351,7 @@ const ready = U.three({ el: root.querySelector(".xv-stage"), camera: { fov: 30 }
   const ELEV = AXIS === "x" ? 0.24 : (P.preset === "phone" || P.preset === "layers") && !(Array.isArray(P.parts) && P.parts.length >= 2) ? 0.6 : 0.42;
   const AZ = AXIS === "x" ? -0.75 : 0;                       // a horizontal stack is seen from the side: the faces show
   const margin = 26 * s, gapPx = 30 * s;
-  const area = { x0: margin, x1: P.w - margin, y0: Math.max(margin, titleH), y1: P.h - margin };
+  const area = { x0: margin, x1: P.w - margin, y0: Math.max(SB.y + margin, titleH), y1: SB.y + SB.h - margin };
   // the object gets most of the region: the pills may overlap its outer margin (short leaders) instead of reserving
   // whole label columns
   const aw = area.x1 - area.x0, ah = area.y1 - area.y0;

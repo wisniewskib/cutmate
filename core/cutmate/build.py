@@ -19,7 +19,7 @@ from .captions import to_srt
 from .chapters import chapters_txt
 from .config import CAPTION_MODES, DEFAULT_CAPTIONS
 from .cut import load_timed
-from .effects import (THREE_MARK, VENDOR_URL, find_effect, held_slice, libs_head, lint_effect, track_slice, vendor_files,
+from .effects import (THREE_MARK, VENDOR_URL, effect_meta, find_effect, held_slice, libs_head, lint_effect, track_slice, vendor_files,
                       vendor_root)
 from .errors import CutmateError
 from .formats import format_of, size_of
@@ -217,8 +217,21 @@ SPLIT_DY = 300                # #split moves the A-roll this far down while a sp
 FACE_Y = 0.40                 # where the face sits in the A-roll frame (fraction of H) when plan.face has nothing
 FACE_IN_HALF = 0.5            # the persistent panel puts the face this far down the bottom part (0.5: dy 672 at 0.5 / 0.40)
 CAPTION_MID = 1375            # theme.css: #captions top 1250 + height 250 / 2 (9:16)
+CAPTION_TEXT = {"9:16": (CAPTION_MID, 80), "16:9": (940, 60)}   # burned caption text: centre y, half height (theme.css)
 PALM_LIFT = 0.05   # a palm-placed effect sits this far (frame fraction) above the palm centre, not on the fingers
 SAFE = {(1080, 1920): [60, 192, 960, 1344], (1920, 1080): [60, 60, 1800, 800]}  # x, y, w, h a placed chip stays in
+
+
+def caption_band(fmt: str, mode: str, t: float, panel: dict | None = None, cap_dy: int = 0) -> list[int] | None:
+    """Where the burned captions are at time t, [y0, y1] in frame px: the caption text band of theme.css (9:16 bottom,
+    centred on CAPTION_MID; 16:9 lower third), moved onto the seam by cap_dy while the persistent panel is up. None when
+    nothing is burned in (srt / none)."""
+    if mode not in ("burn", "both") or fmt not in CAPTION_TEXT:
+        return None
+    mid, half = CAPTION_TEXT[fmt]
+    if panel and panel["start"] - 1e-9 <= t <= panel["end"] + 1e-9:
+        mid += cap_dy
+    return [mid - half, mid + half]
 
 
 def panel_offsets(ratio: float, face_y: float, H: int = 1920) -> tuple[int, int]:
@@ -407,7 +420,7 @@ def _media_tag(cid: str, g: Graphic, P: dict) -> str:
 
 def subcomp(cid: str, g: Graphic, host_start: float, theme: Path, assets: Path, media_map: dict, lang: str,
             size: tuple = (1080, 1920), extra_tags: dict | None = None, comp_path: Path | None = None,
-            tracks: dict | None = None, assets_url: str | None = None, screen=None) -> str:
+            tracks: dict | None = None, assets_url: str | None = None, screen=None, caption_band: list | None = None) -> str:
     sec = _sections(comp_path or theme / "components" / f"{g.type}.html")
     W, H = size
     screen = screen or (lambda x, y, t: (round(x * W, 1), round(y * H, 1)))  # noqa: E731  tracked point -> screen px
@@ -452,6 +465,10 @@ def subcomp(cid: str, g: Graphic, host_start: float, theme: Path, assets: Path, 
             P["follow"] = follow                         # meant to follow: no samples → the effect stays hidden
         if assets_url:
             P["assets"] = assets_url
+        if caption_band:                                 # the burned captions in region px (only where they cross it)
+            y0, y1 = max(0, caption_band[0] - ry), min(rh, caption_band[1] - ry)
+            if y1 > y0:
+                P["caption_band"] = [round(y0), round(y1)]
         if g.params.get("place_xy"):
             px, py = screen(g.params["place_xy"][0], g.params["place_xy"][1], g.start)
             P["place"] = [round(px - rx, 1), round(py - ry, 1)]
@@ -610,6 +627,7 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
     cam = cam_from_cuts(timed, fmt, plan.face, [(g.start, g.end) for g in plan.graphics if g.type == "bg"])
     splits = [[g.start, round(max(g.start + 0.45, g.end - 0.4), 3)] for g in plan.graphics if g.type == "split"]
     pn = plan.panel
+    cap_dy = 0
     if pn:                                             # the persistent panel: the face moves into the bottom part once
         ys = [v[1] for v in plan.face.values()]
         dy, cap_dy = panel_offsets(pn["ratio"], statistics.median(ys) if ys else FACE_Y, H)
@@ -673,6 +691,9 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
         assets_url = None
         if g.type == "custom":
             comp_path = found[g.params["name"]]
+            # WOW effects only (other effects keep their output byte-identical): where the burned captions are
+            band = (caption_band(fmt, mode, (g.start + g.end) / 2, pn, cap_dy)
+                    if effect_meta(comp_path).get("kind") == "wow" else None)
             effect_texts.append(comp_path.read_text(encoding="utf-8"))
             folder = comp_path.parent / g.params["name"]     # the effect's own files (Lottie JSON, textures…)
             if folder.is_dir():
@@ -680,10 +701,11 @@ def build(out_dir: Path, theme: str = "clean", language: str = "pl", factcheck: 
                 fx_used.add(g.params["name"])
                 assets_url = f"assets/fx/{g.params['name']}/"
         else:
+            band = None
             comp_path = _component(th, g.type, theme, warned)
         (proj / "compositions" / f"{cid}.html").write_text(
             subcomp(cid, g, hs, th, A, media_map, language, size=(W, H), extra_tags=extra, comp_path=comp_path,
-                    tracks=tr, assets_url=assets_url, screen=screen), encoding="utf-8")
+                    tracks=tr, assets_url=assets_url, screen=screen, caption_band=band), encoding="utf-8")
         scene = bool(g.params.get("_scene"))
         if g.type == "panel":
             track = 1                                  # under every graphic, over the A-roll

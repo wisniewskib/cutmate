@@ -127,11 +127,15 @@ def _arc_mids(o: dict, t: float) -> list[tuple]:
         return W.globeProject(pose, a[32], o.w, o.h); }});""", names=("globe",))]
 
 
-def _globe_spec(box, at, end, panel, title=""):
+def _globe_spec(box, at, end, panel, title="", P=None):
     c = _countries()
     ll = lambda k: [c[k]["lat"], c[k]["lng"]]  # noqa: E731
-    return {"from": ll("PL"), "to": [ll(k) for k in TO], "w": box[2], "h": box[3], "at": at, "end": end,
-            "panel": panel, "title": title}
+    o = {"from": ll("PL"), "to": [ll(k) for k in TO], "w": box[2], "h": box[3], "at": at, "end": end,
+         "panel": panel, "title": title}
+    safe = _safe(P or {})
+    if safe and (safe[0] > 0 or safe[1] < box[3]):
+        o["safe"] = safe
+    return o
 
 
 def _accent_at(a: np.ndarray, x: float, y: float, hue: float, r: int = 12, spread: float = 20) -> int:
@@ -153,7 +157,36 @@ def _spans(proj: Path, name: str) -> list[tuple]:
         P = json.loads(m.group(1)) if m else {}
         if P.get("name") == name:
             out.append((round(float(start) + P["at"], 3), round(float(start) + P["end"], 3)))
+            _PS.setdefault((str(proj), name), []).append(P)
     return out
+
+
+_PS: dict = {}
+
+
+def _P(proj: Path, name: str, i: int = 0) -> dict:
+    """The built P of the i-th `name` effect (after _spans)."""
+    if (str(Path(proj)), name) not in _PS:
+        _spans(proj, name)
+    return _PS[(str(Path(proj)), name)][i]
+
+
+def _safe(P: dict) -> list | None:
+    """U.safeBox(P) as [y0, y1] (effects.js: the bigger side of the caption band, 1.2 % pad), None without a band."""
+    b = P.get("caption_band")
+    if not b:
+        return None
+    pad = 0.012 * P["h"]
+    above, below = max(0.0, min(P["h"], b[0] - pad)), max(0.0, P["h"] - max(0.0, b[1] + pad))
+    return [0, above] if above >= below else [P["h"] - below, P["h"]]
+
+
+def _clear_of_band(pills, band, region_y=0):
+    """No pill crosses the burned captions (band in region px)."""
+    if band:
+        y0, y1 = band[0] + region_y, band[1] + region_y
+        hits = [p for p in pills if p[1] < y1 and p[3] > y0]
+        assert not hits, (hits, (y0, y1))
 
 
 def _object_box(a: np.ndarray, box, bg, pills=()) -> tuple:
@@ -229,11 +262,14 @@ def test_exploded_view_fills_a_916_scene(tmp_path, home):
     t_asm, t_mid = round(at + 0.19 * span, 3), round(at + 0.62 * span, 3)
     s_asm, s_mid = wowkit.snap(proj, t_asm), wowkit.snap(proj, t_mid)
     print(f"snapshot assembled {t_asm}: {s_asm}\nsnapshot exploded {t_mid}: {s_mid}")
-    full, below = (0, 0, 1080, 1920), (0, 300, 1080, 1800)     # the object is measured under the title band
+    full, below = (0, 0, 1080, 1920), (0, 300, 1080, 990)      # under the title, above the captions
     a, m = _img(s_asm), _img(s_mid)
     pills = _pills(m, full)
     print("pills:", pills)
     assert len(pills) >= 4 and min(y1 - y0 for x0, y0, x1, y1 in pills) >= 64, pills   # ~50 px type at 1080 wide
+    band = _P(proj, "exploded-view")["caption_band"]
+    assert band == [1295, 1455]
+    _clear_of_band(pills, band)                                 # the labels stay off the burned captions
     bx_a, bx_m = _object_box(a, below, (0x0b, 0x0b, 0x0f)), _object_box(m, below, (0x0b, 0x0b, 0x0f), pills)
     wr = (bx_m[2] - bx_m[0]) / 1080
     hr = (bx_m[3] - bx_m[1]) / max(1.0, bx_a[3] - bx_a[1])
@@ -257,19 +293,21 @@ def test_globe_panel_and_scene(tmp_path, home):
     _check_ok(proj)
     hue = _hue_of("#7dd3fc")
     (pa, pe), (sa, se) = _spans(proj, "globe")
-    for box, at, end, panel in ((BOX, pa, pe, True), ((0, 0, 1080, 1920), sa, se, False)):
+    for k_, (box, at, end, panel) in enumerate(((BOX, pa, pe, True), ((0, 0, 1080, 1920), sa, se, False))):
+        P = _P(proj, "globe", k_)
         t = round(at + 0.8 * (end - at), 3)
         t_late = round(at + 0.9 * (end - at), 3)                  # still before the next panel item cuts in
         s, s_late = wowkit.snap(proj, t), wowkit.snap(proj, t_late)
         print(f"snapshot {'panel' if panel else 'scene'} 0.8 ({t}): {s}\nsnapshot 0.9 ({t_late}): {s_late}")
         a, late = _img(s), _img(s_late)
-        mids = _arc_mids(_globe_spec(box, at, end, panel), t)
+        mids = _arc_mids(_globe_spec(box, at, end, panel, P=P), t)
         for (x, y, front), k in zip(mids, TO):                   # every arc is drawn through its apex
             n = _accent_at(a, box[0] + x, box[1] + y, hue)
             print(f"arc PL-{k} apex ({box[0] + x:.0f}, {box[1] + y:.0f}) front={front:.2f}: {n} accent px")
             assert front > 0 and n >= 6, (k, x, y, n, s)
         pills = _pills(late, box)
         assert len(pills) >= 4, (pills, s_late)                  # origin + 3 destinations
+        _clear_of_band(pills, P.get("caption_band"), box[1])     # the labels stay off the burned captions
         for x0, y0, x1, y1 in pills:                             # the labels are final at 0.8: same as at 0.9
             d = np.abs(a[y0:y1, x0:x1] - late[y0:y1, x0:x1]).mean()
             assert d <= 3.0, ((x0, y0, x1, y1), d, s, s_late)
@@ -308,7 +346,7 @@ def test_three_explainers_take_light_panel(tmp_path, home):
     print(f"light panel object box {ob}: luminance mean {lum.mean():.1f}, std {lum.std():.1f}")
     assert lum.std() >= 35 and lum.mean() <= 205, (lum.mean(), lum.std(), s_x)
     g = _img(s_g)
-    for (x, y, front), k in zip(_arc_mids(_globe_spec(BOX, ga, ge, True), t_g), TO):
+    for (x, y, front), k in zip(_arc_mids(_globe_spec(BOX, ga, ge, True, P=_P(proj, "globe")), t_g), TO):
         win = g[int(BOX[1] + y) - 12:int(BOX[1] + y) + 13, int(BOX[0] + x) - 12:int(BOX[0] + x) + 13]
         n = int(_hue_mask(win, 15, 30, sat=0.3, val=0.4).sum())
         print(f"arc PL-{k} apex: {n} orange px")

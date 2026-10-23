@@ -727,3 +727,23 @@ def test_globe_frames_every_point():
         for x, y, front in d:
             assert front > 0.05, (w, h, d)
             assert 0.06 * w <= x <= 0.94 * w and 0.06 * h <= y <= 0.94 * h, (w, h, d)
+
+
+SAFE = """
+global.window = {};
+require(%s);
+const F = window.CutmateFX.pure;
+console.log(JSON.stringify({ none: F.safeBox({ w: 1080, h: 1920 }), bottom: F.safeBox({ w: 1080, h: 1920, caption_band: [1295, 1455] }),
+  top: F.safeBox({ w: 1000, h: 880, caption_band: [0, 300] }), edge: F.safeBox({ w: 1000, h: 880, caption_band: [840, 880] }) }));
+"""
+
+
+def test_safe_box_avoids_the_caption_band():
+    d = _node(SAFE, json.dumps(str(web_dir() / "effects.js")))
+    assert d["none"] == {"x": 0, "y": 0, "w": 1080, "h": 1920}
+    b = d["bottom"]
+    assert b["y"] == 0 and b["w"] == 1080 and 1250 < b["h"] < 1295            # above the band, a pad off it
+    t = d["top"]
+    assert t["y"] > 300 and abs(t["y"] + t["h"] - 880) < 1e-6                  # the bigger side: below
+    e = d["edge"]
+    assert e["y"] == 0 and 820 < e["h"] < 840
