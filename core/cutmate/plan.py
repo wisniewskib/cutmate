@@ -47,6 +47,9 @@ PANEL_PACE = (1.1, 1.7)           # panel: one item per clause / key phrase — 
 PANEL_GAP = 1.0                   # an empty panel longer than this (not covered by a scene) warns (s)
 SCENE_MIN, SCENE_MAX = 1.0, 6.0   # full-screen scene: shorter is an error, longer warns (s)
 SCENE_FADE = 0.25                 # entrance / exit of a full-frame scene (s): effect FADE, scene.html P.fade, hide spans
+WOW = ("exploded-view", "burst-out", "hand-control", "globe", "topic-change", "kinetic-word")  # spectacular effects (capped)
+WOW_SHORT, WOW_GAP, WOW_ONCE = 90.0, 12.0, ("burst-out", "kinetic-word")  # a short ends by 90 s; its WOW spacing / once-only
+WOW_PER_MIN, WOW_MAX = 1, 8                                       # long-form: per started minute, in total
 _PUNCT = ".,!?;:…\"'„\u201c\u201d()[]–—-"
 
 
@@ -637,6 +640,29 @@ def _budget(gs: list[Graphic], end: float | None = None, fmt: str = "9:16", last
     return w
 
 
+def _wow_warnings(gs: list[Graphic], end: float) -> list[str]:
+    """The WOW caps: a short (end <= 90 s) gets <= 2 WOW effects >= 12 s apart (start to start), burst-out and kinetic-word
+    once each; long-form <= 1 per started minute and <= 8 in total. Only customs count (a bg / side / split effect is
+    counted through its expanded custom); chapter_fx plates (`_chapter`) do not."""
+    wow = sorted((g for g in gs if g.type == "custom" and g.params.get("name") in WOW and not g.params.get("_chapter")),
+                 key=lambda g: g.start)
+    short = end <= WOW_SHORT
+    cap = 2 if short else min(WOW_MAX, WOW_PER_MIN * math.ceil(end / 60))
+    w = []
+    if len(wow) > cap:
+        w.append(f"WARN wow effects: {len(wow)} in {end:.0f} s (cap {cap})")
+    if short:
+        for name in WOW_ONCE:
+            n = sum(g.params["name"] == name for g in wow)
+            if n > 1:
+                w.append(f"WARN wow {name}: {n} in {end:.0f} s (cap 1)")
+        for a, b in zip(wow, wow[1:]):
+            if b.start - a.start < WOW_GAP - 1e-9:
+                w.append(f"WARN wow {a.params['name']} and {b.params['name']} are {b.start - a.start:.1f} s apart "
+                         f"(min {WOW_GAP:g})")
+    return w
+
+
 def _glb_warnings(gs: list[Graphic]) -> list[str]:
     w = []
     for g in gs:
@@ -761,7 +787,7 @@ def load_plan(out_dir: Path, factcheck: bool = False, layout: Layout | None = No
         panel_warns.append("WARN panel: no face position (no out/work/tracks.json, no plan \"face\") — the face is "
                            "placed by a guess and may sit too low in the bottom part; run `cutmate track <out>` and rebuild")
     plates = [(c["start"], min(c["start"] + PLATE, end)) for c in plate_chapters(chapters, end)]
-    warnings = gesture_warns + panel_warns + scene_warns + _glb_warnings(gs) + _budget(gs, end, fmt, float(timed[-1]["start"]), plates) + _chapter_warnings(chapters, gs, end, min((w['start'] for w in words), default=0.0)) + (_factcheck(out, gs) if factcheck else [])
+    warnings = gesture_warns + panel_warns + scene_warns + _glb_warnings(gs) + _wow_warnings(gs, end) + _budget(gs, end, fmt, float(timed[-1]["start"]), plates) + _chapter_warnings(chapters, gs, end, min((w['start'] for w in words), default=0.0)) + (_factcheck(out, gs) if factcheck else [])
     cap = raw.get("captions") or {}
     if not isinstance(cap, dict):
         raise PlanError(f"{p}: \"captions\" must be a dict")

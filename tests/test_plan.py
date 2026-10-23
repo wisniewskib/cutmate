@@ -986,3 +986,49 @@ def test_panel_pace_warns_when_items_are_per_sentence(tmp_path):
     # time under a full-screen scene needs no panel items: 10 items in the 16 s left is one per 1.6 s — fine
     sc = dict(plan(10), scenes=[{"from": 4.0, "to": 8.0, "effect": "burst"}])
     assert not any("panel pace" in x for x in load_plan(_long_out(tmp_path / "c", sc, end=20.0)).warnings)
+
+
+def _wow(name, start, end=None, **params):
+    from cutmate.plan import Graphic
+    return Graphic("custom", start, end if end is not None else start + 3.0, dict({"name": name}, **params), False, None, 0)
+
+
+def test_wow_caps(tmp_path):
+    from cutmate.plan import WOW, _wow_warnings
+    assert WOW == ("exploded-view", "burst-out", "hand-control", "globe", "topic-change", "kinetic-word")
+    # a short (end <= 90 s): <= 2 WOW effects, >= 12 s apart, burst-out / kinetic-word once each
+    assert _wow_warnings([_wow("globe", 2), _wow("burst-out", 20)], 40.0) == []
+    w = _wow_warnings([_wow("globe", 2), _wow("exploded-view", 16), _wow("hand-control", 30)], 40.0)
+    assert "WARN wow effects: 3 in 40 s (cap 2)" in w and not any("apart" in x for x in w)
+    w = _wow_warnings([_wow("globe", 5), _wow("topic-change", 13)], 40.0)
+    assert w == ["WARN wow globe and topic-change are 8.0 s apart (min 12)"]
+    w = _wow_warnings([_wow("kinetic-word", 2), _wow("kinetic-word", 25)], 40.0)
+    assert len(w) == 1 and w[0].startswith("WARN wow kinetic-word") and "(cap 1)" in w[0]
+    w = _wow_warnings([_wow("burst-out", 2), _wow("burst-out", 25)], 40.0)
+    assert len(w) == 1 and "burst-out" in w[0]
+    # non-WOW customs and other graphics never count
+    others = [_wow("energy-ball", 3), _wow("checklist", 8), _wow("ui-mock", 9)]
+    assert _wow_warnings(others + [_wow("globe", 2), _wow("burst-out", 20)], 40.0) == []
+    from cutmate.plan import Graphic
+    assert _wow_warnings([Graphic("bg", 2, 5, {"effect": "burst-out"}, True, None, 0), _wow("burst-out", 2, 5),
+                          _wow("globe", 30)], 40.0) == []       # a bg's expanded custom counts once
+    # long-form: <= 1 per started 60 s and <= 8 in total, no spacing rule; chapter_fx plates do not count
+    spread = [_wow(n, 10 + 55 * i) for i, n in enumerate(["globe", "burst-out", "globe", "exploded-view", "topic-change"])]
+    assert _wow_warnings(spread, 300.0) == []
+    w = _wow_warnings(spread + [_wow("kinetic-word", 290)], 300.0)
+    assert w == ["WARN wow effects: 6 in 300 s (cap 5)"]
+    plates = [_wow("topic-change", 30 * i, _chapter=True) for i in range(1, 7)]
+    assert _wow_warnings(spread + plates, 300.0) == []
+    long = [_wow("globe", 30 * i) for i in range(10)]
+    assert _wow_warnings(long, 900.0) == ["WARN wow effects: 10 in 900 s (cap 8)"]
+
+
+def test_wow_caps_join_plan_warnings(tmp_path):
+    words = WORDS + [{"seg": "S2", "word": "dalej", "start": 38.0, "end": 38.5}]
+    out = make_out(tmp_path, {"graphics": [
+        {"type": "custom", "name": "globe", "at": 2.0, "until": 5.0},
+        {"type": "custom", "name": "exploded-view", "at": 16.0, "until": 19.0},
+        {"type": "custom", "name": "hand-control", "at": 30.0, "until": 33.0}]}, words=words)
+    (out / "work" / "edl_timed.json").write_text(json.dumps(
+        [{"id": "S1", "start": 0.0, "end": 3.5}, {"id": "S2", "start": 3.5, "end": 40.0}]), encoding="utf-8")
+    assert "WARN wow effects: 3 in 40 s (cap 2)" in load_plan(out).warnings

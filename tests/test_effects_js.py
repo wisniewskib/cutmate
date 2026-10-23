@@ -362,3 +362,227 @@ def test_classic_explainers_keep_their_natural_pace():
     P = _classic(5.0, value=75, suffix="%", label="tokenów zużytych mniej", note="źródło: README")
     d = _run_effect("stat-card", P, [["fast", 1.0 + 0.45 + 0.05, ".sc-label", "kids"], ["late", t_late, ".sc-note", "settled"]])
     assert not all(d["fast"][0]) and d["late"] == [True]                        # label words start at at + 0.45
+
+
+def _node(js: str, *fmt) -> dict:
+    r = subprocess.run(["node", "-e", js % fmt], capture_output=True, text=True, encoding="utf-8")
+    assert r.returncode == 0, r.stderr[-3000:]
+    return json.loads(r.stdout.strip().splitlines()[-1])
+
+
+SCRAMBLE = """
+global.window = {};
+require(%s);
+const F = window.CutmateFX.pure;
+const CH = "!<>-_\\\\/[]{}=+*^?#ABCDEFGHJKLMNPQRSTUVWXYZ0123456789";
+const T = "GLOBALNIE";
+console.log(JSON.stringify({
+  a: F.scrambleAt(T, 0.3, 7, 1, CH), b: F.scrambleAt(T, 0.3, 7, 1, CH), seed2: F.scrambleAt(T, 0.3, 7, 2, CH),
+  full: F.scrambleAt(T, 1, 99, 1, CH), over: F.scrambleAt(T, 1.7, 3, 1, CH), half: F.scrambleAt(T, 0.5, 10, 1, CH),
+  f10: F.scrambleAt(T, 0.5, 10, 1, CH), f11: F.scrambleAt(T, 0.5, 11, 1, CH), zero: F.scrambleAt(T, 0, 4, 1, CH),
+  neg: F.scrambleAt(T, -1, 4, 1, CH), sp: F.scrambleAt("ZA DARMO  OK", 0.1, 5, 3, CH),
+  pl: F.scrambleAt("Zażółć", 0.5, 2, 1, CH), chars: CH,
+}));
+"""
+
+
+def test_scramble_is_pure():
+    """GSAP's ScrambleTextPlugin draws from Math.random; scrambleAt is a pure function of (text, p, frame, seed)."""
+    d = _node(SCRAMBLE, json.dumps(str(web_dir() / "effects.js")))
+    assert d["a"] == d["b"] and d["a"] != d["seed2"]                     # same args -> same string; the seed matters
+    assert d["full"] == "GLOBALNIE" and d["over"] == "GLOBALNIE"          # p >= 1: the text
+    assert d["half"][:5] == "GLOBA" and len(d["half"]) == 9               # round(0.5 * 9) = 5 characters final
+    assert d["f10"][5:] != d["f11"][5:] and d["f10"][:5] == d["f11"][:5]  # the unrevealed tail changes per frame
+    assert all(c in d["chars"] for c in d["half"][5:])
+    assert len(d["zero"]) == 9 and d["zero"] != "GLOBALNIE" and d["neg"] == d["zero"]
+    assert [i for i, c in enumerate(d["sp"]) if c == " "] == [2, 8, 9]   # spaces stay spaces
+    assert len(d["sp"]) == 12 and d["sp"][0] == "Z"                       # round(0.1 * 12) = 1 final
+    assert d["pl"][:3] == "Zaż" and len(d["pl"]) == 6                     # by character, not UTF-16 unit
+
+
+OPEN = """
+global.window = {};
+require(%s);
+const F = window.CutmateFX.pure;
+const S = [[0, 0], [1, 1], [2, 0]];
+const all = [];
+for (let t = -1; t <= 4; t += 0.01) all.push(F.openAmount(S, t));
+console.log(JSON.stringify({
+  a: F.openAmount(S, 0.9), b: F.openAmount(S, 1.15), c: F.openAmount(S, 1.5), d: F.openAmount(S, 2.3),
+  e: F.openAmount(S, 2.1), slow: F.openAmount(S, 1.15, 0.6), empty: F.openAmount([], 3), none: F.openAmount(null, 3),
+  blip: F.openAmount([[0, 0], [1, 1], [1.1, 0]], 1.2),
+  min: Math.min(...all), max: Math.max(...all),
+}));
+"""
+
+
+def test_open_amount():
+    d = _node(OPEN, json.dumps(str(web_dir() / "effects.js")))
+    assert d["a"] == 0 and d["b"] == pytest.approx(0.5) and d["c"] == 1 and d["d"] == 0
+    assert d["e"] == pytest.approx(0.6)                                   # falls over 0.25 s
+    assert d["slow"] == pytest.approx(0.25)                               # rise = 0.6 s
+    assert d["empty"] == 0 and d["none"] == 0
+    assert d["blip"] == 0                                                 # 1/3 open, then falls past 0: clamped
+    assert d["min"] >= 0 and d["max"] <= 1
+
+
+TOKEN = """
+global.window = {};
+require(%s);
+const root = { style: {} };
+const seen = [];
+let props = {};
+global.document = { documentElement: {} };
+global.getComputedStyle = (el) => { seen.push(el === root); return { getPropertyValue: (k) => props[k] || "" }; };
+const U = window.CutmateFX.make({ to() {} }, root, "c1", { dur: 1 });
+const out = {};
+props = { "--accent": "  #c2501f ", "--font-display": "'Press Start 2P', monospace" };
+out.accent = U.token("--accent", "#7dd3fc");
+out.bare = U.token("accent", "#7dd3fc");
+out.font = U.token("--font-display", "Inter");
+props = { "--accent": "   " };
+out.empty = U.token("--accent", "#7dd3fc");
+out.missing = U.token("--panel-bg", "#0b0b0f");
+out.onRoot = seen.every(Boolean);
+global.getComputedStyle = undefined;
+out.noDom = U.token("--accent", "#7dd3fc");
+console.log(JSON.stringify(out));
+"""
+
+
+def test_token_reads_theme_and_falls_back():
+    """Review Focus 3: canvas / WebGL effects take the theme's tokens (orange accent, pixel font) or the fallback when an
+    older theme lacks one (no --panel-bg) or there is no DOM."""
+    d = _node(TOKEN, json.dumps(str(web_dir() / "effects.js")))
+    assert d["accent"] == "#c2501f" and d["bare"] == "#c2501f" and d["font"] == "'Press Start 2P', monospace"
+    assert d["empty"] == "#7dd3fc" and d["missing"] == "#0b0b0f" and d["noDom"] == "#7dd3fc"
+    assert d["onRoot"] is True                                            # read on the effect's root (cascade)
+
+
+GSAP_JS = plugin_root() / "assets" / "vendor" / "gsap@3.14.2" / "dist" / "gsap.min.js"
+ANIME_JS = plugin_root() / "assets" / "vendor" / "animejs@4.5.0" / "dist" / "bundles" / "anime.umd.min.js"
+
+CLOCK_ORDER = """
+global.window = {};
+const G = require(%s);
+const gsap = G.gsap || G;
+require(%s);
+const tl = gsap.timeline({ paused: true });
+const U = window.CutmateFX.make(tl, {}, "c1", { dur: 4 });
+const state = { v: -1 }, seen = [];
+U.clock((t) => { state.v = Math.round(t * 1000); });           // the writer (e.g. an anime seek)
+U.clock(() => { seen.push(state.v); });                         // a reader (e.g. DOM writes from the animated objects)
+const out = [];
+for (const t of [1.0, 3.0, 2.0, 0.5, 3.5]) { seen.length = 0; tl.totalTime(t, false); out.push([Math.round(t * 1000), seen.slice()]); }
+console.log(JSON.stringify(out));
+"""
+
+
+def test_clocks_run_in_order_when_seeking_backwards():
+    """GSAP renders a timeline's children last-to-first on a backward seek: every U.clock callback hangs off one tween, so
+    a reader registered after a writer always sees this frame's state (a render worker scrubbing back)."""
+    r = _node(CLOCK_ORDER, json.dumps(str(GSAP_JS)), json.dumps(str(web_dir() / "effects.js")))
+    assert r == [[1000, [1000]], [3000, [3000]], [2000, [2000]], [500, [500]], [3500, [3500]]]
+
+
+ANIME = """
+let raf = 0;          // frames requested by anime.js or effects.js (GSAP's own ticker asks for one; HyperFrames owns it)
+global.requestAnimationFrame = () => { if (/anime\\.umd|effects\\.js/.test(new Error().stack)) raf++; return 1; };
+global.cancelAnimationFrame = () => {};
+global.NodeList = class {}; global.HTMLCollection = class {}; global.SVGElement = class {};
+global.window = { requestAnimationFrame, cancelAnimationFrame };
+global.document = { addEventListener() {}, removeEventListener() {}, hidden: false };
+const A = require(%s);
+const G = require(%s);
+const gsap = G.gsap || G;
+require(%s);
+const make = () => {
+  const objs = Array.from({ length: 50 }, () => ({ x: 0, y: 0, s: 1, r: 0 }));
+  const at = A.createTimeline({ autoplay: false });
+  at.add(objs, { x: [0, 100], y: [0, -50], s: [1, 0.2], ease: "outExpo", duration: 900,
+                 delay: A.stagger(30, { grid: [10, 5], from: "center" }) }, 0)
+    .add(objs, { r: 360, x: 300, ease: "outExpo", duration: 600, delay: A.stagger(12, { grid: [10, 5], from: "first" }) }, 1400)
+    .add(objs, { y: 400, ease: "inBack", duration: 500, delay: A.stagger(8) }, 2600);
+  return { objs, at };
+};
+// one effect = one paused GSAP timeline; U.anime seeks the anime timeline from it, a second clock copies the objects
+// out (as an effect writes them to the DOM / canvas)
+const effect = (cid, setup) => {
+  const tl = gsap.timeline({ paused: true });
+  const U = window.CutmateFX.make(tl, {}, cid, { dur: 4 });
+  const m = make(), shown = [];
+  const back = U.anime(setup ? setup(m.at) : m.at);
+  U.clock(() => { shown.length = 0; m.objs.forEach((o) => shown.push(Object.assign({}, o))); });
+  return { tl, shown, back, at: m.at };
+};
+const flat = (xs) => xs.map((o) => [o.x, o.y, o.s, o.r]);
+const maxd = (a, b) => { let d = 0; flat(a).forEach((o, i) => o.forEach((v, k) => { d = Math.max(d, Math.abs(v - flat(b)[i][k])); })); return d; };
+const res = { raf: 0 };
+const one = effect("c1");
+const seek = (e, t) => e.tl.totalTime(t, false);   // as the HyperFrames runtime seeks
+seek(one, 2.0);
+const direct = JSON.parse(JSON.stringify(one.shown));
+res.same = one.back === one.at;
+res.moved = direct[0].x > 0 && direct[0].x !== direct[49].x;
+const two = effect("c2");
+for (const t of [0.5, 3.0, 2.0]) seek(two, t);                   // forward, then a scrub back
+res.scrub = maxd(direct, two.shown);
+const three = effect("c3");
+for (const t of [3.9, 0.2, 2.0]) seek(three, t);
+res.scrub2 = maxd(direct, three.shown);
+res.hfAnime = (window.__hfAnime || []).length;
+// async setup (fonts first): a real timeline handed over as { timeline } (awaiting a paused timeline never ends)
+const four = effect("c4", (at) => Promise.resolve().then(() => ({ timeline: at })));
+window.__hf.buildReady.c4.then(() => {
+  seek(four, 3.0); seek(four, 2.0);
+  res.async = maxd(direct, four.shown);
+  res.raf = raf;
+  console.log(JSON.stringify(res));
+});
+"""
+
+
+def test_anime_seek_order_independent():
+    """anime.js 4.5 (autoplay: false) seeked by U.anime from a real paused GSAP timeline: a frame reached directly equals
+    the same frame reached after other seeks, forwards and backwards (a render worker starting mid-effect), and nothing
+    schedules a requestAnimationFrame."""
+    d = _node(ANIME, json.dumps(str(ANIME_JS)), json.dumps(str(GSAP_JS)), json.dumps(str(web_dir() / "effects.js")))
+    assert d["moved"] and d["same"]
+    assert d["scrub"] <= 1e-9 and d["scrub2"] <= 1e-9 and d["async"] <= 1e-9
+    assert d["raf"] == 0 and d["hfAnime"] == 0                    # never on window.__hfAnime (global-time seeking)
+
+
+ANIME_P = """
+global.window = {};
+require(%s);
+const updates = [];
+const tl = { to(target, vars) { if (vars && vars.onUpdate) updates.push([target, vars]); return tl; } };
+const seek = (t) => updates.forEach(([c, v]) => { c.t = t; v.onUpdate(); });
+const seeks = [], seeks2 = [];
+const at = { seek(ms) { seeks.push(ms); } };
+// a real anime timeline is thenable (then() waits for it to finish): wrapped as { timeline } it is never awaited
+const at2 = { seek(ms) { seeks2.push(ms); }, then() { throw new Error("awaited an anime timeline"); } };
+const U = window.CutmateFX.make(tl, {}, "c1", { dur: 3 });
+const p = Promise.resolve(at);
+const back = U.anime(p);
+const registered = !!(window.__hf && window.__hf.buildReady && window.__hf.buildReady.c1);
+const U2 = window.CutmateFX.make(tl, {}, "c2", { dur: 3 });
+U2.anime(Promise.resolve().then(() => ({ timeline: at2 })));
+seek(1.5);
+const before = seeks.length + seeks2.length;
+Promise.all([window.__hf.buildReady.c1, window.__hf.buildReady.c2]).then(() => {
+  const afterReady = seeks.slice(), afterReady2 = seeks2.slice();
+  seek(2.0);
+  console.log(JSON.stringify({ registered, before, afterReady, afterReady2, last: seeks[seeks.length - 1],
+                               last2: seeks2[seeks2.length - 1], clocks: updates.length, same: back === p }));
+});
+"""
+
+
+def test_anime_promise_waits_ready():
+    d = _node(ANIME_P, json.dumps(str(web_dir() / "effects.js")))
+    assert d["registered"] and d["same"] and d["clocks"] == 2
+    assert d["before"] == 0                                         # the clock is a no-op before the timeline exists
+    assert d["afterReady"] == [1500]                                # once it exists: seeked to the clock's current time
+    assert d["last"] == 2000
+    assert d["afterReady2"] == [1500] and d["last2"] == 2000        # { timeline } form: never awaited

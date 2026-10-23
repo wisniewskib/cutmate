@@ -45,6 +45,37 @@
              color: (o.colors || ["#ffffff"])[Math.floor(r() * (o.colors || [1]).length)] };
   }
 
+  const SCRAMBLE = "!<>-_\\/[]{}=+*^?#ABCDEFGHJKLMNPQRSTUVWXYZ0123456789";
+
+  // text decoding at progress p (0–1) on frame `frame`: the first round(p·len) characters are final, the others are
+  // drawn from `chars` by a seeded generator per (character, frame) — a pure function (GSAP's ScrambleTextPlugin uses
+  // Math.random, so two renders would differ). Whitespace stays whitespace. Characters, not UTF-16 units
+  function scrambleAt(text, p, frame, seed0, chars) {
+    const cs = Array.from(chars || SCRAMBLE), tx = Array.from(String(text));
+    const n = Math.round(Math.min(1, Math.max(0, Number(p) || 0)) * tx.length);
+    return tx.map((c, i) => (i < n || /\s/.test(c) ? c
+      : cs[Math.floor(seed((seed0 || 1) * 7919 + i * 104729 + (frame | 0))() * cs.length)])).join("");
+  }
+
+  // how open (0–1) at t from samples [[t, open], …]: a linear ramp toward the latest sample's state — up over `rise` s,
+  // down over `fall` s — replayed from the start using only the samples <= t (so any frame is computed alone)
+  function openAmount(series, t, rise, fall) {
+    rise = rise ?? 0.3; fall = fall ?? 0.25;
+    let v = 0, at = null, goal = 0;
+    const step = (to) => {
+      if (at === null) return;
+      const dt = to - at;
+      v = goal > v ? Math.min(goal, v + dt / Math.max(1e-6, rise)) : Math.max(goal, v - dt / Math.max(1e-6, fall));
+    };
+    for (const s of series || []) {
+      if (!(s[0] <= t)) break;
+      step(s[0]);
+      at = s[0]; goal = Math.min(1, Math.max(0, Number(s[1]) || 0));
+    }
+    step(t);
+    return Math.min(1, Math.max(0, v));
+  }
+
   function make(tl, root, cid, P) {
     const D = Math.max(0.001, P.dur || 1);
     const U = {};
@@ -86,10 +117,38 @@
       const cs = getComputedStyle(document.documentElement);
       return String(cs.getPropertyValue("--font-num") || "").trim() || String(cs.getPropertyValue("--font-display") || "").trim();
     };
+    // every U.clock callback runs from ONE tween, always in registration order: GSAP renders a timeline's children
+    // last-to-first when it seeks backwards, so separate tweens would let a reader (DOM writes) run before the writer
+    // (an anime seek) and show the previous frame's state — a render worker scrubbing back would differ
+    let clocks = null;
     U.clock = function (fn) {
-      const c = { t: 0 };
-      tl.to(c, { t: D, duration: D, ease: "none", onUpdate: () => fn(c.t) }, 0);
+      if (!clocks) {
+        clocks = [];
+        const c = { t: 0 };
+        tl.to(c, { t: D, duration: D, ease: "none", onUpdate: () => { for (const f of clocks) f(c.t); } }, 0);
+      }
+      clocks.push(fn);
       fn(0);
+    };
+    // the theme token `--name` as computed on the effect's root (so a theme / panel override applies), trimmed; the
+    // fallback when it is empty or there is no DOM. Canvas / WebGL colours and fonts come from here
+    U.token = function (name, fallback) {
+      const k = String(name).startsWith("--") ? String(name) : "--" + name;
+      try {
+        if (typeof getComputedStyle !== "function") return fallback;
+        const v = String(getComputedStyle(root).getPropertyValue(k) || "").trim();
+        return v || fallback;
+      } catch (e) { return fallback; }
+    };
+    // decodes `text` into el from `from` over `dur` s (scrambleAt with frame = floor(t·30)); final from from + dur on
+    U.scramble = function (el, text, o) {
+      o = o || {};
+      const from = o.from ?? P.at ?? 0, dur = o.dur ?? 0.6, sd = o.seed ?? 1, chars = o.chars || SCRAMBLE;
+      U.clock((t) => {
+        const p = dur > 0 ? Math.min(1, Math.max(0, (t - from) / dur)) : (t >= from ? 1 : 0);
+        const s = scrambleAt(text, p, Math.floor(t * 30 + 1e-6), sd, chars);
+        if (el.textContent !== s) el.textContent = s;
+      });
     };
     U.follow = function (el, track) {
       if (!track || !track.length) { tl.set(el, { autoAlpha: 0 }, 0); return; }
@@ -190,9 +249,57 @@
           return camera.position.clone().add(dir.multiplyScalar(d));
         };
         const render = () => (composer ? composer.render() : renderer.render(scene, camera));
-        return { THREE, scene, camera, renderer, composer, toWorld, render };
+        return { THREE, scene, camera, renderer, composer, toWorld, render, w, h };
       })();
       return U.ready(ready);
+    };
+    // world point (THREE.Vector3 or [x, y, z]) → [x, y] in region px (DOM labels over a WebGL object)
+    U.toScreen = function (three, v3) {
+      const { THREE, camera } = three;
+      const w = three.w || P.w, h = three.h || P.h;
+      camera.updateMatrixWorld(); camera.updateProjectionMatrix();
+      const v = (v3 && v3.isVector3 ? v3.clone() : new THREE.Vector3(v3[0], v3[1], v3[2])).project(camera);
+      return [(v.x + 1) / 2 * w, (1 - v.y) / 2 * h];
+    };
+    // pmndrs postprocessing on a U.three() scene (instead of three's own bloom): Bloom, GodRays (≤ 60 samples, half
+    // resolution), ChromaticAberration, Vignette merged into one EffectPass. alpha "luma": a last pass rebuilds alpha
+    // from brightness (the glow composites like light over the A-roll, as U.three does); "opaque": a full-frame scene.
+    // render() passes delta 0, so effect time never comes from the composer's wall clock. GlitchEffect is forbidden
+    U.post = function (three, o) {
+      o = o || {};
+      return U.ready((async () => {
+        const PP = await import("postprocessing");
+        const { THREE, renderer, scene, camera } = three;
+        if (o.alpha === "opaque") renderer.setClearColor(0x000000, 1);
+        const composer = new PP.EffectComposer(renderer, { frameBufferType: THREE.HalfFloatType });
+        composer.addPass(new PP.RenderPass(scene, camera));
+        const fx = {}, list = [];
+        if (o.bloom) {
+          fx.bloom = new PP.BloomEffect({ intensity: o.bloom.intensity ?? 1, luminanceThreshold: o.bloom.threshold ?? 0.6,
+                                          radius: o.bloom.radius ?? 0.6, mipmapBlur: true, resolutionScale: 0.5 });
+          list.push(fx.bloom);
+        }
+        if (o.godrays && o.godrays.source) {
+          const g = o.godrays;
+          fx.godrays = new PP.GodRaysEffect(camera, g.source, { density: g.density ?? 0.96, decay: g.decay ?? 0.92,
+            weight: g.weight ?? 0.4, samples: Math.min(60, g.samples ?? 60), resolutionScale: 0.5, blur: true });
+          list.push(fx.godrays);
+        }
+        if (o.chroma) {
+          const off = o.chroma.offset ?? 0.002;
+          fx.chroma = new PP.ChromaticAberrationEffect({ offset: Array.isArray(off) ? new THREE.Vector2(off[0], off[1])
+            : off && off.isVector2 ? off : new THREE.Vector2(off, off * 0.5), radialModulation: false });
+          list.push(fx.chroma);
+        }
+        if (o.vignette) list.push(new PP.VignetteEffect({ offset: 0.35, darkness: 0.55 }));
+        if (list.length) composer.addPass(new PP.EffectPass(camera, ...list));
+        if (o.alpha !== "opaque") {
+          composer.addPass(new PP.EffectPass(camera, new PP.Effect("CmLumaAlpha",
+            "void mainImage(const in vec4 i, const in vec2 uv, out vec4 o){ vec3 c=clamp(i.rgb,0.,1.); o=vec4(c, max(i.a, max(c.r,max(c.g,c.b)))); }")));
+        }
+        composer.setSize(three.w || P.w, three.h || P.h, false);
+        return { composer, effects: fx, render: () => composer.render(0) };
+      })());
     };
     U.glowOrb = function (three, o) {
       o = o || {};
@@ -244,11 +351,23 @@
       window.katex.render(latex, el, { throwOnError: false });
       return el.querySelectorAll(".mord, .mbin, .mrel, .mopen, .mclose, .mpunct");
     };
-    U.anime = function (timeline) { U.clock((t) => timeline.seek(t * 1000)); return timeline; };
+    // seeks an anime.js timeline (autoplay: false; never on window.__hfAnime) from the clock. A promise (async setup:
+    // fonts, measuring) goes to U.ready and must resolve to { timeline } — an anime timeline is itself thenable and
+    // awaiting a paused one never ends — or to a non-thenable object with seek(ms). Until then the clock does nothing
+    U.anime = function (x) {
+      let anim = null, last = 0;
+      const pick = (v) => (v && typeof v.seek === "function" ? v : v && v.timeline && typeof v.timeline.seek === "function" ? v.timeline : null);
+      anim = pick(x);
+      U.clock((t) => { last = t; if (anim) anim.seek(t * 1000); });
+      if (!anim && x && typeof x.then === "function") {
+        U.ready(Promise.resolve(x).then((v) => { anim = pick(v); if (anim) anim.seek(last * 1000); }));
+      }
+      return x;
+    };
     U.lottie = function (anim) { U.clock((t) => anim.goToAndStop(t * 1000, false)); return anim; };
     return U;
   }
 
-  window.CutmateFX = { make, pure: { seed, trackAt, particleState } };
+  window.CutmateFX = { make, pure: { seed, trackAt, particleState, scrambleAt, openAmount } };
   if (typeof module !== "undefined") module.exports = window.CutmateFX;
 })();

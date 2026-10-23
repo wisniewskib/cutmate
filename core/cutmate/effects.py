@@ -11,7 +11,10 @@ from .plan import NAME_RE
 
 FORBIDDEN = ("Date.now", "Math.random", "performance.now", "requestAnimationFrame", "setTimeout", "setInterval",
              "onUpdate", "setAnimationLoop", "anime.utils.random", "d3.transition", "AfterimagePass",
-             "THREE.Clock", "new Date", "crypto.getRandomValues", "gsap.ticker", ".play(")
+             "THREE.Clock", "new Date", "crypto.getRandomValues", "gsap.ticker", ".play(",
+             # callbacks fire only when playback crosses a point (a worker seeking straight to a frame skips them);
+             # GlitchEffect / ScrambleTextPlugin draw from Math.random inside the library
+             "onComplete", "onRepeat", "onRender", "onBegin", "onLoop", ".restart(", "GlitchEffect", "ScrambleTextPlugin")
 _SECTION = re.compile(r"<(style|markup|script)>(.*?)</\1>", re.S)
 VENDOR = {"gsap": "gsap@3.14.2", "three": "three@0.181.2", "postprocessing": "postprocessing@6.39.5",
           "animejs": "animejs@4.5.0", "lottie": "lottie@5.12.2", "katex": "katex@0.19.0", "roughjs": "roughjs@4.6.6",
@@ -53,6 +56,19 @@ def lint_effect(path: Path) -> None:
     for api in FORBIDDEN:
         if api in text:
             raise PlanError(f"{Path(path).name}: uses {api} — not allowed in effects (see SKILL.md, effects rules)")
+
+
+def effect_meta(path: Path) -> dict:
+    """The effect's entry (`name` = the file stem) in the index.json beside it: build needs such as "kind", "modes",
+    "tips", "aroll_fx", "webgl". {} when there is no index.json, it cannot be read or it has no entry for the effect."""
+    path = Path(path)
+    try:
+        entries = json.loads((path.parent / "index.json").read_text(encoding="utf-8"))
+    except (ValueError, OSError):
+        return {}
+    if not isinstance(entries, list):
+        return {}
+    return next((dict(e) for e in entries if isinstance(e, dict) and e.get("name") == path.stem), {})
 
 
 def vendor_root(folder: str) -> Path:

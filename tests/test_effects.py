@@ -283,3 +283,35 @@ def test_vendor_root_falls_back_to_home_then_errors(tmp_path, monkeypatch):
     assert E.vendor_root("gsap@3.14.2") == tmp_path / "home" / "vendor" / "gsap@3.14.2"
     (tmp_path / "bundled" / "gsap@3.14.2").mkdir(parents=True)
     assert E.vendor_root("gsap@3.14.2") == tmp_path / "bundled" / "gsap@3.14.2"
+
+
+def test_effect_meta(tmp_path):
+    fx = tmp_path / "custom" / "kinetic-word.html"
+    fx.parent.mkdir()
+    fx.write_text(GOOD, encoding="utf-8")
+    assert E.effect_meta(fx) == {}                                          # no index.json
+    index = fx.parent / "index.json"
+    entry = {"name": "kinetic-word", "kind": "wow", "modes": ["scene", "overlay"], "webgl": False,
+             "aroll_fx": {"dur": 0.6}, "params": {"text": "the word"}}
+    index.write_text(json.dumps([{"name": "other", "kind": "3d"}, "junk", entry], ensure_ascii=False), encoding="utf-8")
+    assert E.effect_meta(fx) == entry
+    assert E.effect_meta(fx.with_name("globe.html")) == {}                  # no entry for this stem
+    index.write_text("[{broken", encoding="utf-8")
+    assert E.effect_meta(fx) == {}
+    index.write_text(json.dumps({"name": "kinetic-word"}), encoding="utf-8")   # not a list
+    assert E.effect_meta(fx) == {}
+    index.write_bytes(b"\xff\xfe\x00junk")                                   # not UTF-8
+    assert E.effect_meta(fx) == {}
+    stock = plugin_root() / "themes" / "clean" / "components" / "custom" / "energy-ball.html"
+    assert E.effect_meta(stock)["name"] == "energy-ball" and "kind" in E.effect_meta(stock)
+
+
+@pytest.mark.parametrize("api", ["onComplete", "onRepeat", "onRender", "onBegin", "onLoop", ".restart(", "GlitchEffect",
+                                 "ScrambleTextPlugin"])
+def test_new_forbidden_apis(tmp_path, api):
+    assert api in E.FORBIDDEN
+    p = tmp_path / "wow.html"
+    p.write_text(GOOD.replace("U.clock((t) => {});", f"x.{api.strip('.(')}({{}});" if api == ".restart(" else f"// {api}\nU.clock(() => {{}});"),
+                 encoding="utf-8")
+    with pytest.raises(PlanError, match=re.escape(f"wow.html: uses {api}")):
+        E.lint_effect(p)
