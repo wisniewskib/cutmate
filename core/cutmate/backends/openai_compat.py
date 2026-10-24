@@ -18,7 +18,7 @@ class OpenAICompatBackend:
         key = os.environ.get(self.key_env)
         if not key:
             raise BackendError(f"{self.key_env} is not set. Set it in your shell profile and restart Claude Code "
-                               f"(README → Transcription), or run /cutmate:setup to pick another backend.")
+                               f"(docs/installation.md → API keys), or run /cutmate:setup to pick another backend.")
         up = encode_for_upload(wav, self.limit_bytes, self.name)
         data = [("model", self.model), ("language", language), ("response_format", "verbose_json"),
                 ("timestamp_granularities[]", "word"), ("temperature", "0")]
