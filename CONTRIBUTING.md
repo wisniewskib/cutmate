@@ -1,10 +1,10 @@
-# Contributing to cutmate
+# Współtworzenie cutmate
 
-Thanks for helping. This guide gets you from a fresh clone to a passing test run, and explains the rules that keep cutmate working on Windows, macOS and Linux.
+Dzięki, że pomagasz. Ten przewodnik prowadzi cię od świeżego klona do przechodzących testów i wyjaśnia zasady, dzięki którym cutmate działa na Windowsie, macOS i Linuksie.
 
-## Dev setup
+## Środowisko deweloperskie
 
-Prerequisites: Python 3.10+, Node.js 22+ (with `npx`), ffmpeg, git. Google Chrome is optional (the `shot` command).
+Wymagania: Python 3.10+, Node.js 22+ (z `npx`), ffmpeg, git. Google Chrome jest opcjonalny (polecenie `shot`).
 
 **Linux / macOS**
 
@@ -13,8 +13,8 @@ git clone https://github.com/wisniewskib/cutmate.git
 cd cutmate
 python3 -m venv .venv
 .venv/bin/python -m pip install -e ".[dev]"
-.venv/bin/python -m pip install -e ".[dev,align,track,faster]"   # optional: the full set, for -m slow / hf tests
-.venv/bin/cutmate vendor                                         # GSAP, needed by build tests
+.venv/bin/python -m pip install -e ".[dev,align,track,faster]"   # opcjonalnie: pełny zestaw, do testów -m slow / hf
+.venv/bin/cutmate vendor                                         # GSAP, potrzebny testom builda
 ```
 
 **Windows (PowerShell)**
@@ -27,7 +27,7 @@ py -3 -m venv .venv
 .venv\Scripts\cutmate.exe vendor
 ```
 
-To try your working copy inside Claude Code, without touching your real cutmate home:
+Żeby wypróbować swoją kopię roboczą w Claude Code bez ruszania prawdziwego katalogu domowego cutmate:
 
 ```bash
 CUTMATE_HOME=/tmp/cm-dev claude --plugin-dir .
@@ -37,57 +37,57 @@ CUTMATE_HOME=/tmp/cm-dev claude --plugin-dir .
 $env:CUTMATE_HOME = "$env:TEMP\cm-dev"; claude --plugin-dir .
 ```
 
-Then run `/cutmate:setup` in that session.
+Potem uruchom w tej sesji `/cutmate:setup`.
 
-## Tests
+## Testy
 
-The suite lives in `tests/`. By default `pytest` skips the heavy markers (`addopts = -m 'not slow and not hf and not net'` in `pyproject.toml`).
+Testy są w `tests/`. Domyślnie `pytest` pomija ciężkie markery (`addopts = -m 'not slow and not hf and not net'` w `pyproject.toml`).
 
-| Command | What runs | Needs |
+| Polecenie | Co się uruchamia | Wymaga |
 |---|---|---|
-| `.venv/bin/python -m pytest` | The fast suite (hundreds of tests; a few minutes) | `dev` extra, ffmpeg |
-| `.venv/bin/python -m pytest -m hf` | Tests that build and render with `npx hyperframes` (themes, components, WOW effects, render budgets) | Node.js 22+, network on first run, Chrome downloaded by HyperFrames |
-| `.venv/bin/python -m pytest -m net` | Tests that download fonts from Google Fonts | Network |
-| `.venv/bin/python -m pytest -m slow` | Tests that need downloaded models or recorded samples | `align` / `track` / `faster` extras, models |
-| `.venv/bin/python -m pytest tests/test_plan.py -k density` | One file / one test | |
+| `.venv/bin/python -m pytest` | Szybki zestaw (setki testów; kilka minut) | Dodatek `dev`, ffmpeg |
+| `.venv/bin/python -m pytest -m hf` | Testy, które budują i renderują przez `npx hyperframes` (motywy, komponenty, efekty WOW, budżety renderu) | Node.js 22+, sieć przy pierwszym uruchomieniu, Chrome pobrany przez HyperFrames |
+| `.venv/bin/python -m pytest -m net` | Testy, które pobierają fonty z Google Fonts | Sieć |
+| `.venv/bin/python -m pytest -m slow` | Testy, które potrzebują pobranych modeli albo nagranych próbek | Dodatki `align` / `track` / `faster`, modele |
+| `.venv/bin/python -m pytest tests/test_plan.py -k density` | Jeden plik / jeden test | |
 
-On Windows use `.venv\Scripts\python.exe -m pytest …`.
+Na Windowsie użyj `.venv\Scripts\python.exe -m pytest …`.
 
-Always run the fast suite before a PR. Run `-m hf` when you touch `build.py`, theme components, effects, `web/*.js` or anything that changes rendered output. Some builds are pinned by **byte-identical golden** outputs, so an intended visual change needs its golden updated in the same PR, with a note explaining why.
+Przed każdym PR uruchom szybki zestaw. Uruchom `-m hf`, gdy ruszasz `build.py`, komponenty motywów, efekty, `web/*.js` albo cokolwiek, co zmienia renderowany wynik. Niektóre buildy są przypięte do **identycznych bajt w bajt „złotych”** wyników, więc zamierzona zmiana wizualna wymaga aktualizacji złotego pliku w tym samym PR, z notką wyjaśniającą dlaczego.
 
-Write the failing test first, then the fix.
+Najpierw napisz test, który nie przechodzi, a potem poprawkę.
 
-## Conventions
+## Konwencje
 
-- **One concern per change.** Fixes stay small. Commit messages are short and imperative, and use the existing prefixes (`feat:`, `fix:`, `docs:`, `test:`).
-- **Errors are one line with the fix.** Raise `CutmateError` (or a subclass) with the cause and the command that fixes it. The CLI prints `cutmate: …` and exits 2. Never show a stack trace for an expected failure.
-- **Never handle secrets.** API keys come from environment variables only. Never echo user input that might be a key (see `config.set_values`).
-- **Determinism.** Anything that renders must be a pure function of time: one paused timeline or `U.clock`, randomness only from `U.seed`. Add new forbidden tokens to the lint in `effects.py` with a test.
-- **Offline renders.** A new JS library goes through `tools/vendor_libs.py` with a pinned version, sha256 hashes and its licence in `assets/vendor/LICENSES/`. If its licence does not allow redistribution, mark it `"redistribute": false` so `cutmate vendor` fetches it instead.
-- **Licences.** Fonts must be OFL (Google Fonts) and sound effects CC0 or similar, with a licence file next to them. Never commit a recording of a real person.
-- **Skills are the product.** If you change CLI output, flags or file names, update every `skills/*/SKILL.md` that mentions them and the docs in `docs/`. Skill commands use `"$CM"` (the venv CLI) and must run in Claude Code's Git Bash on Windows.
-- **Docs ship with the change.** A new command, flag, config key or effect param needs its entry in `docs/cli.md`, `docs/configuration.md` or `docs/effects.md`, and in `index.json` for effects.
+- **Jedna sprawa na zmianę.** Poprawki są małe. Komunikaty commitów są krótkie, w trybie rozkazującym i używają istniejących przedrostków (`feat:`, `fix:`, `docs:`, `test:`).
+- **Błąd to jedna linia z rozwiązaniem.** Rzucaj `CutmateError` (albo podklasę) z przyczyną i poleceniem, które to naprawia. CLI wypisuje `cutmate: …` i kończy się kodem 2. Nigdy nie pokazuj stack trace'a przy spodziewanym błędzie.
+- **Nigdy nie dotykaj sekretów.** Klucze API pochodzą wyłącznie ze zmiennych środowiskowych. Nigdy nie wyświetlaj danych od użytkownika, które mogą być kluczem (zobacz `config.set_values`).
+- **Determinizm.** Wszystko, co się renderuje, musi być czystą funkcją czasu: jedna zatrzymana oś czasu albo `U.clock`, losowość wyłącznie z `U.seed`. Nowe zakazane elementy dodawaj do lintu w `effects.py` razem z testem.
+- **Rendery offline.** Nowa biblioteka JS przechodzi przez `tools/vendor_libs.py` z przypiętą wersją, sumami sha256 i licencją w `assets/vendor/LICENSES/`. Jeśli jej licencja nie pozwala na rozpowszechnianie, oznacz ją `"redistribute": false`, żeby zamiast tego pobierał ją `cutmate vendor`.
+- **Licencje.** Fonty muszą być na OFL (Google Fonts), a efekty dźwiękowe na CC0 albo podobnej licencji, z plikiem licencji obok. Nigdy nie commituj nagrania prawdziwej osoby.
+- **Skille to produkt.** Jeśli zmieniasz wyjście CLI, flagi albo nazwy plików, zaktualizuj każdy `skills/*/SKILL.md`, który o nich wspomina, i dokumentację w `docs/`. Polecenia w skillach używają `"$CM"` (CLI z venv) i muszą działać w Git Bash z Claude Code na Windowsie.
+- **Dokumentacja idzie razem ze zmianą.** Nowe polecenie, flaga, klucz konfiguracji albo parametr efektu potrzebuje wpisu w `docs/cli.md`, `docs/configuration.md` albo `docs/effects.md`, a w przypadku efektów także w `index.json`.
 
-## Windows rules
+## Zasady dla Windowsa
 
-Most cutmate users are on Windows, so every change must work there as well as on Linux and macOS:
+Większość użytkowników cutmate jest na Windowsie, więc każda zmiana musi działać tam tak samo jak na Linuksie i macOS:
 
-- **`pathlib` only.** No `/`-joined path strings and no hard-coded `/tmp`. Use `tempfile` or the cutmate home.
-- **`encoding="utf-8"`** on every `open`, `read_text` and `write_text`. The Windows default (cp1250 / cp1252) breaks Polish text.
-- **No symlinks.** Copy instead.
-- **Subprocesses:** list arguments, never `shell=True`, no bash-only commands from Python. Resolve executables with `shutil.which` (so `npx.cmd` and `ffmpeg.exe` are found).
-- **ASCII-safe file names** for anything cutmate writes.
-- **ffmpeg filters:** avoid `drawtext` with font paths, because Windows drive letters break the filter syntax. Draw text with Pillow, as `preview.py` does.
-- **Skill text:** commands must work in Claude Code's Git Bash on Windows: quote every path (spaces in user folders), use the `CM=…` line that also finds `venv/Scripts/cutmate.exe`, and give PowerShell variants (`setx`, `setup.ps1`) where a user runs something in their own terminal.
-- **Install scripts:** keep `setup.sh` / `setup.ps1` and `detect.sh` / `detect.ps1` in step with each other. `setup.ps1` must stay compatible with Windows PowerShell 5.1.
+- **Tylko `pathlib`.** Żadnych ścieżek sklejanych przez `/` i żadnego zakodowanego na sztywno `/tmp`. Używaj `tempfile` albo katalogu domowego cutmate.
+- **`encoding="utf-8"`** przy każdym `open`, `read_text` i `write_text`. Domyślne kodowanie Windowsa (cp1250 / cp1252) psuje polski tekst.
+- **Żadnych dowiązań symbolicznych.** Zamiast tego kopiuj.
+- **Podprocesy:** argumenty jako lista, nigdy `shell=True`, żadnych poleceń tylko dla basha wywoływanych z Pythona. Programy znajduj przez `shutil.which` (żeby znaleźć `npx.cmd` i `ffmpeg.exe`).
+- **Nazwy plików bezpieczne dla ASCII** dla wszystkiego, co zapisuje cutmate.
+- **Filtry ffmpeg:** unikaj `drawtext` ze ścieżkami do fontów, bo litery dysków w Windowsie psują składnię filtra. Rysuj tekst przez Pillow, tak jak robi to `preview.py`.
+- **Treść skilli:** polecenia muszą działać w Git Bash z Claude Code na Windowsie: bierz w cudzysłów każdą ścieżkę (spacje w folderach użytkownika), używaj linii `CM=…`, która znajduje też `venv/Scripts/cutmate.exe`, i podawaj warianty dla PowerShella (`setx`, `setup.ps1`) tam, gdzie użytkownik coś uruchamia we własnym terminalu.
+- **Skrypty instalacyjne:** trzymaj `setup.sh` / `setup.ps1` i `detect.sh` / `detect.ps1` w zgodzie ze sobą. `setup.ps1` musi pozostać zgodny z Windows PowerShell 5.1.
 
-If something is Linux-only, say so in the PR. Before a release, the setup and an edit are run from scratch on a real Windows machine.
+Jeśli coś działa tylko na Linuksie, napisz to w PR. Przed wydaniem setup i montaż są uruchamiane od zera na prawdziwym komputerze z Windowsem.
 
-## Pull requests
+## Pull requesty
 
-1. Branch from `main`.
-2. Make the change, with tests and docs.
-3. Run the fast suite (and `-m hf` if rendering is affected).
-4. Open the PR with what changed, why, how you tested it, and on which OS.
+1. Utwórz gałąź od `main`.
+2. Wprowadź zmianę, z testami i dokumentacją.
+3. Uruchom szybki zestaw testów (i `-m hf`, jeśli zmiana dotyka renderowania).
+4. Otwórz PR z opisem tego, co się zmieniło, dlaczego, jak to przetestowałeś i na jakim systemie.
 
-By contributing, you agree that your contribution is licensed under the [MIT License](LICENSE).
+Wnosząc wkład, zgadzasz się, że jest on objęty [licencją MIT](LICENSE).

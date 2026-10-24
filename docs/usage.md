@@ -1,158 +1,158 @@
-# Usage: editing a video
+# Użycie: montaż filmu
 
-This guide takes you from a folder of raw takes to a finished video, and shows where you step in along the way.
+Ten przewodnik prowadzi cię od folderu surowych nagrań do gotowego filmu i pokazuje, w których momentach wkraczasz ty.
 
-## Before you start
+## Zanim zaczniesz
 
-- `/cutmate:setup` has finished (see [installation.md](installation.md)).
-- Put **all takes of one video in one folder**: phone clips (`.mov`, `.mp4`, …) or camera files, in any order. Retakes, false starts and talking to the camera between takes are fine. Removing them is cutmate's job.
-- Optional: put b-roll (screenshots, images, logos, clips) in `<folder>/broll/`.
+- `/cutmate:setup` jest zakończony (zobacz [installation.md](installation.md)).
+- Wrzuć **wszystkie ujęcia jednego filmu do jednego folderu**: klipy z telefonu (`.mov`, `.mp4`, …) albo pliki z aparatu, w dowolnej kolejności. Powtórki, falstarty i gadanie do kamery między ujęciami są w porządku. Wycięcie ich to zadanie cutmate.
+- Opcjonalnie: wrzuć b-roll (zrzuty ekranu, obrazy, logotypy, klipy) do `<folder>/broll/`.
 
-cutmate **never modifies your source clips**. Everything goes to `<folder>/out/`.
+cutmate **nigdy nie zmienia twoich plików źródłowych**. Wszystko trafia do `<folder>/out/`.
 
-## Start an edit
+## Rozpoczęcie montażu
 
 ```text
 /cutmate:edit ~/Videos/caveman-short
 ```
 
-You can add context in the same message, for example names that Whisper might misspell, a theme, or requests:
+W tej samej wiadomości możesz dodać kontekst, na przykład nazwy, które Whisper mógłby przekręcić, motyw albo prośby:
 
 ```text
-/cutmate:edit ~/Videos/caveman-short — product names: Claude, Caveman, GitHub. Use the neon-pill theme. Add explainers.
+/cutmate:edit ~/Videos/caveman-short — nazwy produktów: Claude, Caveman, GitHub. Użyj motywu neon-pill. Dodaj explainery.
 ```
 
-The format comes from the clips: all portrait means a **9:16 short**, all landscape means a **16:9 long-form** video, and a mix makes Claude ask you once which one to make.
+Format wynika z klipów: same pionowe oznaczają **short 9:16**, same poziome **długi film 16:9**, a przy mieszance Claude raz zapyta, który format zrobić.
 
-## What happens, step by step
+## Co się dzieje, krok po kroku
 
-| Step | What Claude does | Written to `out/` |
+| Krok | Co robi Claude | Co trafia do `out/` |
 |---|---|---|
-| 1. Transcribe | Transcribes every clip word by word, prompted with your proper names. Flags `SUSPECT long word` windows that hide a stumble. | `work/<clip>/transcript.json`, `silences.json`, `<stem>.wav` |
-| 2. Look | Makes contact sheets of frames and **reads them**: looking away, reading notes, framing jumps, pointing | `sheets/*.png` |
-| 2b. Outline (16:9) | Chapters with titles, clips and time ranges | `outline.md` |
-| 3. Pick takes | Re-transcribes suspicious windows (`probe`), scans loudness (`rms`), compares every take of each repeated line, and writes down a reason for each choice | `takes.md` |
-| 4. Fact-check | Checks every number, price, date, version and "first / only / free" claim with a web search and the source page | `factcheck.md` |
-| 5. Cut | Cuts on silence boundaries, snaps cuts to the frame grid, levels each segment, adds short audio fades | `edl.json`, `aroll.mp4` |
-| 6. Align | Word-level timings for captions (wav2vec2 forced alignment) | `work/aligned_words.json` |
-| 7. Track | Face, hand and pointing positions over time, when an effect needs them | `work/tracks.json` |
-| 8. Plan | Captions, graphics, explainers, effects, the panel (split-panel themes), music | `plan.json` |
-| 9. Checkpoint | **"zrozumiałem tak"**: the list of what Claude will do (see below) | `requests.md` |
-| 9b. Preview (16:9) | A fast 480p preview of the cut with chapter plates, for your OK | `preview.mp4`, `chapters.txt` |
-| 10. Build | Turns the plan into a HyperFrames project, then snapshots and reads frames | `composition/`, `snapshots/` |
-| 11. Render | Check, render, then finalize to −14 LUFS with a spec check | `final.mp4`, `check_*.png` |
-| 12. QA | Re-transcribes the cut to catch missed repeats; checks music and SFX levels against the voice | Report in the chat |
-| 13. Thumbnail | A frame with a strong expression plus a title and a hook | `thumbnail.png`, `thumbnail.jpg` |
-| 14. Notes | The final structure, every graphic and why, music, the commands used | `EDIT_NOTES.md` |
+| 1. Transkrypcja | Transkrybuje każdy klip słowo po słowie, podpowiadając modelowi twoje nazwy własne. Oznacza okna `SUSPECT long word`, w których kryje się zająknięcie. | `work/<clip>/transcript.json`, `silences.json`, `<stem>.wav` |
+| 2. Oglądanie | Robi arkusze klatek i **czyta je**: odwracanie wzroku, czytanie z kartki, skoki kadru, wskazywanie palcem | `sheets/*.png` |
+| 2b. Konspekt (16:9) | Rozdziały z tytułami, klipami i zakresami czasu | `outline.md` |
+| 3. Wybór ujęć | Ponownie transkrybuje podejrzane okna (`probe`), skanuje głośność (`rms`), porównuje każde ujęcie każdej powtarzanej kwestii i zapisuje uzasadnienie każdego wyboru | `takes.md` |
+| 4. Fact-check | Sprawdza każdą liczbę, cenę, datę, wersję i każde twierdzenie typu „pierwszy / jedyny / darmowy” przez wyszukiwanie w sieci i stronę źródłową | `factcheck.md` |
+| 5. Cięcie | Tnie na granicach ciszy, dociąga cięcia do siatki klatek, wyrównuje głośność każdego fragmentu i dodaje krótkie przejścia audio | `edl.json`, `aroll.mp4` |
+| 6. Wyrównanie | Czasy słów dla napisów (wymuszone wyrównanie wav2vec2) | `work/aligned_words.json` |
+| 7. Śledzenie | Pozycje twarzy, dłoni i wskazywania w czasie, gdy efekt ich potrzebuje | `work/tracks.json` |
+| 8. Plan | Napisy, grafiki, explainery, efekty, panel (motywy split-panel), muzyka | `plan.json` |
+| 9. Punkt kontrolny | **„zrozumiałem tak”**: lista tego, co Claude zrobi (zobacz niżej) | `requests.md` |
+| 9b. Podgląd (16:9) | Szybki podgląd cięcia w 480p z planszami rozdziałów, do twojego zatwierdzenia | `preview.mp4`, `chapters.txt` |
+| 10. Build | Zamienia plan w projekt HyperFrames, potem robi i czyta zrzuty klatek | `composition/`, `snapshots/` |
+| 11. Render | Sprawdzenie, render, a potem finalizacja do −14 LUFS z kontrolą specyfikacji | `final.mp4`, `check_*.png` |
+| 12. QA | Ponownie transkrybuje gotowe cięcie, żeby wyłapać przeoczone powtórki; sprawdza poziom muzyki i efektów dźwiękowych względem głosu | Raport na czacie |
+| 13. Miniatura | Klatka z wyrazistą miną plus tytuł i hak | `thumbnail.png`, `thumbnail.jpg` |
+| 14. Notatki | Ostateczna struktura, każda grafika i powód jej użycia, muzyka, użyte polecenia | `EDIT_NOTES.md` |
 
-Steps 4 (fact-check), 12 (QA) and 13 (thumbnail) are optional. Turn them on or off with `steps.factcheck`, `steps.qa` and `steps.thumbnail` (see [configuration.md](configuration.md)).
+Kroki 4 (fact-check), 12 (QA) i 13 (miniatura) są opcjonalne. Włączasz je i wyłączasz kluczami `steps.factcheck`, `steps.qa` i `steps.thumbnail` (zobacz [configuration.md](configuration.md)).
 
-**Resuming:** if you run `/cutmate:edit` again on the same folder, Claude continues from the first missing file in `out/`.
+**Wznawianie:** jeśli uruchomisz `/cutmate:edit` ponownie na tym samym folderze, Claude kontynuuje od pierwszego brakującego pliku w `out/`.
 
-### When Claude stops and asks
+### Kiedy Claude się zatrzymuje i pyta
 
-Claude pauses in only a few places:
+Claude robi pauzę tylko w kilku miejscach:
 
-1. **A claim fails the fact-check** (❌ or ⚠️). You choose: use another take that says it right, cut the line, re-record it, or keep it with an on-screen correction.
-2. **Mixed formats**: which format to make.
-3. **The "zrozumiałem tak" checkpoint**: when you made any requests.
-4. **The 16:9 preview**: always for long-form, before the slow full render (a 15-minute video takes about 45–60 minutes to render).
+1. **Twierdzenie nie przechodzi fact-checku** (❌ albo ⚠️). Wybierasz: użyć innego ujęcia, w którym mówisz to poprawnie, wyciąć kwestię, nagrać ją ponownie albo zostawić z korektą na ekranie.
+2. **Mieszane formaty**: który format zrobić.
+3. **Punkt kontrolny „zrozumiałem tak”**: gdy miałeś jakiekolwiek prośby.
+4. **Podgląd 16:9**: zawsze przy długich filmach, przed powolnym pełnym renderem (15-minutowy film renderuje się około 45–60 minut).
 
-## Requests: in chat or spoken in the recording
+## Prośby: na czacie albo powiedziane w nagraniu
 
-You can ask for things in two ways:
+O rzeczy możesz prosić na dwa sposoby:
 
-- **In chat:** "put a space background behind me at 0:41", "add explainers", "a counter on the 75%".
-- **Out loud, while recording:** director notes addressed to the editor, such as "here you put a stat card", "add a globe here", "move me somewhere else". cutmate recognises these lines in the transcript, turns them into requests and **cuts them out of the video**, unless they are also content.
+- **Na czacie:** „daj kosmiczne tło za mną w 0:41”, „dodaj explainery”, „licznik na tych 75%”.
+- **Na głos, podczas nagrywania:** uwagi reżyserskie skierowane do montażysty, takie jak „tu daj kartę z liczbą”, „tu dodaj globus”, „przesuń mnie gdzie indziej”. cutmate rozpoznaje te kwestie w transkrypcji, zamienia je w prośby i **wycina je z filmu**, chyba że są też częścią treści.
 
-Claude collects every request into `out/requests.md`, one line each:
+Claude zbiera każdą prośbę w `out/requests.md`, po jednej w linii:
 
 ```text
 - [<source>] <what> → <target> [@ <anchor>]
 ```
 
-| Part | Values |
+| Część | Wartości |
 |---|---|
-| source | `[czat]` (chat), `[nagranie <clip> <time>]` (spoken in a recording), `[uwagi <mm:ss>]` (your feedback after a render), `[niespodzianka]` (a surprise Claude added) |
-| target | A component (`counter`, `split`, `stamp` …), `custom:<name>`, `explainers`, `cut` or `skip` |
-| anchor | A segment (`S5`), a word in a segment (`S7:Rasengan`) or a time in the cut video (`41.0` or `0:41`; matches within ±1 s) |
+| source (źródło) | `[czat]`, `[nagranie <clip> <time>]` (powiedziane w nagraniu), `[uwagi <mm:ss>]` (twoje uwagi po renderze), `[niespodzianka]` (niespodzianka dodana przez Claude'a) |
+| target (cel) | Komponent (`counter`, `split`, `stamp` …), `custom:<name>`, `explainers`, `cut` albo `skip` |
+| anchor (kotwica) | Fragment (`S5`), słowo we fragmencie (`S7:Rasengan`) albo czas w gotowym filmie (`41.0` lub `0:41`; dopasowanie w zakresie ±1 s) |
 
-Example:
+Przykład:
 
 ```text
-- [czat] space background behind me → bg @ 0:41
-- [nagranie IMG_6050.MOV 12.3] globe with the countries → custom:globe @ S4:świecie
-- [niespodzianka] gem on "meet" → custom:burst-out @ S2:poznajcie
+- [czat] kosmiczne tło za mną → bg @ 0:41
+- [nagranie IMG_6050.MOV 12.3] globus z krajami → custom:globe @ S4:świecie
+- [niespodzianka] klejnot na „poznajcie” → custom:burst-out @ S2:poznajcie
 ```
 
-Before the checkpoint, Claude runs `cutmate requests <folder>/out`. It matches each line against `plan.json` and prints `OK`, `MISSING`, `BAD` or `NOTE` per request (surprises get a `SURPRISE` prefix), followed by a summary such as `requests: 5 ok, 0 missing, 0 bad`. Claude fixes every `MISSING` and `BAD` before it shows you anything.
+Przed punktem kontrolnym Claude uruchamia `cutmate requests <folder>/out`. Polecenie dopasowuje każdą linię do `plan.json` i dla każdej prośby wypisuje `OK`, `MISSING`, `BAD` albo `NOTE` (niespodzianki dostają przedrostek `SURPRISE`), a na końcu podsumowanie w stylu `requests: 5 ok, 0 missing, 0 bad`. Claude poprawia każde `MISSING` i `BAD`, zanim cokolwiek ci pokaże.
 
-### "Zaskocz mnie" (surprises)
+### „Zaskocz mnie” (niespodzianki)
 
-When you ask for effects or explainers, Claude may add 1–3 surprises of its own: an effect on a gesture, a WOW effect on the key moment, or a stamp on the punchline. They are logged as `[niespodzianka]` and flagged in the checkpoint list, so you can strike them. Say "bez niespodzianek" (no surprises), or simply "no surprises", to turn them off. A plain cut with no requests never gets surprises.
+Gdy prosisz o efekty albo explainery, Claude może dorzucić od siebie 1–3 niespodzianki: efekt na geście, efekt WOW w kluczowym momencie albo stempel na puencie. Są zapisywane jako `[niespodzianka]` i oznaczone na liście w punkcie kontrolnym, więc możesz je skreślić. Powiedz „bez niespodzianek”, żeby je wyłączyć. Zwykłe cięcie bez żadnych próśb nigdy nie dostaje niespodzianek.
 
-## The "zrozumiałem tak" checkpoint
+## Punkt kontrolny „zrozumiałem tak”
 
-"Zrozumiałem tak" means "here's what I understood". Right before the build, Claude shows you a list like this:
+Tuż przed buildem Claude pokazuje ci listę w takim stylu:
 
 ```text
 zrozumiałem tak:
-- [czat] space background → bg @ 0:41                     OK
-- [nagranie IMG_6050.MOV 12.3] globe → custom:globe @ S4   OK
-- [niespodzianka] burst on the open palm @ 18.2            SURPRISE OK
+- [czat] kosmiczne tło → bg @ 0:41                         OK
+- [nagranie IMG_6050.MOV 12.3] globus → custom:globe @ S4   OK
+- [niespodzianka] wybuch na otwartej dłoni @ 18.2           SURPRISE OK
 - [wow] kinetic-word → "+300%" @ S6:wystartowało
 ```
 
-Reply OK, or strike or change lines ("drop the burst", "move the globe to the next sentence"). Claude maps your changes, runs `cutmate requests` again, and only then builds and renders. With a split-panel theme, the list also shows the panel timeline, one line per item (for example `0.00–1.40 stat-card 44%`).
+Odpowiedz OK albo skreśl lub zmień linie („wyrzuć wybuch”, „przesuń globus do następnego zdania”). Claude nanosi twoje zmiany, ponownie uruchamia `cutmate requests` i dopiero wtedy robi build i render. Przy motywie split-panel lista pokazuje też oś czasu panelu, po jednej linii na element (na przykład `0.00–1.40 stat-card 44%`).
 
-If you made no requests, there is no pause: the same information goes into `EDIT_NOTES.md`.
+Jeśli nie miałeś żadnych próśb, nie ma pauzy: te same informacje trafiają do `EDIT_NOTES.md`.
 
-## After the render: feedback
+## Po renderze: uwagi
 
-Watch `final.mp4` and reply with timestamps:
+Obejrzyj `final.mp4` i odpowiedz, podając znaczniki czasu:
 
 ```text
-1:12 the chip covers my mouth; 2:03 cut the "um"; 2:40 make the globe red
+1:12 etykieta zasłania mi usta; 2:03 wytnij to „yyy”; 2:40 zrób globus na czerwono
 ```
 
-Each note is logged as `[uwagi <mm:ss>]` in `requests.md`. All changes are batched into one rebuild and one render. When a fix touches the cut (the EDL), graphics move with their words automatically.
+Każda uwaga trafia do `requests.md` jako `[uwagi <mm:ss>]`. Wszystkie zmiany są zbierane w jeden ponowny build i jeden render. Gdy poprawka dotyka cięcia (EDL), grafiki automatycznie przesuwają się razem ze swoimi słowami.
 
-## Saving an effect for later
+## Zapisywanie efektu na później
 
-When Claude wrote a new effect for this video (in `out/custom/<name>.html`) and you accepted it, Claude asks once whether to save it into your theme:
+Gdy Claude napisał dla tego filmu nowy efekt (w `out/custom/<name>.html`), a ty go zaakceptowałeś, Claude raz zapyta, czy zapisać go w twoim motywie:
 
 ```bash
-cutmate save-effect ~/Videos/caveman-short/out space-bg --description "starfield behind the speaker"
+cutmate save-effect ~/Videos/caveman-short/out space-bg --description "gwiazdy za mówiącym"
 ```
 
-From then on, every video with that theme can use it. See [effects.md](effects.md#saving-an-effect).
+Od tej chwili każdy film z tym motywem może go używać. Zobacz [effects.md](effects.md#zapisywanie-efektu).
 
-## Outputs
+## Pliki wynikowe
 
-Everything lives in `<folder>/out/`:
+Wszystko ląduje w `<folder>/out/`:
 
-| File | What it is |
+| Plik | Co to jest |
 |---|---|
-| `final.mp4` | The finished video: 1080×1920 (9:16) or 1920×1080 (16:9), 30 fps, H.264 + AAC, −14 LUFS |
-| `thumbnail.png`, `thumbnail.jpg` | The thumbnail: 1080×1920 for shorts, 1280×720 for 16:9 (when `steps.thumbnail` is on) |
-| `chapters.txt` | 16:9: chapter timestamps to paste into the YouTube description |
-| `captions.srt` | When the caption mode for the format is `srt` or `both` (default for 16:9) |
-| `EDIT_NOTES.md` | Final structure, every graphic and why, music, scene sources, commands used |
-| `takes.md` | Every take compared, the chosen one and why; the checks for each segment |
-| `factcheck.md` | One line per claim: timestamp, quote, verdict, the correct version, a link |
-| `requests.md` | Your requests and Claude's surprises |
-| `edl.json` | The cut: segments with source file, in / out and the corrected text |
-| `plan.json` | Graphics, captions, panel, scenes, music |
-| `aroll.mp4` | The cut A-roll (voice levelled, no graphics) |
-| `preview.mp4` | 16:9 only: the 480p checkpoint preview |
-| `composition/` | The HyperFrames project (HTML, media, vendored libraries) |
-| `snapshots/`, `sheets/`, `check_*.png` | Frames Claude read to check its work |
-| `work/` | Intermediate files: transcripts, WAVs, aligned words, tracks, `render.log` |
+| `final.mp4` | Gotowy film: 1080×1920 (9:16) albo 1920×1080 (16:9), 30 kl./s, H.264 + AAC, −14 LUFS |
+| `thumbnail.png`, `thumbnail.jpg` | Miniatura: 1080×1920 dla shortów, 1280×720 dla 16:9 (gdy `steps.thumbnail` jest włączone) |
+| `chapters.txt` | 16:9: znaczniki czasu rozdziałów do wklejenia w opis na YouTube |
+| `captions.srt` | Gdy tryb napisów dla danego formatu to `srt` albo `both` (domyślnie dla 16:9) |
+| `EDIT_NOTES.md` | Ostateczna struktura, każda grafika i powód jej użycia, muzyka, źródła scen, użyte polecenia |
+| `takes.md` | Każde porównane ujęcie, wybrane ujęcie i powód wyboru; kontrole dla każdego fragmentu |
+| `factcheck.md` | Jedna linia na twierdzenie: znacznik czasu, cytat, werdykt, poprawna wersja, link |
+| `requests.md` | Twoje prośby i niespodzianki od Claude'a |
+| `edl.json` | Cięcie: fragmenty z plikiem źródłowym, punktami wejścia / wyjścia i poprawionym tekstem |
+| `plan.json` | Grafiki, napisy, panel, sceny, muzyka |
+| `aroll.mp4` | Pocięty A-roll (wyrównany głos, bez grafik) |
+| `preview.mp4` | Tylko 16:9: podgląd 480p do punktu kontrolnego |
+| `composition/` | Projekt HyperFrames (HTML, media, dołączone biblioteki) |
+| `snapshots/`, `sheets/`, `check_*.png` | Klatki, które Claude czytał, żeby sprawdzić swoją pracę |
+| `work/` | Pliki pośrednie: transkrypcje, pliki WAV, wyrównane słowa, ścieżki śledzenia, `render.log` |
 
-## Tips for better results
+## Jak uzyskać lepsze wyniki
 
-- **Say each line until you nail it.** cutmate compares all takes, so extra takes cost you nothing.
-- **Say names clearly** and mention them when you start the edit (`product names: …`). They become the transcription prompt.
-- **Pause briefly between takes.** Cuts land on silences.
-- **Use your hands on purpose.** An open palm toward the camera or a clear point gives effects a place to land.
-- **Keep spoken director notes short and addressed to the editor** ("here you put …", "add …"), so they are recognised and cut.
+- **Powtarzaj każdą kwestię, aż wyjdzie idealnie.** cutmate porównuje wszystkie ujęcia, więc dodatkowe ujęcia nic cię nie kosztują.
+- **Wymawiaj nazwy wyraźnie** i wymień je, gdy zaczynasz montaż (`nazwy produktów: …`). Stają się podpowiedzią dla transkrypcji.
+- **Rób krótką pauzę między ujęciami.** Cięcia wypadają na ciszy.
+- **Używaj rąk celowo.** Otwarta dłoń skierowana do kamery albo wyraźne wskazanie palcem dają efektom miejsce, w którym mogą się pojawić.
+- **Uwagi reżyserskie mów krótko i kieruj je do montażysty** („tu daj …”, „dodaj …”), żeby zostały rozpoznane i wycięte.

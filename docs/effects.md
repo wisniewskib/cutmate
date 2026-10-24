@@ -1,194 +1,194 @@
-# Effects
+# Efekty
 
-Beyond captions and the basic components, cutmate has three tiers of animated effects:
+Poza napisami i podstawowymi komponentami cutmate ma trzy poziomy animowanych efektów:
 
-1. **Explainers**: animated explanations of what is said (a number, steps, a tool, a mechanism).
-2. **The WOW pack**: six tested show-stoppers for the key moments of a video.
-3. **Custom effects**: written by Claude when you ask for something nothing else covers, and saved into your theme when you like them.
+1. **Explainery**: animowane wyjaśnienia tego, co mówisz (liczba, kroki, narzędzie, mechanizm).
+2. **Pakiet WOW**: sześć sprawdzonych efektów, które robią wrażenie w kluczowych momentach filmu.
+3. **Własne efekty**: pisane przez Claude'a, gdy prosisz o coś, czego nic innego nie pokrywa, i zapisywane w twoim motywie, gdy ci się spodobają.
 
-All of them take your theme's tokens (colours, fonts, radius, shadow), so a cloned style restyles them too. They are seek-safe and deterministic (see [the rules](#determinism-rules)), and they render offline from vendored libraries.
+Wszystkie biorą tokeny z twojego motywu (kolory, fonty, zaokrąglenia, cień), więc sklonowany styl też je przestylowuje. Działają poprawnie przy przewijaniu (seek-safe) i są deterministyczne (zobacz [zasady](#zasady-determinizmu)), a renderują się offline z dołączonych bibliotek.
 
-Effects are defined in `themes/clean/components/custom/` (one `.html` file each), and `index.json` describes their parameters. Claude reads `index.json` before using an effect.
+Efekty są zdefiniowane w `themes/clean/components/custom/` (każdy w osobnym pliku `.html`), a `index.json` opisuje ich parametry. Claude czyta `index.json`, zanim użyje efektu.
 
-## When effects are used
+## Kiedy efekty są używane
 
-| Theme layout | Explainers | WOW effects | Custom effects |
+| Układ motywu | Explainery | Efekty WOW | Własne efekty |
 |---|---|---|---|
-| Classic (9:16 or 16:9) | Only when you ask ("add explainers", "explain this with an animation") | When you ask for effects, or when surprises are on | On request |
-| Split-panel (9:16) | Always: they fill the panel, one item per clause | `exploded-view` / `globe` as panel items, `kinetic-word` / `topic-change` as scenes, `hand-control` over the speaker's half | On request |
+| Classic (9:16 albo 16:9) | Tylko gdy poprosisz („dodaj explainery”, „wytłumacz to animacją”) | Gdy prosisz o efekty albo gdy niespodzianki są włączone | Na życzenie |
+| Split-panel (9:16) | Zawsze: wypełniają panel, jeden element na każdą część zdania | `exploded-view` / `globe` jako elementy panelu, `kinetic-word` / `topic-change` jako sceny, `hand-control` nad połową kadru z mówiącym | Na życzenie |
 
-In a classic theme, Claude picks 2–4 explainers per 60 s, each at least 2 s long, with at least 2 s of plain face between them.
+W motywie klasycznym Claude wybiera 2–4 explainery na 60 s, każdy trwa co najmniej 2 s, a między nimi jest co najmniej 2 s samej twarzy.
 
-## Built-in components (for reference)
+## Wbudowane komponenty (ściąga)
 
-These are the basic graphics in every theme (`plan.json` → `graphics`):
+To podstawowe grafiki dostępne w każdym motywie (`plan.json` → `graphics`):
 
-| Component | Use | Main fields |
+| Komponent | Zastosowanie | Główne pola |
 |---|---|---|
-| `title` | A name reveal or the topic (at most 1) | `at`, `text`, `kicker?`, `logo?` |
-| `counter` | THE number of the video, counting up | `at`, `to`, `prefix?`, `suffix?`, `label` |
-| `list` | A spoken list (≤ 4 items) | `items[{text, at}]`, `head?` |
-| `chip` | A small label for a name / tool | `at`, `text`, `logo?` / `icon?` |
-| `stamp` | A one-word punchline | `at`, `text` |
-| `bars` | A comparison (≤ 3 rows) | `at`, `head`, `rows[{label, value}]`, `illustrative` |
-| `point` | A card near the finger when you point | `at`, `image`, `corner` |
-| `split` | 9:16: b-roll panel on top, face below | `from`, `to`, `media` or `effect` + `params` |
-| `pip` | 16:9: b-roll full-screen, face in a circle | `from`, `to`, `media`, `corner?`, `fit?` |
-| `lower-third` | 16:9: name and role once at the self-introduction | `at`, `name`, `role?` |
-| `side` | 16:9: speaker on one half, graphic on the other | `from`, `to`, `media` or `effect`, `speaker` |
-| `bg` | Replaces the background behind the speaker | `from`, `to`, `media` or `effect` |
-| `custom` | Any effect by name | `name`, `from`/`to` or `at`/`until`, `params`, `follow?`, `place?` |
+| `title` | Przedstawienie się albo temat (najwyżej 1) | `at`, `text`, `kicker?`, `logo?` |
+| `counter` | NAJWAŻNIEJSZA liczba filmu, odliczana w górę | `at`, `to`, `prefix?`, `suffix?`, `label` |
+| `list` | Wypowiadana lista (≤ 4 punkty) | `items[{text, at}]`, `head?` |
+| `chip` | Mała etykieta z nazwą / narzędziem | `at`, `text`, `logo?` / `icon?` |
+| `stamp` | Puenta w jednym słowie | `at`, `text` |
+| `bars` | Porównanie (≤ 3 wiersze) | `at`, `head`, `rows[{label, value}]`, `illustrative` |
+| `point` | Karta przy palcu, gdy coś wskazujesz | `at`, `image`, `corner` |
+| `split` | 9:16: panel z b-rollem u góry, twarz na dole | `from`, `to`, `media` albo `effect` + `params` |
+| `pip` | 16:9: b-roll na pełnym ekranie, twarz w kółku | `from`, `to`, `media`, `corner?`, `fit?` |
+| `lower-third` | 16:9: imię i rola, raz, gdy się przedstawiasz | `at`, `name`, `role?` |
+| `side` | 16:9: mówiący na jednej połowie, grafika na drugiej | `from`, `to`, `media` albo `effect`, `speaker` |
+| `bg` | Podmienia tło za mówiącym | `from`, `to`, `media` albo `effect` |
+| `custom` | Dowolny efekt po nazwie | `name`, `from`/`to` albo `at`/`until`, `params`, `follow?`, `place?` |
 
-Any graphic can also take `until`, `hit` (a hit sound and shake) and `sfx`. Anchors are `"S2:word"`, `"S2:word#2"` or seconds.
+Każda grafika może też przyjąć `until`, `hit` (dźwięk uderzenia i wstrząs) oraz `sfx`. Kotwice to `"S2:word"`, `"S2:word#2"` albo sekundy.
 
-## Explainers
+## Explainery
 
-| Effect | Picked for | Key params |
+| Efekt | Wybierany dla | Kluczowe parametry |
 |---|---|---|
-| `stat-card` | A number | `value` (counts up), `prefix?`, `suffix?`, `label`, `note?`, `media?` (darkened screenshot behind), `accent?`, `layout` `card` \| `hero` |
-| `flow` | Steps / a process | `nodes` (2–6), `edges?`, `style` `clean` \| `rough` (hand-drawn), `seed?`, `title?`, `accent?` |
-| `ui-mock` | A tool, a chat, a command, a page | `kind` `chat` \| `terminal` \| `post` \| `browser` \| `app`; `lines` (chat / terminal / post); `url`, `search?`, `rows`, `highlight?` (browser); `title`, `search?`, `rows` with `toggle?` / `click?` (app); `replies?` / `reposts?` / `likes?` (post: real counts only) |
-| `iso-machine` | A mechanism, "how it works" | `parts` (2–5, shapes `box`, `cylinder`, `funnel`, `screen`, `gear`), `token?` `cube` \| `sphere`, `counter?` `{to, label}`, `title?`, `theme` `light` \| `dark` \| `panel` |
-| `checklist` | A check / comparison | `rows` (2–8, status `ok`, `bad`, `warn`, `info`, `label?`), `strike?`, `summary?` `{value, suffix?, label?}`, `title?` |
-| `headline` | A key phrase with no number, product or steps | `text` (1–6 words), `kicker?`, `mode` `type` \| `pop` |
+| `stat-card` | Liczby | `value` (odliczana w górę), `prefix?`, `suffix?`, `label`, `note?`, `media?` (przyciemniony zrzut ekranu w tle), `accent?`, `layout` `card` \| `hero` |
+| `flow` | Kroków / procesu | `nodes` (2–6), `edges?`, `style` `clean` \| `rough` (rysowany odręcznie), `seed?`, `title?`, `accent?` |
+| `ui-mock` | Narzędzia, czatu, polecenia, strony | `kind` `chat` \| `terminal` \| `post` \| `browser` \| `app`; `lines` (chat / terminal / post); `url`, `search?`, `rows`, `highlight?` (browser); `title`, `search?`, `rows` z `toggle?` / `click?` (app); `replies?` / `reposts?` / `likes?` (post: tylko prawdziwe liczby) |
+| `iso-machine` | Mechanizmu, „jak to działa” | `parts` (2–5, kształty `box`, `cylinder`, `funnel`, `screen`, `gear`), `token?` `cube` \| `sphere`, `counter?` `{to, label}`, `title?`, `theme` `light` \| `dark` \| `panel` |
+| `checklist` | Sprawdzenia / porównania | `rows` (2–8, status `ok`, `bad`, `warn`, `info`, `label?`), `strike?`, `summary?` `{value, suffix?, label?}`, `title?` |
+| `headline` | Kluczowej frazy bez liczby, produktu i kroków | `text` (1–6 słów), `kicker?`, `mode` `type` \| `pop` |
 
-In a classic 9:16 video an explainer goes in a `split` (a 1000×820 panel); in 16:9 it goes in a `side`:
+W klasycznym filmie 9:16 explainer trafia do `split` (panel 1000×820), a w 16:9 do `side`:
 
 ```json
 {"type": "split", "from": "S3:Claude", "to": "S3:linki.", "effect": "stat-card",
- "params": {"value": 50, "suffix": "%", "label": "links broken"}}
+ "params": {"value": 50, "suffix": "%", "label": "linków nie działa"}}
 ```
 
-**Text and numbers come only from what is said.** A number in an explainer must be confirmed by a ✅ line in `factcheck.md`. The build warns only about `stat-card` `value` and `checklist` `summary.value`; Claude checks the rest itself.
+**Tekst i liczby pochodzą wyłącznie z tego, co zostało powiedziane.** Liczba w explainerze musi być potwierdzona linią ✅ w `factcheck.md`. Build ostrzega tylko o `value` w `stat-card` i `summary.value` w `checklist`; resztę Claude sprawdza sam.
 
-### 3D and VFX
+### 3D i VFX
 
-| Effect | What it does | Key params |
+| Efekt | Co robi | Kluczowe parametry |
 |---|---|---|
-| `showcase-3d` | A hero 3D object flies in beside the speaker, turns, flies out | `shape` `torus-knot` \| `icosahedron` \| `text` \| `glb`, `text?`, `model?`, `color?`, `size?`, `x?`, `y?` |
-| `burst` | A one-shot energy impact (~1–1.4 s): flash, shockwave rings, sparks | `colors?`, `size?` (1.2–1.6 for a hero moment), `x?`, `y?` |
-| `hand-sparks` | Energy pouring out of the hands | `mode` `stream` \| `sparks`, `link?` (an arc between the hands), `colors?`, `size?` |
-| `energy-ball` | A swirling energy orb on the hand that follows it | `radius?`, `colors?`, `x?`, `y?` |
+| `showcase-3d` | Główny obiekt 3D wlatuje obok mówiącego, obraca się i wylatuje | `shape` `torus-knot` \| `icosahedron` \| `text` \| `glb`, `text?`, `model?`, `color?`, `size?`, `x?`, `y?` |
+| `burst` | Jednorazowe uderzenie energii (~1–1,4 s): błysk, fale uderzeniowe, iskry | `colors?`, `size?` (1.2–1.6 na kluczowy moment), `x?`, `y?` |
+| `hand-sparks` | Energia wylewająca się z dłoni | `mode` `stream` \| `sparks`, `link?` (łuk między dłońmi), `colors?`, `size?` |
+| `energy-ball` | Wirująca kula energii na dłoni, która podąża za ręką | `radius?`, `colors?`, `x?`, `y?` |
 
-All four support `"place": "gesture"`. `energy-ball` and `hand-sparks` follow the hand.
+Wszystkie cztery obsługują `"place": "gesture"`. `energy-ball` i `hand-sparks` podążają za dłonią.
 
-## The WOW pack
+## Pakiet WOW
 
-Six stock show-stoppers (`"kind": "wow"` in `index.json`). Whenever one of them fits a moment, it replaces writing a new effect.
+Sześć gotowych efektów robiących wrażenie (`"kind": "wow"` w `index.json`). Gdy któryś z nich pasuje do momentu, używa się go zamiast pisać nowy efekt.
 
-| Effect | Moment | Modes | Length |
+| Efekt | Moment | Tryby | Długość |
 |---|---|---|---|
-| `exploded-view` | "Let's take it apart", "what's inside", layers, a device or system explained | panel, scene, side, overlay | 3–4.5 s |
-| `globe` | "Worldwide", countries, cities, a global number | panel, scene, side | 3–5 s |
-| `burst-out` | The hero reveal: "this changes everything", "meet …", the product name said with emphasis | bg (classic only) | 3–5 s |
-| `hand-control` | An open palm toward the camera, a "conjuring" gesture | overlay | 3–6 s |
-| `topic-change` | A chapter change, "now…", "moving on to", "second thing" | overlay, scene, chapter | 1.2–2.0 s |
-| `kinetic-word` | THE word or number of the video: a launch, "+300%", "FREE" | scene, overlay | 2.5–6 s (3–4 reads best) |
+| `exploded-view` | „Rozbierzmy to na części”, „co jest w środku”, warstwy, wyjaśnianie urządzenia albo systemu | panel, scene, side, overlay | 3–4,5 s |
+| `globe` | „Na całym świecie”, kraje, miasta, globalna liczba | panel, scene, side | 3–5 s |
+| `burst-out` | Wielkie odsłonięcie: „to zmienia wszystko”, „poznajcie …”, nazwa produktu wypowiedziana z naciskiem | bg (tylko classic) | 3–5 s |
+| `hand-control` | Otwarta dłoń skierowana do kamery, gest „czarowania” | overlay | 3–6 s |
+| `topic-change` | Zmiana rozdziału, „teraz…”, „przechodzimy do”, „druga rzecz” | overlay, scene, chapter | 1,2–2,0 s |
+| `kinetic-word` | NAJWAŻNIEJSZE słowo albo liczba filmu: premiera, „+300%”, „ZA DARMO” | scene, overlay | 2,5–6 s (najlepiej czyta się 3–4) |
 
 ### `exploded-view`
 
-A 3D product-render exploded view. The assembled object turns in, its parts slide apart with numbered leader-line labels, it orbits, then slams back together with a click flash.
+Rozłożony widok produktu w 3D. Złożony obiekt obraca się w kadr, jego części rozsuwają się z ponumerowanymi etykietami na liniach odniesienia, kamera krąży wokół, a potem wszystko z trzaskiem składa się z powrotem z błyskiem.
 
-| Param | Values |
+| Parametr | Wartości |
 |---|---|
-| `parts` | 2–7 items `{"label", "shape", "color"?}` from bottom to top. Shapes: `block`, `cylinder`, `disc`, `ring`, `gear`, `board`, `screen`, `shell` |
-| `preset` | When `parts` is missing: `engine` (default), `phone`, `layers`; labels in the video language |
-| `axis` | `y` (vertical stack, default) or `x` (horizontal) |
-| `title` | Optional heading |
-| `bg` | `panel` (the theme's `--panel-bg`, default) or `none` (transparent over the video) |
+| `parts` | 2–7 elementów `{"label", "shape", "color"?}` od dołu do góry. Kształty: `block`, `cylinder`, `disc`, `ring`, `gear`, `board`, `screen`, `shell` |
+| `preset` | Gdy brakuje `parts`: `engine` (domyślnie), `phone`, `layers`; etykiety w języku filmu |
+| `axis` | `y` (pionowy stos, domyślnie) albo `x` (poziomo) |
+| `title` | Opcjonalny nagłówek |
+| `bg` | `panel` (`--panel-bg` z motywu, domyślnie) albo `none` (przezroczyste tło nad filmem) |
 
 ### `globe`
 
-A light 3D dotted globe. It spins to the origin country, accent arcs shoot out to each destination and land with pulsing pins, and country labels decode at the end.
+Jasny, kropkowany globus 3D. Obraca się do kraju początkowego, z niego wystrzeliwują łuki w kolorze akcentu do każdego celu i lądują pulsującymi pinezkami, a na końcu „dekodują się” etykiety krajów.
 
-| Param | Values |
+| Parametr | Wartości |
 |---|---|
-| `from` | Origin, ISO-2 code (for example `"PL"`) |
-| `to` | 1–6 destination ISO-2 codes |
-| `labels` | `auto` (country names in the video language) or a list of names |
-| `style` | `dots` (default) or `solid` |
-| `title` | Optional heading |
+| `from` | Punkt startowy, kod ISO-2 (na przykład `"PL"`) |
+| `to` | 1–6 kodów ISO-2 celów |
+| `labels` | `auto` (nazwy krajów w języku filmu) albo lista nazw |
+| `style` | `dots` (domyślnie) albo `solid` |
+| `title` | Opcjonalny nagłówek |
 
-Country data comes from Natural Earth (public domain), built into `globe/land.json` and `globe/countries.json`.
+Dane krajów pochodzą z Natural Earth (domena publiczna) i są wbudowane w `globe/land.json` oraz `globe/countries.json`.
 
 ### `burst-out`
 
-A 3D object bursts from behind the speaker's head with god rays, arcs over them and flies at the camera. On the impact word the canvas jumps in front with an RGB-split pulse, sparks, a shockwave and a frame shake. The object then holds beside the speaker (never over the face, above the captions) and spins out.
+Obiekt 3D wybucha zza głowy mówiącego razem ze snopami światła, przelatuje łukiem nad nim i leci na kamerę. Na słowie uderzenia płótno wskakuje na pierwszy plan z pulsem rozszczepienia RGB, iskrami, falą uderzeniową i wstrząsem kadru. Potem obiekt zatrzymuje się obok mówiącego (nigdy na twarzy, nad napisami) i odlatuje, wirując.
 
 ```json
 {"type": "bg", "from": "S4:to", "to": "S4:wszystko.", "effect": "burst-out", "hit": "S4:Claude",
  "params": {"shape": "gem", "label": "Claude Code"}}
 ```
 
-| Param | Values |
+| Parametr | Wartości |
 |---|---|
-| `shape` | `gem` (default), `cube`, `knot`, `sphere`, `logo` (`media` image on a rounded extruded card) |
-| `color` | Optional (default `--accent`) |
-| `rays` | God rays (default `true`) |
-| `label` | Optional title that decodes under the object after the impact |
-| `media` | The logo image for `shape: "logo"` |
+| `shape` | `gem` (domyślnie), `cube`, `knot`, `sphere`, `logo` (obraz z `media` na zaokrąglonej, wytłoczonej karcie) |
+| `color` | Opcjonalny (domyślnie `--accent`) |
+| `rays` | Snopy światła (domyślnie `true`) |
+| `label` | Opcjonalny tytuł, który „dekoduje się” pod obiektem po uderzeniu |
+| `media` | Obraz logo dla `shape: "logo"` |
 
-Anchor `hit` on the impact word, start at least 1 s before it, and end at least 1.5 s after it. `burst-out` needs the face position (from tracking or plan `face`). It is a `bg` effect: it cuts the speaker out (HyperFrames `remove-background`), which costs about 17× its duration on a CPU. Classic layouts only, once per short.
+Zakotwicz `hit` na słowie uderzenia, zacznij co najmniej 1 s przed nim i skończ co najmniej 1,5 s po nim. `burst-out` potrzebuje pozycji twarzy (ze śledzenia albo z `face` w planie). To efekt typu `bg`: wycina mówiącego z tła (`remove-background` z HyperFrames), co na CPU zajmuje około 17× długości efektu. Tylko układy klasyczne, raz na short.
 
 ### `hand-control`
 
-Hand magic on your real hand. Warm streak sparks stream from each extended fingertip, and while your palm is open toward the camera a themed card unfolds above your fingertips, follows the hand, and folds back into it when the palm closes.
+Magia na twojej prawdziwej dłoni. Z każdego wyprostowanego palca sypią się ciepłe smugi iskier, a gdy twoja dłoń jest otwarta w stronę kamery, nad palcami rozkłada się karta w stylu motywu, podąża za ręką i składa się z powrotem w dłoń, gdy ją zamkniesz.
 
 ```json
 {"type": "custom", "name": "hand-control", "from": "S5:patrzcie", "to": 21.5,
- "params": {"card": {"title": "Gesture control", "lines": ["Sparks from every finger", "Card on an open palm"]}}}
+ "params": {"card": {"title": "Sterowanie gestem", "lines": ["Iskry z każdego palca", "Karta na otwartej dłoni"]}}}
 ```
 
-| Param | Values |
+| Parametr | Wartości |
 |---|---|
-| `card` | `{"title", "lines" (≤ 3), "media"?}`: the point being made |
-| `sparks` | `tips` (default) or `off` |
-| `hand` | `auto` (the raised open palm, default), `left`, `right`: the **speaker's own** hand, so with an unmirrored camera `right` is on the screen's left |
-| `colors` | Optional `[core, body, glow]` (default `--spark` / `--spark-glow` or warm amber) |
-| `media` | Optional card image |
+| `card` | `{"title", "lines" (≤ 3), "media"?}`: to, o czym właśnie mówisz |
+| `sparks` | `tips` (domyślnie) albo `off` |
+| `hand` | `auto` (uniesiona otwarta dłoń, domyślnie), `left`, `right`: **twoja własna** ręka, więc przy nieodbitym obrazie z kamery `right` jest po lewej stronie ekranu |
+| `colors` | Opcjonalnie `[core, body, glow]` (domyślnie `--spark` / `--spark-glow` albo ciepły bursztyn) |
+| `media` | Opcjonalny obraz na karcie |
 
-It needs fingertip tracks, so run `cutmate track --force <out>` once when the build asks for it. It works in 9:16 classic, in 9:16 split-panel (in the speaker's half) and in 16:9. It is never a panel item or a scene.
+Potrzebuje śladów czubków palców, więc uruchom raz `cutmate track --force <out>`, gdy build o to poprosi. Działa w 9:16 classic, w 9:16 split-panel (w połowie kadru z mówiącym) i w 16:9. Nigdy nie jest elementem panelu ani sceną.
 
 ### `topic-change`
 
-The A-roll itself glitches for 0.6 s (RGB split, or a wave), slice bars and scanlines come up, the title decodes out of an RGB-split triple, and the kicker types in. It ends with a hard cut and a 2-frame white flash.
+Sam A-roll glitchuje przez 0,6 s (rozszczepienie RGB albo fala), pojawiają się paski i linie skanowania, tytuł wyłania się z potrójnego rozszczepienia RGB, a kicker wpisuje się literka po literce. Kończy się twardym cięciem i 2-klatkowym białym błyskiem.
 
-| Param | Values |
+| Parametr | Wartości |
 |---|---|
-| `title` | The next topic, ≤ 40 characters |
-| `kicker` | Optional small label (chapter plates: `ROZDZIAŁ 02`) |
-| `style` | `glitch` (default) or `wave` |
+| `title` | Następny temat, ≤ 40 znaków |
+| `kicker` | Opcjonalna mała etykieta (plansze rozdziałów: `ROZDZIAŁ 02`) |
+| `style` | `glitch` (domyślnie) albo `wave` |
 
-For long-form videos, `"chapter_fx": "topic-change"` at the top of `plan.json` turns every chapter plate from chapter 2 on into this effect. Chapter plates do not count toward the WOW caps.
+W długich filmach `"chapter_fx": "topic-change"` na najwyższym poziomie `plan.json` zamienia w ten efekt każdą planszę rozdziału od rozdziału 2. Plansze rozdziałów nie liczą się do limitów WOW.
 
 ### `kinetic-word`
 
-A full-screen anime.js punch. About 600 themed shapes pop in as a grid, ripple out, burst, and fly into the letterforms of your word. It lands with a camera punch, a ring, an underline and a starburst, breathes while it holds, then shatters out.
+Pełnoekranowe uderzenie zrobione w anime.js. Około 600 kształtów w stylu motywu wyskakuje jako siatka, rozchodzi się falą, wybucha i wlatuje w kształty liter twojego słowa. Słowo ląduje z uderzeniem kamery, pierścieniem, podkreśleniem i rozbłyskiem, „oddycha”, gdy stoi, a potem rozpada się na kawałki.
 
-| Param | Values |
+| Parametr | Wartości |
 |---|---|
-| `text` | ≤ 14 characters from the sentence (`"+300%"`, `"FREE"`) |
-| `kicker` | Optional label above the word |
-| `count` | Number of shapes, 300–900 (default 600) |
-| `shapes` | `mixed` (default), `squares`, `dots`, `dashes` |
-| `bg` | `panel` (default, full frame) or `none` (over the video) |
+| `text` | ≤ 14 znaków ze zdania (`"+300%"`, `"FREE"`) |
+| `kicker` | Opcjonalna etykieta nad słowem |
+| `count` | Liczba kształtów, 300–900 (domyślnie 600) |
+| `shapes` | `mixed` (domyślnie), `squares`, `dots`, `dashes` |
+| `bg` | `panel` (domyślnie, pełny kadr) albo `none` (nad filmem) |
 
-The word lands 1.0 s after `from`. Start the effect about 1 s before the spoken word, or anchor `"hit": "S3:word"` (custom only, at least 0.6 s after `from`).
+Słowo ląduje 1,0 s po `from`. Zacznij efekt około 1 s przed wypowiedzeniem słowa albo zakotwicz `"hit": "S3:word"` (tylko custom, co najmniej 0,6 s po `from`).
 
-### WOW caps
+### Limity WOW
 
-| Video | Limit |
+| Film | Limit |
 |---|---|
-| Short (cut video ≤ 90 s) | ≤ 2 WOW effects, ≥ 12 s apart start to start; `burst-out` and `kinetic-word` once each |
-| Long-form | ≤ 1 per minute, ≤ 8 in total; chapter plates (`chapter_fx`) not counted |
+| Short (gotowy film ≤ 90 s) | ≤ 2 efekty WOW, co najmniej 12 s odstępu między ich początkami; `burst-out` i `kinetic-word` najwyżej raz każdy |
+| Długi film | ≤ 1 na minutę, ≤ 8 łącznie; plansze rozdziałów (`chapter_fx`) się nie liczą |
 
-Panel items and scenes count toward the caps. There is never one WOW effect right after another without plain footage between them, and never one over the face. The build prints `WARN wow …` when a cap is broken, and Claude fixes it before the checkpoint.
+Elementy panelu i sceny liczą się do limitów. Nigdy nie ma jednego efektu WOW zaraz po drugim bez zwykłego nagrania pomiędzy i nigdy żadnego na twarzy. Build wypisuje `WARN wow …`, gdy limit jest przekroczony, a Claude naprawia to przed punktem kontrolnym.
 
-## Custom effects written by Claude
+## Własne efekty pisane przez Claude'a
 
-When you ask for something nothing above covers ("put a space background behind me", "a Rasengan in my hand"), Claude writes a new effect in `out/custom/<name>.html`. It starts from the closest template, checks it against the build's lint, and reads snapshots of it every 0.25 s before showing you the checkpoint.
+Gdy prosisz o coś, czego nic powyżej nie pokrywa („daj kosmiczne tło za mną”, „Rasengan w mojej dłoni”), Claude pisze nowy efekt w `out/custom/<name>.html`. Zaczyna od najbliższego szablonu, sprawdza go lintem builda i czyta jego zrzuty co 0,25 s, zanim pokaże ci punkt kontrolny.
 
-An effect file has three sections, like a theme component:
+Plik efektu ma trzy sekcje, tak jak komponent motywu:
 
 ```html
 <style>ROOT { position: absolute; inset: 0; }</style>
@@ -207,65 +207,65 @@ U.three({ el: root.querySelector(".fx"), bloom: { strength: 1.2, radius: 0.6, th
 </script>
 ```
 
-### The effect API
+### API efektów
 
-| Name | What it is |
+| Nazwa | Co to jest |
 |---|---|
-| `P` | Parameters: `P.w`, `P.h`, `P.dur`, `P.at`, `P.end`, `P.track`, `P.assets`, plus your own `params` at the top level |
-| `root` | The effect's root element (`ROOT` in the style) |
-| `U.clock(fn)` | **The only per-frame driver**: `fn(t)` with local time |
-| `U.seed(n)` | **The only randomness** (seeded) |
-| `U.trackAt(P.track, t)`, `U.follow(el, P.track)` | Face / hand position at `t`; stick an element to it |
-| `U.three({el, bloom, camera})` | A three.js scene with an optional bloom composer, `toWorld(xPx, yPx, z)` and `render()` |
-| `U.glowOrb`, `U.particles` | A glowing orb, a particle system |
-| `U.draw`, `U.rough`, `U.tex` | SVG line drawing, Rough.js hand-drawn shapes, KaTeX formulas |
-| `U.anime(tl)`, `U.lottie(anim)` | Hand over an anime.js timeline / Lottie animation (`autoplay: false`) for the clock to seek |
-| `U.fonts([...])`, `U.ready(promise)` | Wait for the theme font; make the first frame wait for async setup |
-| `U.scramble` | Seeded text scramble (instead of GSAP's ScrambleTextPlugin) |
+| `P` | Parametry: `P.w`, `P.h`, `P.dur`, `P.at`, `P.end`, `P.track`, `P.assets` plus twoje własne `params` na najwyższym poziomie |
+| `root` | Główny element efektu (`ROOT` w stylach) |
+| `U.clock(fn)` | **Jedyny sterownik wywoływany co klatkę**: `fn(t)` z czasem lokalnym |
+| `U.seed(n)` | **Jedyne źródło losowości** (z ziarnem) |
+| `U.trackAt(P.track, t)`, `U.follow(el, P.track)` | Pozycja twarzy / dłoni w chwili `t`; przyklejenie do niej elementu |
+| `U.three({el, bloom, camera})` | Scena three.js z opcjonalnym kompozytorem bloom, `toWorld(xPx, yPx, z)` i `render()` |
+| `U.glowOrb`, `U.particles` | Świecąca kula, system cząsteczek |
+| `U.draw`, `U.rough`, `U.tex` | Rysowanie linii SVG, odręczne kształty z Rough.js, wzory KaTeX |
+| `U.anime(tl)`, `U.lottie(anim)` | Przekazuje oś czasu anime.js / animację Lottie (`autoplay: false`) zegarowi, który ją przewija |
+| `U.fonts([...])`, `U.ready(promise)` | Czeka na font motywu; każe pierwszej klatce poczekać na asynchroniczną inicjalizację |
+| `U.scramble` | Mieszanie tekstu z ziarnem (zamiast ScrambleTextPlugin z GSAP) |
 
-Files the effect needs (Lottie JSON, textures, GLB models) go in `out/custom/<name>/`, and `P.assets` is their URL prefix.
+Pliki potrzebne efektowi (JSON Lottie, tekstury, modele GLB) trafiają do `out/custom/<name>/`, a `P.assets` to przedrostek ich adresów URL.
 
-### Determinism rules
+### Zasady determinizmu
 
-HyperFrames renders by **seeking** each frame independently, often in parallel workers. An effect must therefore draw the same pixels for the same `t`, every time, in any order. The build **rejects** a file that contains any of these, even in a comment or a string:
+HyperFrames renderuje, **przewijając** (seek) do każdej klatki niezależnie, często w równoległych procesach. Dlatego efekt musi za każdym razem i w dowolnej kolejności rysować te same piksele dla tego samego `t`. Build **odrzuca** plik, który zawiera którykolwiek z tych elementów, nawet w komentarzu albo w stringu:
 
-| Forbidden | Use instead |
+| Zakazane | Użyj zamiast tego |
 |---|---|
-| `Date.now`, `new Date`, `performance.now`, `THREE.Clock` | `t` from `U.clock` |
-| `Math.random`, `crypto.getRandomValues`, `anime.utils.random`, `gsap.utils.random`, `utils.random`, `utils.randomPick`, `utils.shuffle`, `"random(…)"` values, `from: "random"` staggers | `U.seed(n)` |
+| `Date.now`, `new Date`, `performance.now`, `THREE.Clock` | `t` z `U.clock` |
+| `Math.random`, `crypto.getRandomValues`, `anime.utils.random`, `gsap.utils.random`, `utils.random`, `utils.randomPick`, `utils.shuffle`, wartości `"random(…)"`, staggery `from: "random"` | `U.seed(n)` |
 | `requestAnimationFrame`, `setTimeout`, `setInterval`, `setAnimationLoop`, `gsap.ticker`, `onUpdate`, `.play(` | `U.clock` |
-| `onComplete`, `onRepeat`, `onRender`, `onBegin`, `onLoop`, `onStart`, `onReverseComplete`, `onBeforeUpdate`, `onPause`, `onInterrupt`, `onSwapped`, `.restart(` | Compute state from `t` (a seeking renderer skips these callbacks) |
-| `d3.transition`, `AfterimagePass`, `GlitchEffect`, `ScrambleTextPlugin` | Library-internal time or randomness; use `U.scramble` for scrambles |
+| `onComplete`, `onRepeat`, `onRender`, `onBegin`, `onLoop`, `onStart`, `onReverseComplete`, `onBeforeUpdate`, `onPause`, `onInterrupt`, `onSwapped`, `.restart(` | Wyliczaj stan z `t` (renderer, który przewija, pomija te callbacki) |
+| `d3.transition`, `AfterimagePass`, `GlitchEffect`, `ScrambleTextPlugin` | Czas albo losowość wewnątrz biblioteki; do mieszania tekstu użyj `U.scramble` |
 
-Other rules:
+Inne zasady:
 
-- Create anime.js and Lottie objects with `autoplay: false` and hand them to `U.anime` / `U.lottie`.
-- Hand-placed `custom` effects get no automatic fade. Draw nothing before `P.at` and be gone by `P.end` (gate everything with a visibility factor, as above).
-- Only the vendored three.js addons load (`RoomEnvironment`, `TextGeometry`, `FontLoader`, `GLTFLoader`, `EffectComposer`, `RenderPass`, `UnrealBloomPass`, `OutputPass`, `ShaderPass`, `SavePass`, `MaskPass`, `Pass`, `CopyShader`, `LuminosityHighPassShader`, `OutputShader`, `BufferGeometryUtils`). The build rejects any other addon.
+- Obiekty anime.js i Lottie twórz z `autoplay: false` i przekazuj je do `U.anime` / `U.lottie`.
+- Ręcznie umieszczone efekty `custom` nie dostają automatycznego zanikania. Nie rysuj niczego przed `P.at` i zniknij do `P.end` (uzależnij wszystko od współczynnika widoczności, jak w przykładzie wyżej).
+- Ładują się tylko dołączone dodatki three.js (`RoomEnvironment`, `TextGeometry`, `FontLoader`, `GLTFLoader`, `EffectComposer`, `RenderPass`, `UnrealBloomPass`, `OutputPass`, `ShaderPass`, `SavePass`, `MaskPass`, `Pass`, `CopyShader`, `LuminosityHighPassShader`, `OutputShader`, `BufferGeometryUtils`). Build odrzuca każdy inny dodatek.
 
-## Gesture placement
+## Umieszczanie gestem
 
-When you say "here" / "there" without naming a place, or simply show it with your hands, Claude writes `"place": "gesture"` (for `custom` and `chip`) or `"speaker": "gesture"` (for `side`). A named place ("bottom right", "on the left") always wins.
+Gdy mówisz „tutaj” / „tam” bez nazwania miejsca albo po prostu pokazujesz je rękami, Claude zapisuje `"place": "gesture"` (dla `custom` i `chip`) albo `"speaker": "gesture"` (dla `side`). Nazwane miejsce („w prawym dolnym rogu”, „po lewej”) zawsze wygrywa.
 
-The hand decides the spot, using the hand-shape tracks from `cutmate track`:
+O miejscu decyduje dłoń, na podstawie śladów kształtu dłoni z `cutmate track`:
 
-| What the hand does | Where the effect goes |
+| Co robi dłoń | Gdzie trafia efekt |
 |---|---|
-| An open / presenting palm | Just above that palm, following the hand for the whole span (`P.hands` holds both palms) |
-| A clear index-finger point | The pointed spot, just past the fingertip |
-| Neither | The higher visible hand |
+| Otwarta / prezentująca dłoń | Tuż nad tą dłonią, podążając za ręką przez cały czas trwania (`P.hands` zawiera obie dłonie) |
+| Wyraźne wskazanie palcem wskazującym | Wskazane miejsce, tuż za czubkiem palca |
+| Ani jedno, ani drugie | Wyżej uniesiona widoczna dłoń |
 
-The effect takes its position from the hand sample nearest to its start, so Claude anchors it on the **gesture** rather than on the word. Every visible gesture gets an effect sized to read on a phone: `burst` for a framed spot or a punch, `showcase-3d` on a presenting palm, `energy-ball` on a cupped hand, `hand-sparks` for spread hands, and `hand-control` for the clearest open palm.
+Efekt bierze pozycję z próbki dłoni najbliższej swojemu początkowi, więc Claude kotwiczy go na **geście**, a nie na słowie. Każdy widoczny gest dostaje efekt na tyle duży, żeby był czytelny na telefonie: `burst` na obramowanym miejscu albo uderzeniu, `showcase-3d` na prezentującej dłoni, `energy-ball` na złożonej w miseczkę dłoni, `hand-sparks` przy rozłożonych rękach, a `hand-control` przy najwyraźniejszej otwartej dłoni.
 
-Effects can also **follow** a tracked part for their whole span with `"follow": "face" | "hand_left" | "hand_right" | "hand"`. This needs a fresh `work/tracks.json`: run `cutmate track <out>` after every re-cut, because the build ignores tracks older than `aroll.mp4`.
+Efekty mogą też przez cały czas trwania **podążać** za śledzoną częścią ciała dzięki `"follow": "face" | "hand_left" | "hand_right" | "hand"`. To wymaga świeżego `work/tracks.json`: uruchamiaj `cutmate track <out>` po każdym ponownym cięciu, bo build ignoruje ślady starsze niż `aroll.mp4`.
 
-## Saving an effect
+## Zapisywanie efektu
 
-After you accept a video that used a new custom effect:
+Gdy zaakceptujesz film, w którym użyto nowego własnego efektu:
 
 ```bash
-cutmate save-effect <folder>/out <name> --description "what it does"
-cutmate save-effect <folder>/out <name> --theme my-theme --force     # pick the theme, overwrite
+cutmate save-effect <folder>/out <name> --description "co robi"
+cutmate save-effect <folder>/out <name> --theme my-theme --force     # wybór motywu, nadpisanie
 ```
 
-This lints the effect, copies `out/custom/<name>.html` (and its asset folder) to `~/.cutmate/themes/<theme>/components/custom/`, and records it in that folder's `index.json`, together with the params and `follow` it was used with. Every later edit with that theme can then use it. See [customizing.md](customizing.md#3-saved-effects).
+Polecenie lintuje efekt, kopiuje `out/custom/<name>.html` (i jego folder z zasobami) do `~/.cutmate/themes/<theme>/components/custom/` i zapisuje go w `index.json` tego folderu, razem z parametrami i trybem `follow`, z którymi był użyty. Każdy późniejszy montaż z tym motywem może go wtedy używać. Zobacz [customizing.md](customizing.md#3-zapisane-efekty).

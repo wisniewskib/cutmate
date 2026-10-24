@@ -1,32 +1,32 @@
-# Architecture
+# Architektura
 
-This page explains how cutmate is put together: who decides what, where files live, the two contracts between Claude and the engine (`edl.json` and `plan.json`), and how renders stay offline and deterministic.
+Ta strona wyjaśnia, jak zbudowany jest cutmate: kto o czym decyduje, gdzie leżą pliki, jakie są dwa kontrakty między Claude'em a silnikiem (`edl.json` i `plan.json`) i jak rendery pozostają offline i deterministyczne.
 
-## The big idea: Claude decides, the CLI executes
+## Główna idea: Claude decyduje, CLI wykonuje
 
-cutmate has two halves:
+cutmate składa się z dwóch połówek:
 
-| Half | What it is | Responsibilities |
+| Połówka | Co to jest | Odpowiedzialność |
 |---|---|---|
-| **Skills** (`skills/*/SKILL.md`) | Instructions Claude Code follows | Editorial judgement: reading frames, picking takes, fact-checking, mapping requests, planning graphics, checking snapshots, talking to you |
-| **Engine** (`core/cutmate/`, the `cutmate` CLI) | Python 3.10+ | Everything that must be exact and repeatable: transcription, cutting, loudness, alignment, tracking, building and rendering the composition, validation, QA |
+| **Skille** (`skills/*/SKILL.md`) | Instrukcje, którymi kieruje się Claude Code | Ocena montażowa: czytanie klatek, wybór ujęć, fact-checking, mapowanie próśb, planowanie grafik, sprawdzanie zrzutów, rozmowa z tobą |
+| **Silnik** (`core/cutmate/`, CLI `cutmate`) | Python 3.10+ | Wszystko, co musi być dokładne i powtarzalne: transkrypcja, cięcie, głośność, wyrównanie, śledzenie, budowanie i renderowanie kompozycji, walidacja, QA |
 
-The two talk through **files in `out/`**, never through hidden state. Each step writes a file, the next step reads it, and `/cutmate:edit` resumes from the first missing one. Because every decision is a readable file (`takes.md`, `edl.json`, `plan.json`, `requests.md`), you can audit an edit or change it by hand.
+Obie połówki komunikują się przez **pliki w `out/`**, nigdy przez ukryty stan. Każdy krok zapisuje plik, następny go czyta, a `/cutmate:edit` wznawia pracę od pierwszego brakującego. Ponieważ każda decyzja jest czytelnym plikiem (`takes.md`, `edl.json`, `plan.json`, `requests.md`), możesz przejrzeć montaż albo zmienić go ręcznie.
 
-The engine is strict. It validates every plan and rejects bad anchors, overlapping budgets, forbidden code in effects, missing libraries and stale tracks, always with a one-line message that names the fix. The skills are written so that Claude fixes every error and thinks about every `WARN` before you see anything.
+Silnik jest surowy. Waliduje każdy plan i odrzuca błędne kotwice, nakładające się budżety, zakazany kod w efektach, brakujące biblioteki i nieaktualne ślady, zawsze z jednolinijkowym komunikatem, który mówi, jak to naprawić. Skille są napisane tak, żeby Claude naprawił każdy błąd i przemyślał każde `WARN`, zanim cokolwiek zobaczysz.
 
-## Pipeline
+## Przepływ
 
 ```mermaid
 flowchart TB
-    subgraph Claude["Claude Code (skills)"]
-        S1[read sheets] --> S2[takes.md]
+    subgraph Claude["Claude Code (skille)"]
+        S1[czyta arkusze klatek] --> S2[takes.md]
         S2 --> S3[factcheck.md]
         S3 --> S4[edl.json]
         S5[plan.json + requests.md]
-        S6[read snapshots, fix plan]
+        S6[czyta zrzuty, poprawia plan]
     end
-    subgraph CLI["cutmate CLI (Python)"]
+    subgraph CLI["CLI cutmate (Python)"]
         C1[transcribe] --> C2[sheet / probe / rms]
         C3[cut → aroll.mp4] --> C4[align → aligned_words.json]
         C4 --> C5[track → tracks.json]
@@ -36,7 +36,7 @@ flowchart TB
     end
     subgraph HF["HyperFrames (npx)"]
         H1[check] --> H2[snapshot]
-        H3[render: headless Chrome → frames → MP4]
+        H3[render: headless Chrome → klatki → MP4]
         H4[remove-background]
     end
     C2 --> S1
@@ -48,108 +48,108 @@ flowchart TB
     S6 --> C6
     C6 --> C7
     C7 --> H3
-    C6 -. bg effects .-> H4
+    C6 -. efekty bg .-> H4
     C7 --> C8
 ```
 
-## Repository layout
+## Struktura repozytorium
 
 ```text
 cutmate/
 ├── .claude-plugin/
-│   ├── plugin.json            # plugin manifest (name, version, dependency on hyperframes@hyperframes)
-│   └── marketplace.json       # this repo is its own marketplace
+│   ├── plugin.json            # manifest pluginu (nazwa, wersja, zależność od hyperframes@hyperframes)
+│   └── marketplace.json       # to repo jest swoim własnym marketplace'em
 ├── skills/
 │   ├── setup/SKILL.md         # /cutmate:setup
 │   ├── edit/SKILL.md          # /cutmate:edit
 │   ├── theme/SKILL.md         # /cutmate:theme
-│   ├── theme/generate.md      # shared recipe: direction → theme files (used by theme and clone-style)
+│   ├── theme/generate.md      # wspólny przepis: kierunek → pliki motywu (używany przez theme i clone-style)
 │   └── clone-style/SKILL.md   # /cutmate:clone-style
-├── core/cutmate/              # the Python package behind the `cutmate` CLI
-│   ├── cli.py                 # argparse entry point, every subcommand
-│   ├── config.py              # ~/.cutmate/config.json: keys, defaults, validation
-│   ├── backends/              # transcription: local (faster-whisper / mlx-whisper), groq, openai, elevenlabs
+├── core/cutmate/              # pakiet Pythona stojący za CLI `cutmate`
+│   ├── cli.py                 # punkt wejścia argparse, wszystkie podpolecenia
+│   ├── config.py              # ~/.cutmate/config.json: klucze, wartości domyślne, walidacja
+│   ├── backends/              # transkrypcja: local (faster-whisper / mlx-whisper), groq, openai, elevenlabs
 │   ├── transcribe.py, takes.py, sheet.py, formats.py
 │   ├── cut.py, align.py, ctc.py, tracks.py
-│   ├── plan.py                # plan.json validation, anchors, budgets, density, WOW caps
-│   ├── build.py               # plan → HyperFrames project (composition/), captions.srt, chapters.txt
-│   ├── effects.py             # custom effect discovery, lint (determinism rules), save-effect
-│   ├── layout.py              # classic vs split-panel
+│   ├── plan.py                # walidacja plan.json, kotwice, budżety, gęstość, limity WOW
+│   ├── build.py               # plan → projekt HyperFrames (composition/), captions.srt, chapters.txt
+│   ├── effects.py             # wykrywanie własnych efektów, lint (zasady determinizmu), save-effect
+│   ├── layout.py              # classic kontra split-panel
 │   ├── render.py, finalize.py, preview.py, qa.py, thumb.py, shot.py, music.py
 │   ├── themes.py, theme_check.py, directions.py, fonts.py
 │   ├── doctor.py, selftest.py, smoke.py, vendor.py, cuda.py, hf.py
-│   └── web/                   # cutmate.js + effects.js: the runtime loaded into every composition (U.*)
-├── themes/clean/              # the bundled neutral theme (components, custom effects, fonts, tokens)
+│   └── web/                   # cutmate.js + effects.js: środowisko uruchomieniowe ładowane do każdej kompozycji (U.*)
+├── themes/clean/              # wbudowany neutralny motyw (komponenty, własne efekty, fonty, tokeny)
 ├── assets/
-│   ├── sfx/                   # 6 CC0 sound effects + manifest + licences
-│   ├── vendor/                # pinned JS libraries + MANIFEST.json (sha256) + LICENSES/
-│   └── brand/                 # README banner and social preview
-├── install/                   # detect.sh / detect.ps1 (report), setup.sh / setup.ps1 (venv)
-├── tools/                     # maintainer scripts: vendor_libs.py, fetch_assets.py
-├── tests/                     # pytest suite (fast by default; -m hf / -m net / -m slow for the heavy ones)
-└── docs/                      # this documentation
+│   ├── sfx/                   # 6 efektów dźwiękowych CC0 + manifest + licencje
+│   ├── vendor/                # przypięte biblioteki JS + MANIFEST.json (sha256) + LICENSES/
+│   └── brand/                 # banner do README i podgląd do mediów społecznościowych
+├── install/                   # detect.sh / detect.ps1 (raport), setup.sh / setup.ps1 (venv)
+├── tools/                     # skrypty dla opiekunów: vendor_libs.py, fetch_assets.py
+├── tests/                     # testy pytest (domyślnie szybkie; -m hf / -m net / -m slow dla ciężkich)
+└── docs/                      # ta dokumentacja
 ```
 
 ## HyperFrames
 
-[HyperFrames](https://github.com/heygen-com/hyperframes) (Apache-2.0, by HeyGen) renders HTML to video. A composition is an HTML page with timed clips on one **paused** timeline. The renderer seeks the page to each frame in headless Chrome, captures it, and encodes the frames together with the audio.
+[HyperFrames](https://github.com/heygen-com/hyperframes) (Apache-2.0, od HeyGen) renderuje HTML do wideo. Kompozycja to strona HTML z klipami osadzonymi w czasie na jednej **zatrzymanej** osi czasu. Renderer przewija stronę do każdej klatki w headless Chrome, przechwytuje ją i koduje klatki razem z dźwiękiem.
 
-cutmate pins one version and runs it through `npx` (`core/cutmate/hf.py`):
+cutmate przypina jedną wersję i uruchamia ją przez `npx` (`core/cutmate/hf.py`):
 
 ```bash
 npx --yes hyperframes@0.8.157 <command>
 ```
 
-| HyperFrames command | Used by | For |
+| Polecenie HyperFrames | Używane przez | Do czego |
 |---|---|---|
-| `check` | `render`, `theme check` | Validates the composition. A run cut off by the 120 s deadline on a busy machine is retried once, then only warned about. |
-| `snapshot` | `/cutmate:edit` (Claude) | Frames at the build's checkpoints, for Claude to read |
-| `render` | `cutmate render` | The full render to `out/work/render.mp4` |
-| `remove-background` | `build` (for `bg` effects) | Speaker cut-out (about 17× the clip duration on a CPU) |
-| `media-use resolve` | Skills | Music beds and AI images, only when you are signed in to HeyGen |
+| `check` | `render`, `theme check` | Waliduje kompozycję. Przebieg przerwany przez 120-sekundowy limit na zajętym komputerze jest ponawiany raz, a potem kończy się tylko ostrzeżeniem. |
+| `snapshot` | `/cutmate:edit` (Claude) | Klatki w punktach kontrolnych z builda, do przeczytania przez Claude'a |
+| `render` | `cutmate render` | Pełny render do `out/work/render.mp4` |
+| `remove-background` | `build` (dla efektów `bg`) | Wycięcie mówiącego z tła (na CPU około 17× długości klipu) |
+| `media-use resolve` | Skille | Podkłady muzyczne i obrazy AI, tylko gdy jesteś zalogowany do HeyGen |
 
-The HyperFrames **plugin** (installed from its own marketplace) provides the audio carve script that ducks music under the voice.
+**Plugin** HyperFrames (instalowany z jego własnego marketplace'u) dostarcza skrypt carve, który ścisza muzykę pod głosem.
 
-### What `cutmate build` produces
+### Co tworzy `cutmate build`
 
 ```text
 out/composition/
-├── index.html                 # root composition: A-roll, captions, one host per graphic, audio tracks
-├── compositions/              # one sub-composition per graphic (<id>.html)
+├── index.html                 # główna kompozycja: A-roll, napisy, jeden host na grafikę, ścieżki audio
+├── compositions/              # jedna podkompozycja na grafikę (<id>.html)
 └── assets/
-    ├── aroll.mp4              # the cut
-    ├── media/                 # b-roll, cut-outs, face clips
-    ├── fonts/, sfx/, bgm/     # theme fonts, sound effects, the music bed
-    └── vendor/<lib>@<ver>/    # only the libraries this project loads (GSAP always)
+    ├── aroll.mp4              # cięcie
+    ├── media/                 # b-roll, wycięcia, klipy z twarzą
+    ├── fonts/, sfx/, bgm/     # fonty motywu, efekty dźwiękowe, podkład muzyczny
+    └── vendor/<lib>@<ver>/    # tylko biblioteki, które ten projekt ładuje (GSAP zawsze)
 ```
 
-Every graphic is a theme component (`themes/<theme>/components/<type>.html`) with `<style>`, `<markup>` and `<script>` sections. It is filled with the graphic's parameters and animated on the shared timeline, so it is seek-safe by construction.
+Każda grafika to komponent motywu (`themes/<theme>/components/<type>.html`) z sekcjami `<style>`, `<markup>` i `<script>`. Jest wypełniana parametrami grafiki i animowana na wspólnej osi czasu, więc z założenia działa poprawnie przy przewijaniu.
 
-## The contracts: `edl.json` and `plan.json`
+## Kontrakty: `edl.json` i `plan.json`
 
-### `edl.json`: the cut
+### `edl.json`: cięcie
 
-Written by Claude after `takes.md`, read by `cut`, `align`, `build` and `requests`.
+Zapisywany przez Claude'a po `takes.md`, czytany przez `cut`, `align`, `build` i `requests`.
 
 ```json
 {"format": "9:16", "fps": 30,
  "segments": [
-   {"id": "S1", "file": "IMG_6048.MOV", "in": 1.83, "out": 12.22, "text": "corrected text, exactly as said"},
+   {"id": "S1", "file": "IMG_6048.MOV", "in": 1.83, "out": 12.22, "text": "poprawiony tekst, dokładnie tak, jak został powiedziany"},
    {"id": "S2", "file": "IMG_6051.MOV", "in": 0.40, "out": 6.95, "text": "…"}],
  "spoken": {"Claude": "klod", "75%": "siedemdziesiąt pięć procent"}}
 ```
 
-| Field | Meaning |
+| Pole | Znaczenie |
 |---|---|
-| `format` | `9:16` or `16:9` |
-| `segments[].id` | `S1`, `S2`, … in video order; used in anchors |
-| `segments[].file`, `in`, `out` | Source clip and its time range (seconds), cut on silence boundaries |
-| `segments[].text` | The caption source of truth: names spelled right, never reworded |
-| `spoken` | How numbers and foreign words are pronounced, for the aligner |
+| `format` | `9:16` albo `16:9` |
+| `segments[].id` | `S1`, `S2`, … w kolejności w filmie; używane w kotwicach |
+| `segments[].file`, `in`, `out` | Klip źródłowy i jego zakres czasu (w sekundach), cięty na granicach ciszy |
+| `segments[].text` | Źródło prawdy dla napisów: nazwy zapisane poprawnie, nigdy nie przeredagowane |
+| `spoken` | Jak wymawiane są liczby i obce słowa, dla modelu wyrównującego |
 
-### `plan.json`: everything on screen
+### `plan.json`: wszystko, co na ekranie
 
-Written by Claude, validated and built by `build`.
+Zapisywany przez Claude'a, walidowany i budowany przez `build`.
 
 ```json
 {"captions": {"key": ["CLAUDE", "CAVEMAN"]},
@@ -160,49 +160,49 @@ Written by Claude, validated and built by `build`.
  "music": {"src": "/abs/path/bed.mp3"}}
 ```
 
-| Key | Meaning |
+| Klucz | Znaczenie |
 |---|---|
-| `captions.key` | Words drawn in the accent colour (inflected forms match too) |
-| `graphics` | Components and effects (see [effects.md](effects.md#built-in-components-for-reference)) |
-| `panel` | Split-panel themes: the contiguous timeline of panel items `{at, until?, effect + params \| media, fit?, sfx?}` |
-| `scenes` | Split-panel themes: full-frame moments `{from, to, media \| effect + params}` |
-| `chapters` | 16:9: `[{"at": "S1:word", "title": "…"}]` (plates for chapter 2 onward) |
-| `chapter_fx` | 16:9: `"topic-change"` turns the plates into the WOW glitch |
-| `face` | Per-segment face position `[x, y]` (fractions of the frame); filled from `tracks.json` when missing |
-| `music` | A specific bed (`src`, optional `volume`); folder music needs no entry |
+| `captions.key` | Słowa rysowane w kolorze akcentu (odmienione formy też pasują) |
+| `graphics` | Komponenty i efekty (zobacz [effects.md](effects.md#wbudowane-komponenty-ściąga)) |
+| `panel` | Motywy split-panel: ciągła oś czasu elementów panelu `{at, until?, effect + params \| media, fit?, sfx?}` |
+| `scenes` | Motywy split-panel: momenty na pełny kadr `{from, to, media \| effect + params}` |
+| `chapters` | 16:9: `[{"at": "S1:word", "title": "…"}]` (plansze od rozdziału 2) |
+| `chapter_fx` | 16:9: `"topic-change"` zamienia plansze w glitch WOW |
+| `face` | Pozycja twarzy dla każdego fragmentu `[x, y]` (ułamki kadru); uzupełniana z `tracks.json`, gdy jej brakuje |
+| `music` | Konkretny podkład (`src`, opcjonalnie `volume`); muzyka z folderu nie wymaga wpisu |
 
-**Anchors** tie graphics to words, so they survive re-cuts: `"S2:word"` is the first occurrence of the word in segment S2, `"S2:word#2"` is the second, and a number means seconds into the cut video. `"S2:75"` also matches a spoken "75%".
+**Kotwice** wiążą grafiki ze słowami, więc przetrwają ponowne cięcia: `"S2:word"` to pierwsze wystąpienie słowa we fragmencie S2, `"S2:word#2"` to drugie, a liczba oznacza sekundy od początku gotowego filmu. `"S2:75"` pasuje też do wypowiedzianego „75%”.
 
-**What the planner enforces:** a `list` has at most 4 items, `bars` at most 3 rows, a `stamp` is one word, and `counter.to` is a number. It also enforces budgets (at most 2 `hit` graphics, 1 `title`, no overlaps), density (a visual on screen at least 50 % of the time; bare face never longer than 4 s in 9:16 or 20 s in 16:9, apart from the hook and the CTA tail), the WOW caps, panel cadence and gaps, and the rule that `split` is not allowed in 16:9.
+**Czego pilnuje planer:** `list` ma najwyżej 4 punkty, `bars` najwyżej 3 wiersze, `stamp` to jedno słowo, a `counter.to` to liczba. Pilnuje też budżetów (najwyżej 2 grafiki z `hit`, 1 `title`, brak nakładania się), gęstości (grafika na ekranie przez co najmniej 50% czasu; sama twarz nigdy dłużej niż 4 s w 9:16 albo 20 s w 16:9, poza hakiem i końcowym CTA), limitów WOW, kadencji i przerw w panelu oraz zasady, że `split` jest niedozwolony w 16:9.
 
-## Determinism
+## Determinizm
 
-Renders seek frames independently, often in parallel, so every frame must be a pure function of time:
+Rendery przewijają do klatek niezależnie, często równolegle, więc każda klatka musi być czystą funkcją czasu:
 
-- Components and effects animate through **one paused timeline** (GSAP) or through `U.clock(t)`, the only per-frame driver in custom effects.
-- Randomness comes only from `U.seed(n)`.
-- `effects.py` lints every custom effect and **rejects** wall-clock time, `Math.random`, timers, `requestAnimationFrame`, play / restart calls, crossing callbacks (`onComplete` …), library randomness, and unvendored three.js addons. The full list is in [effects.md](effects.md#determinism-rules).
-- `theme check` renders every component in both formats before a theme can be saved. The test suite pins byte-identical "golden" builds for the main layouts.
+- Komponenty i efekty animują się na **jednej zatrzymanej osi czasu** (GSAP) albo przez `U.clock(t)`, jedyny sterownik wywoływany co klatkę we własnych efektach.
+- Losowość pochodzi wyłącznie z `U.seed(n)`.
+- `effects.py` lintuje każdy własny efekt i **odrzuca** czas zegarowy, `Math.random`, timery, `requestAnimationFrame`, wywołania play / restart, callbacki przejść (`onComplete` …), losowość bibliotek i niedołączone dodatki three.js. Pełna lista jest w [effects.md](effects.md#zasady-determinizmu).
+- `theme check` renderuje każdy komponent w obu formatach, zanim motyw będzie można zapisać. Testy przypinają identyczne bajt w bajt „złote” buildy dla głównych układów.
 
-## Offline vendoring
+## Biblioteki offline
 
-**Builds and renders never fetch a library from the network.** Every JavaScript and CSS file a composition can load is pinned in `assets/vendor/MANIFEST.json`, together with its version, source URL, licence and the **sha256 of every file**.
+**Build i render nigdy nie pobierają biblioteki z sieci.** Każdy plik JavaScript i CSS, który kompozycja może załadować, jest przypięty w `assets/vendor/MANIFEST.json` razem z wersją, adresem źródła, licencją i **sumą sha256 każdego pliku**.
 
-| Library | Version | In the repo? |
+| Biblioteka | Wersja | W repo? |
 |---|---|---|
-| three.js (+ selected addons and fonts) | 0.181.2 | Yes |
-| postprocessing | 6.39.5 | Yes |
-| anime.js | 4.5.0 | Yes |
-| lottie-web | 5.12.2 | Yes |
-| KaTeX (+ fonts) | 0.19.0 | Yes |
-| Rough.js | 4.6.6 | Yes |
-| D3 | 7.9.0 | Yes |
-| **GSAP** (+ DrawSVG, MorphSVG, MotionPath, SplitText) | 3.14.2 | **No**: `"redistribute": false` |
+| three.js (+ wybrane dodatki i fonty) | 0.181.2 | Tak |
+| postprocessing | 6.39.5 | Tak |
+| anime.js | 4.5.0 | Tak |
+| lottie-web | 5.12.2 | Tak |
+| KaTeX (+ fonty) | 0.19.0 | Tak |
+| Rough.js | 4.6.6 | Tak |
+| D3 | 7.9.0 | Tak |
+| **GSAP** (+ DrawSVG, MorphSVG, MotionPath, SplitText) | 3.14.2 | **Nie**: `"redistribute": false` |
 
-GSAP's licence does not clearly allow redistribution, so the repo ships only its licence text and hashes. `cutmate vendor` downloads the files from jsDelivr into `~/.cutmate/vendor/gsap@3.14.2/`, checks each against the manifest, and writes nothing that fails the check. `setup.sh` / `setup.ps1` run it automatically, and `cutmate doctor` → `vendor` reports it. `build` resolves every library a project needs **before writing any file**, so a missing GSAP fails cleanly with "run `cutmate vendor`".
+Licencja GSAP nie pozwala jednoznacznie na rozpowszechnianie, więc repo zawiera tylko tekst jej licencji i sumy kontrolne. `cutmate vendor` pobiera pliki z jsDelivr do `~/.cutmate/vendor/gsap@3.14.2/`, sprawdza każdy z manifestem i nie zapisuje niczego, co nie przejdzie kontroli. `setup.sh` / `setup.ps1` uruchamiają je automatycznie, a `cutmate doctor` → `vendor` pokazuje stan. `build` rozwiązuje każdą bibliotekę potrzebną projektowi **przed zapisaniem jakiegokolwiek pliku**, więc brakujący GSAP kończy się czystym błędem z „run `cutmate vendor`”.
 
-At build time, only the libraries the project actually uses are copied into `composition/assets/vendor/`. For maintainers, `tools/vendor_libs.py` re-downloads everything, regenerates the manifest and licences, and rebuilds the globe data from Natural Earth.
+Podczas builda do `composition/assets/vendor/` kopiowane są tylko te biblioteki, których projekt faktycznie używa. Dla opiekunów projektu: `tools/vendor_libs.py` pobiera wszystko od nowa, generuje ponownie manifest i licencje oraz odbudowuje dane globusa z Natural Earth.
 
-## The cutmate home
+## Katalog domowy cutmate
 
-User data lives outside the plugin, in `${CUTMATE_HOME:-~/.cutmate}`: config, venv, models, GSAP, your themes, theme checks, clone work files and the smoke test (see [configuration.md](configuration.md#what-lives-in-the-cutmate-home)). Updating or reinstalling the plugin never touches it. After an update, run `/cutmate:setup` once: it notices that the venv points at the old plugin folder and reinstalls.
+Dane użytkownika leżą poza pluginem, w `${CUTMATE_HOME:-~/.cutmate}`: konfiguracja, venv, modele, GSAP, twoje motywy, kontrole motywów, pliki robocze klonowania i render testowy (zobacz [configuration.md](configuration.md#co-jest-w-katalogu-domowym-cutmate)). Aktualizacja albo ponowna instalacja pluginu nigdy go nie rusza. Po aktualizacji uruchom raz `/cutmate:setup`: zauważy, że venv wskazuje na stary folder pluginu, i zainstaluje go ponownie.

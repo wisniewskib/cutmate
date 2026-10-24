@@ -1,137 +1,137 @@
-# Customizing cutmate
+# Dostosowywanie cutmate
 
-cutmate is built to be extended without forking it. There are three layers you can make your own:
+cutmate jest zbudowany tak, żeby dało się go rozszerzać bez forkowania. Są trzy warstwy, które możesz zrobić po swojemu:
 
-1. **Your own skill** on top of cutmate: your house rules, applied to every edit.
-2. **Your own themes**: the look.
-3. **Saved effects**: effects Claude wrote for one video, reused in every later one.
+1. **Własny skill** na bazie cutmate: twoje zasady, stosowane przy każdym montażu.
+2. **Własne motywy**: wygląd.
+3. **Zapisane efekty**: efekty, które Claude napisał dla jednego filmu, używane ponownie w każdym kolejnym.
 
-## 1. Your own skill on top of `/cutmate:edit`
+## 1. Własny skill na bazie `/cutmate:edit`
 
-A Claude Code skill is a folder with a `SKILL.md` file. Put a personal skill in your user skills folder:
+Skill w Claude Code to folder z plikiem `SKILL.md`. Osobisty skill wrzuć do swojego folderu ze skillami użytkownika:
 
-| OS | Path |
+| System | Ścieżka |
 |---|---|
 | Linux / macOS | `~/.claude/skills/<name>/SKILL.md` |
 | Windows | `%USERPROFILE%\.claude\skills\<name>\SKILL.md` |
 
-The pattern: your skill **sets the rules first** (theme, language, what to always or never do, your CTA, your naming), then **runs the `cutmate:edit` skill** on the folder. cutmate does the editing, and your rules decide the choices it leaves open to Claude.
+Schemat: twój skill **najpierw ustala zasady** (motyw, język, czego zawsze albo nigdy nie robić, twoje CTA, twoje nazewnictwo), a potem **uruchamia skill `cutmate:edit`** na folderze. cutmate robi montaż, a twoje zasady rozstrzygają wybory, które zostawia Claude'owi.
 
-### Full example: a weekly tech short
+### Pełny przykład: cotygodniowy short o technologii
 
-Save this as `~/.claude/skills/tech-short/SKILL.md`:
+Zapisz to jako `~/.claude/skills/tech-short/SKILL.md`:
 
 ```markdown
 ---
 name: tech-short
-description: Edit my weekly AI-tools short with cutmate using my house rules — neon-pill theme, English, a fixed CTA, no surprises, a stat card for every number. Use when I say "tech short", "weekly short" or "/tech-short <folder>".
+description: Montuje mój cotygodniowy short o narzędziach AI w cutmate według moich zasad — motyw neon-pill, polski, stałe CTA, bez niespodzianek, stat-card dla każdej liczby. Używaj, gdy mówię "tech short", "cotygodniowy short" albo "/tech-short <folder>".
 ---
 
 # /tech-short <folder>
 
-My house rules for every weekly short. Apply them, then edit with cutmate.
+Moje zasady dla każdego cotygodniowego shorta. Zastosuj je, a potem zmontuj film w cutmate.
 
 ## 0. CLI
 
-Set the cutmate CLI once (works on Linux, macOS and Windows Git Bash):
+Ustaw raz CLI cutmate (działa na Linuksie, macOS i w Git Bash na Windowsie):
 `CM="$(ls "${CUTMATE_HOME:-$HOME/.cutmate}/venv/bin/cutmate" "${CUTMATE_HOME:-$HOME/.cutmate}/venv/Scripts/cutmate.exe" 2>/dev/null | head -1)"; [ -n "$CM" ] || CM="$(command -v cutmate)"`
-If it does not run, tell me to run /cutmate:setup and stop.
+Jeśli się nie uruchamia, powiedz mi, żebym uruchomił /cutmate:setup, i zakończ.
 
-## 1. Settings for this video
+## 1. Ustawienia dla tego filmu
 
-- Check `"$CM" config show`. If `language` is not `en`, run `"$CM" config set language=en`.
-- Theme: always `neon-pill` (pass it to cutmate:edit as "use the neon-pill theme"). If `"$CM" theme list`
-  has no `neon-pill`, say so and use the config theme.
-- Captions: burned for 9:16 (the config default). Never change other config keys.
+- Sprawdź `"$CM" config show`. Jeśli `language` nie jest `pl`, uruchom `"$CM" config set language=pl`.
+- Motyw: zawsze `neon-pill` (przekaż go do cutmate:edit jako „użyj motywu neon-pill”). Jeśli `"$CM" theme list`
+  nie ma `neon-pill`, powiedz o tym i użyj motywu z konfiguracji.
+- Napisy: wypalone dla 9:16 (domyślne w konfiguracji). Nigdy nie zmieniaj innych kluczy konfiguracji.
 
-## 2. House rules (tell cutmate:edit all of them up front)
+## 2. Moje zasady (przekaż je wszystkie cutmate:edit na starcie)
 
-- Transcription prompt names: Claude Code, Anthropic, GitHub, MCP, plus every product named in the folder name.
-- **No surprises** ("bez niespodzianek"): only the effects I ask for and the stock components.
-- Explainers: yes. Every spoken number gets a `stat-card`, and every named product gets its real page via
+- Nazwy do podpowiedzi transkrypcji: Claude Code, Anthropic, GitHub, MCP oraz każdy produkt wymieniony w nazwie folderu.
+- **Bez niespodzianek**: tylko efekty, o które proszę, i standardowe komponenty.
+- Explainery: tak. Każda wypowiedziana liczba dostaje `stat-card`, a każdy wymieniony produkt swoją prawdziwą stronę przez
   `"$CM" shot "<url>" -o "<folder>/broll/<name>.png" --light`.
-- WOW effects: at most one per short, `kinetic-word` on THE number of the video. Never `burst-out`.
-- Hook: the strongest line first, at most 3 s. End on my CTA line ("Comment TOOLS and I'll send you the list.").
-  If no take says the CTA, tell me before cutting — do not invent it.
-- Thumbnail: the title is the promise of the video in at most 4 words, all caps; the hook is the question I ask.
-- Never keep a take where I look at my notes.
+- Efekty WOW: najwyżej jeden na short, `kinetic-word` na NAJWAŻNIEJSZEJ liczbie filmu. Nigdy `burst-out`.
+- Hak: najmocniejsza kwestia na początku, najwyżej 3 s. Koniec na moim CTA („Napisz NARZĘDZIA w komentarzu, a wyślę ci listę.”).
+  Jeśli żadne ujęcie nie zawiera CTA, powiedz mi o tym przed cięciem — nie wymyślaj go.
+- Miniatura: tytuł to obietnica filmu w najwyżej 4 słowach, wielkimi literami; hak to pytanie, które zadaję.
+- Nigdy nie zostawiaj ujęcia, w którym patrzę w notatki.
 
-## 3. Edit
+## 3. Montaż
 
-Run the `cutmate:edit` skill with `<folder>` and all of section 2 as the request. Follow every cutmate checkpoint
-as usual (fact-check stops, "zrozumiałem tak").
+Uruchom skill `cutmate:edit` z `<folder>` i całą sekcją 2 jako prośbą. Przejdź wszystkie punkty kontrolne cutmate
+jak zwykle (zatrzymania przy fact-checku, „zrozumiałem tak”).
 
-## 4. After the render
+## 4. Po renderze
 
-- Copy `<folder>/out/final.mp4` to `<folder>/<folder name>-final.mp4` (never overwrite a source clip).
-- Write `<folder>/out/POST.md`: a title (≤ 60 chars), a 2-line description and 5 hashtags, from the transcript only.
-- Tell me the path of the video, the thumbnail and POST.md in three lines.
+- Skopiuj `<folder>/out/final.mp4` do `<folder>/<folder name>-final.mp4` (nigdy nie nadpisuj klipu źródłowego).
+- Napisz `<folder>/out/POST.md`: tytuł (≤ 60 znaków), 2-linijkowy opis i 5 hashtagów, wyłącznie na podstawie transkrypcji.
+- Podaj mi w trzech liniach ścieżkę do filmu, miniatury i POST.md.
 ```
 
-Then, in Claude Code:
+Potem w Claude Code:
 
 ```text
 /tech-short ~/Videos/2026-10-24-mcp-servers
 ```
 
-**Why this works:**
+**Dlaczego to działa:**
 
-- cutmate's skills read your requests the same way, whether they come from chat or from another skill. Everything in section 2 lands in `requests.md` and the "zrozumiałem tak" checkpoint, so you can still see and strike it.
-- Your rules only narrow choices that cutmate leaves to Claude: which effects, how many, the hook, the theme. cutmate's own guarantees still apply, including fact-checking, never touching source clips, the WOW caps and the density rules.
-- The CLI line is the same one cutmate's skills use, so it works on all three OSes.
+- Skille cutmate czytają twoje prośby tak samo, niezależnie od tego, czy przychodzą z czatu, czy z innego skilla. Wszystko z sekcji 2 trafia do `requests.md` i punktu kontrolnego „zrozumiałem tak”, więc dalej możesz to zobaczyć i skreślić.
+- Twoje zasady tylko zawężają wybory, które cutmate zostawia Claude'owi: jakie efekty, ile, hak, motyw. Gwarancje samego cutmate nadal obowiązują, w tym fact-checking, nietykanie klipów źródłowych, limity WOW i zasady gęstości.
+- Linia z CLI jest taka sama jak w skillach cutmate, więc działa na wszystkich trzech systemach.
 
-### Tips for your own skill
+### Wskazówki do własnego skilla
 
-- **Use config keys for durable settings** (`cutmate config set …`) and the skill text for per-video rules.
-- **Prefer cutmate's own words** for its features: "explainers", "bez niespodzianek" (no surprises), WOW effect names, component names (`stat-card`, `stamp`, `chip`). These are the terms its skill maps.
-- **Do not reimplement steps.** Let `cutmate:edit` transcribe, pick takes and render. Add steps before (folder checks, names) or after (copying, posting notes).
-- **Keep commands portable**: quote paths, use `"$CM"`, and avoid Linux-only tools in steps that must also work on Windows Git Bash.
+- **Trwałe ustawienia trzymaj w kluczach konfiguracji** (`cutmate config set …`), a zasady dla pojedynczych filmów w treści skilla.
+- **Używaj słów samego cutmate** na jego funkcje: „explainery”, „bez niespodzianek”, nazwy efektów WOW, nazwy komponentów (`stat-card`, `stamp`, `chip`). To terminy, które rozpoznaje jego skill.
+- **Nie implementuj kroków od nowa.** Niech `cutmate:edit` transkrybuje, wybiera ujęcia i renderuje. Dodawaj kroki przed (sprawdzenie folderu, nazwy) albo po (kopiowanie, notatki do posta).
+- **Pisz przenośne polecenia**: bierz ścieżki w cudzysłów, używaj `"$CM"` i unikaj narzędzi dostępnych tylko na Linuksie w krokach, które mają działać też w Git Bash na Windowsie.
 
-## 2. Your own themes
+## 2. Własne motywy
 
-The easiest way is `/cutmate:theme` or `/cutmate:clone-style` (see [themes.md](themes.md)). To build or tweak one by hand, work on a **draft** and let the check gate approve it:
+Najprościej użyć `/cutmate:theme` albo `/cutmate:clone-style` (zobacz [themes.md](themes.md)). Żeby zbudować albo podrasować motyw ręcznie, pracuj na **szkicu** i pozwól, żeby zatwierdziła go bramka kontrolna:
 
 ```bash
-cutmate theme new my-look --from clean --mode custom       # draft in ~/.cutmate/themes/.drafts/my-look/
+cutmate theme new my-look --from clean --mode custom       # szkic w ~/.cutmate/themes/.drafts/my-look/
 cutmate theme font my-look "Space Grotesk" --role display
 cutmate theme font my-look "Manrope" --role text
-# edit tokens.css (colours, --radius, --shadow), theme.css (captions), components/*.html, theme.json (sfx), frame.md
-cutmate theme check my-look --clip ~/Videos/take1.mp4      # lint + render both formats → check/contact.png
+# edytuj tokens.css (kolory, --radius, --shadow), theme.css (napisy), components/*.html, theme.json (sfx), frame.md
+cutmate theme check my-look --clip ~/Videos/take1.mp4      # lint + render obu formatów → check/contact.png
 cutmate theme save my-look
 cutmate theme use my-look
 ```
 
-What to change, from the safest to the most involved:
+Co zmieniać, od najbezpieczniejszego do najbardziej zaawansowanego:
 
-| Change | Where | Notes |
+| Zmiana | Gdzie | Uwagi |
 |---|---|---|
-| Colours, corners, shadows | `tokens.css` | Restyles every component, explainer and WOW effect at once. Keep the required tokens and the contrast (≥ 4.5). |
-| Fonts | `cutmate theme font` | OFL Google Fonts with Polish letters only; never edit the `cutmate:font` blocks by hand |
-| Caption style | `theme.css` → `.cw`, `.cw.key`, `.cw.num` | Keep `opacity: 0` on `.cw` and the safe-zone rules |
-| Sound per component | `theme.json` → `sfx` | Cue names: `whoosh`, `pop`, `click`, `impact`, `swell`, `ping` |
-| Component look | `components/<type>.html` | Keep the structure and parameters of clean's version: the edit skill relies on the component contract |
-| Rules Claude follows | `frame.md` | Zones, budgets, density and components; keep the rule sections |
-| Layout | `theme.json` → `layout` | `split-panel` needs `--panel-bg` (see [themes.md](themes.md#layouts)) |
+| Kolory, narożniki, cienie | `tokens.css` | Przestylowuje naraz każdy komponent, explainer i efekt WOW. Zachowaj wymagane tokeny i kontrast (≥ 4.5). |
+| Fonty | `cutmate theme font` | Tylko fonty Google na OFL z polskimi znakami; nigdy nie edytuj bloków `cutmate:font` ręcznie |
+| Styl napisów | `theme.css` → `.cw`, `.cw.key`, `.cw.num` | Zachowaj `opacity: 0` w `.cw` i zasady stref bezpiecznych |
+| Dźwięk dla komponentu | `theme.json` → `sfx` | Nazwy dźwięków: `whoosh`, `pop`, `click`, `impact`, `swell`, `ping` |
+| Wygląd komponentu | `components/<type>.html` | Zachowaj strukturę i parametry wersji z clean: skill montażowy opiera się na kontrakcie komponentu |
+| Zasady, którymi kieruje się Claude | `frame.md` | Strefy, budżety, gęstość i komponenty; zachowaj sekcje z zasadami |
+| Układ | `theme.json` → `layout` | `split-panel` wymaga `--panel-bg` (zobacz [themes.md](themes.md#układy)) |
 
-Leave the stock explainers and WOW effects (`components/custom/*`) alone: they take your look through tokens only.
+Standardowe explainery i efekty WOW (`components/custom/*`) zostaw w spokoju: przejmują twój wygląd wyłącznie przez tokeny.
 
-**Sharing a theme:** a theme is a plain folder. Copy `~/.cutmate/themes/<name>/` to someone else's `~/.cutmate/themes/`, then run `cutmate theme check <name> --saved` once before using it. Only share fonts that are OFL (their `OFL-*.txt` files are in `fonts/`).
+**Udostępnianie motywu:** motyw to zwykły folder. Skopiuj `~/.cutmate/themes/<name>/` do `~/.cutmate/themes/` innej osoby, a potem raz uruchom `cutmate theme check <name> --saved`, zanim zaczniesz go używać. Udostępniaj tylko fonty na OFL (ich pliki `OFL-*.txt` są w `fonts/`).
 
-## 3. Saved effects
+## 3. Zapisane efekty
 
-When Claude writes an effect for one video (`out/custom/<name>.html`) and you like it, save it into your theme:
+Gdy Claude napisze efekt dla jednego filmu (`out/custom/<name>.html`), a tobie się spodoba, zapisz go w swoim motywie:
 
 ```bash
-cutmate save-effect ~/Videos/short/out space-bg --description "starfield behind the speaker"
+cutmate save-effect ~/Videos/short/out space-bg --description "gwiazdy za mówiącym"
 cutmate save-effect ~/Videos/short/out space-bg --theme my-look --force
 ```
 
-| What happens | Where |
+| Co się dzieje | Gdzie |
 |---|---|
-| The effect is linted (the [determinism rules](effects.md#determinism-rules)) | |
-| The HTML and its asset folder are copied | `~/.cutmate/themes/<theme>/components/custom/<name>.html` and `<name>/` |
-| An entry is written with your description, the params it was used with and its `follow` mode | `~/.cutmate/themes/<theme>/components/custom/index.json` |
+| Efekt jest lintowany ([zasady determinizmu](effects.md#zasady-determinizmu)) | |
+| HTML i jego folder z zasobami są kopiowane | `~/.cutmate/themes/<theme>/components/custom/<name>.html` i `<name>/` |
+| Zapisywany jest wpis z twoim opisem, parametrami, z którymi efekt był użyty, i jego trybem `follow` | `~/.cutmate/themes/<theme>/components/custom/index.json` |
 
-In later edits, Claude reads both the bundled `index.json` and yours before writing anything new. Asking for "the space background again" reuses your effect. You can also write an effect yourself in `<folder>/out/custom/<name>.html` and use it in a plan as `{"type": "custom", "name": "<name>", …}`. The API and rules are in [effects.md](effects.md#custom-effects-written-by-claude).
+Przy kolejnych montażach Claude czyta zarówno wbudowany `index.json`, jak i twój, zanim napisze cokolwiek nowego. Prośba o „to kosmiczne tło jeszcze raz” użyje twojego efektu. Możesz też sam napisać efekt w `<folder>/out/custom/<name>.html` i użyć go w planie jako `{"type": "custom", "name": "<name>", …}`. API i zasady są opisane w [effects.md](effects.md#własne-efekty-pisane-przez-claudea).
 
-> `--theme` defaults to the config theme. Effects are always saved under `~/.cutmate/themes/<theme>/components/custom/`, even for the bundled `clean`, and cutmate looks there before the plugin's own effects. The plugin folder itself is never modified. Lookup order for an effect name: `out/custom/`, then your theme folder, then the plugin's theme, then the stock effects in `clean`.
+> `--theme` domyślnie bierze motyw z konfiguracji. Efekty są zawsze zapisywane w `~/.cutmate/themes/<theme>/components/custom/`, nawet dla wbudowanego `clean`, a cutmate szuka tam, zanim sięgnie po efekty samego pluginu. Sam folder pluginu nigdy nie jest modyfikowany. Kolejność szukania efektu po nazwie: `out/custom/`, potem folder twojego motywu, potem motyw pluginu, a na końcu standardowe efekty w `clean`.

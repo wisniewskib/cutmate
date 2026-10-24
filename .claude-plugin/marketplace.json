@@ -1,9 +1,9 @@
 {
   "name": "cutmate",
-  "description": "cutmate — AI video editing plugin for Claude Code",
+  "description": "cutmate — plugin do montażu wideo z AI dla Claude Code",
   "owner": { "name": "Bartosz Wiśniewski" },
   "allowCrossMarketplaceDependenciesOn": ["hyperframes"],
   "plugins": [
-    { "name": "cutmate", "source": ".", "description": "Edit talking-head videos with Claude" }
+    { "name": "cutmate", "source": ".", "description": "Montaż filmów, w których mówisz do kamery, z pomocą Claude" }
   ]
 }

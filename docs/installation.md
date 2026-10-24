@@ -1,12 +1,12 @@
-# Installation
+# Instalacja
 
-After this guide you will have the cutmate plugin in Claude Code, a Python environment in `~/.cutmate/venv` with the models downloaded, and a 5-second test render that proves everything works.
+Po tym przewodniku będziesz mieć plugin cutmate w Claude Code, środowisko Pythona w `~/.cutmate/venv` z pobranymi modelami i 5-sekundowy render testowy, który potwierdza, że wszystko działa.
 
-The short version: install the plugin, then run `/cutmate:setup`. The wizard does the rest and asks before it installs anything. This page explains what it does on each OS, so you can install things yourself or fix them when something fails.
+Wersja w skrócie: zainstaluj plugin, a potem uruchom `/cutmate:setup`. Kreator zrobi resztę i zapyta, zanim cokolwiek zainstaluje. Ta strona wyjaśnia, co robi na każdym systemie, żebyś mógł zainstalować rzeczy samodzielnie albo naprawić je, gdy coś się nie uda.
 
-## 1. Install the plugin
+## 1. Instalacja pluginu
 
-cutmate declares a dependency on the HyperFrames plugin (`hyperframes@hyperframes`). Add both marketplaces in Claude Code, then install cutmate:
+cutmate deklaruje zależność od pluginu HyperFrames (`hyperframes@hyperframes`). Dodaj oba marketplace'y w Claude Code, a potem zainstaluj cutmate:
 
 ```text
 /plugin marketplace add heygen-com/hyperframes
@@ -14,25 +14,25 @@ cutmate declares a dependency on the HyperFrames plugin (`hyperframes@hyperframe
 /plugin install cutmate@cutmate
 ```
 
-If the HyperFrames plugin did not come along with cutmate, install it as well: `/plugin install hyperframes@hyperframes`. cutmate needs its audio skill to duck the music under the voice (the "carve"). Without it, the music bed simply stays at a flat level.
+Jeśli plugin HyperFrames nie zainstalował się razem z cutmate, doinstaluj go: `/plugin install hyperframes@hyperframes`. cutmate potrzebuje jego skilla audio, żeby przyciszać muzykę pod głosem („carve”). Bez niego podkład muzyczny po prostu gra na stałym poziomie.
 
-### From a local clone (development, or no marketplace)
+### Z lokalnego klona (rozwój albo brak marketplace'u)
 
 ```bash
 git clone https://github.com/wisniewskib/cutmate.git
 claude --plugin-dir ./cutmate
 ```
 
-## 2. System dependencies
+## 2. Zależności systemowe
 
-| Tool | Needed for | Minimum |
+| Narzędzie | Do czego | Minimum |
 |---|---|---|
-| Python | The `cutmate` CLI (in its own venv) | 3.10, with `venv` / `ensurepip` |
+| Python | CLI `cutmate` (we własnym venv) | 3.10, z `venv` / `ensurepip` |
 | Node.js + `npx` | HyperFrames (`npx --yes hyperframes@0.8.157 …`) | 22 |
-| ffmpeg | Cutting, loudness, frames | Any recent build |
-| Chrome / Chromium / Edge | `cutmate shot` page screenshots only | Any |
+| ffmpeg | Cięcie, głośność, klatki | Dowolna świeża wersja |
+| Chrome / Chromium / Edge | Tylko zrzuty stron przez `cutmate shot` | Dowolna |
 
-The wizard runs a detector that installs nothing and prints JSON: OS, package manager, GPU, tools found, free disk space, and what is missing together with the command to install it. You can run it yourself:
+Kreator uruchamia detektor, który niczego nie instaluje i wypisuje JSON: system, menedżer pakietów, GPU, znalezione narzędzia, wolne miejsce na dysku oraz to, czego brakuje, razem z poleceniem instalacji. Możesz go uruchomić sam:
 
 **Linux / macOS / Windows Git Bash**
 
@@ -46,9 +46,9 @@ bash install/detect.sh
 powershell -ExecutionPolicy Bypass -File install\detect.ps1
 ```
 
-These are the install commands the detector suggests:
+Oto polecenia instalacji, które podpowiada detektor:
 
-| OS | ffmpeg | Python | Node.js 22+ |
+| System | ffmpeg | Python | Node.js 22+ |
 |---|---|---|---|
 | Ubuntu / Debian (apt) | `sudo apt-get install -y ffmpeg` | `sudo apt-get install -y python3 python3-venv` | `sudo snap install node --classic --channel=22/stable` |
 | Fedora (dnf) | `sudo dnf install -y ffmpeg-free` | `sudo dnf install -y python3` | `sudo dnf install -y nodejs22` |
@@ -56,20 +56,20 @@ These are the install commands the detector suggests:
 | macOS (Homebrew) | `brew install ffmpeg` | `brew install python@3.12` | `brew install node` |
 | Windows (winget) | `winget install -e --id Gyan.FFmpeg` | `winget install -e --id Python.Python.3.12` | `winget install -e --id OpenJS.NodeJS.LTS` |
 
-> **Claude never runs `sudo` and never types a password.** When a command needs `sudo`, you run it yourself, either in the Claude Code chat with a leading `!` (for example `! sudo apt-get install -y ffmpeg`) or in your own terminal. Claude runs `brew` and `winget` commands only after you say yes.
+> **Claude nigdy nie uruchamia `sudo` i nigdy nie wpisuje hasła.** Gdy polecenie wymaga `sudo`, uruchamiasz je sam: na czacie Claude Code z `!` na początku (na przykład `! sudo apt-get install -y ffmpeg`) albo we własnym terminalu. Polecenia `brew` i `winget` Claude uruchamia dopiero po twojej zgodzie.
 
-> **Windows:** after a `winget` install, restart Claude Code so its shell sees the new `PATH`, then run `/cutmate:setup` again. It resumes where it stopped.
+> **Windows:** po instalacji przez `winget` zrestartuj Claude Code, żeby jego powłoka zobaczyła nowy `PATH`, a potem uruchom `/cutmate:setup` ponownie. Kreator wznowi pracę tam, gdzie skończył.
 
-## 3. The Python environment
+## 3. Środowisko Pythona
 
-The setup script creates `${CUTMATE_HOME:-~/.cutmate}/venv`, installs cutmate into it in editable mode, and then fetches GSAP (see [libraries.md](libraries.md#gsap)). Set `CUTMATE_HOME` to put cutmate's home somewhere else.
+Skrypt instalacyjny tworzy `${CUTMATE_HOME:-~/.cutmate}/venv`, instaluje w nim cutmate w trybie edytowalnym, a potem pobiera GSAP (zobacz [libraries.md](libraries.md#gsap)). Ustaw `CUTMATE_HOME`, jeśli katalog domowy cutmate ma być gdzie indziej.
 
 **Linux / macOS / Windows Git Bash**
 
 ```bash
-bash install/setup.sh --gpu nvidia --local     # NVIDIA GPU, local Whisper
-bash install/setup.sh --gpu apple --local      # Apple Silicon, local Whisper (mlx-whisper)
-bash install/setup.sh --gpu none               # CPU-only machine with an API backend
+bash install/setup.sh --gpu nvidia --local     # GPU NVIDIA, lokalny Whisper
+bash install/setup.sh --gpu apple --local      # Apple Silicon, lokalny Whisper (mlx-whisper)
+bash install/setup.sh --gpu none               # komputer bez GPU, z backendem przez API
 ```
 
 **Windows PowerShell**
@@ -79,22 +79,22 @@ powershell -ExecutionPolicy Bypass -File install\setup.ps1 -Gpu nvidia -Local
 powershell -ExecutionPolicy Bypass -File install\setup.ps1 -Gpu none
 ```
 
-| Flag (`setup.sh` / `setup.ps1`) | Effect |
+| Flaga (`setup.sh` / `setup.ps1`) | Działanie |
 |---|---|
-| `--gpu nvidia\|apple\|none` / `-Gpu nvidia\|none` | Which GPU to target. `apple` is accepted by `setup.sh` only. |
-| `--local` / `-Local` | Also installs local Whisper: `faster-whisper` (NVIDIA / CPU) or `mlx-whisper` (Apple). With NVIDIA it also installs the CUDA 12 libraries `nvidia-cublas-cu12` and `nvidia-cudnn-cu12==9.*` from pip. |
-| `--dry-run` / `-DryRun` | Prints the commands without running them |
+| `--gpu nvidia\|apple\|none` / `-Gpu nvidia\|none` | Pod jakie GPU instalować. `apple` przyjmuje tylko `setup.sh`. |
+| `--local` / `-Local` | Instaluje też lokalnego Whispera: `faster-whisper` (NVIDIA / CPU) albo `mlx-whisper` (Apple). Przy NVIDIA instaluje też z pip biblioteki CUDA 12 `nvidia-cublas-cu12` i `nvidia-cudnn-cu12==9.*`. |
+| `--dry-run` / `-DryRun` | Wypisuje polecenia bez ich uruchamiania |
 
-Every install gets the `align` (PyTorch + transformers) and `track` (MediaPipe) extras. On anything but Apple, PyTorch comes from the CPU wheel index, because alignment runs fine on the CPU. The venv takes about 3–4 GB.
+Każda instalacja dostaje dodatki `align` (PyTorch + transformers) i `track` (MediaPipe). Poza Apple PyTorch pochodzi z indeksu paczek dla CPU, bo wyrównanie spokojnie działa na procesorze. Venv zajmuje około 3–4 GB.
 
-When the script finishes it prints where the CLI is:
+Na koniec skrypt wypisuje, gdzie jest CLI:
 
-| OS | CLI path |
+| System | Ścieżka CLI |
 |---|---|
 | Linux / macOS | `~/.cutmate/venv/bin/cutmate` |
 | Windows | `~/.cutmate/venv/Scripts/cutmate.exe` (`%USERPROFILE%\.cutmate\venv\Scripts\cutmate.exe`) |
 
-The skills find the CLI on their own. To run it by hand:
+Skille same znajdują CLI. Żeby uruchomić je ręcznie:
 
 ```bash
 # Linux / macOS
@@ -108,125 +108,125 @@ The skills find the CLI on their own. To run it by hand:
 & "$HOME\.cutmate\venv\Scripts\cutmate.exe" doctor
 ```
 
-The rest of these docs write the command as just `cutmate`.
+W dalszej części dokumentacji polecenie zapisujemy po prostu jako `cutmate`.
 
-## 4. Transcription backend, GPU and models
+## 4. Backend transkrypcji, GPU i modele
 
-| Backend | Runs on | Model | Needs |
+| Backend | Działa na | Model | Wymaga |
 |---|---|---|---|
-| `local` | NVIDIA GPU (CUDA), Apple Silicon or CPU | Whisper large-v3 (`faster-whisper`; `mlx-whisper` on Apple) | `--local` at setup, about 3 GB download |
-| `groq` | Groq API | `whisper-large-v3` | `GROQ_API_KEY` |
-| `openai` | OpenAI API | `whisper-1` | `OPENAI_API_KEY` |
-| `elevenlabs` | ElevenLabs API | `scribe_v2` | `ELEVENLABS_API_KEY` |
+| `local` | GPU NVIDIA (CUDA), Apple Silicon albo CPU | Whisper large-v3 (`faster-whisper`; na Apple `mlx-whisper`) | `--local` przy instalacji, około 3 GB do pobrania |
+| `groq` | API Groq | `whisper-large-v3` | `GROQ_API_KEY` |
+| `openai` | API OpenAI | `whisper-1` | `OPENAI_API_KEY` |
+| `elevenlabs` | API ElevenLabs | `scribe_v2` | `ELEVENLABS_API_KEY` |
 
-The wizard recommends `local` when it finds an NVIDIA or Apple GPU, and `groq` when it finds no GPU, because large-v3 on a CPU is slow.
+Kreator poleca `local`, gdy znajdzie GPU NVIDIA albo Apple, a `groq`, gdy nie znajdzie żadnego GPU, bo large-v3 na procesorze jest wolny.
 
 ```bash
 cutmate config set transcription=local language=en
-cutmate models --language en       # alignment model + face/hand tracking models (+ Whisper for local)
+cutmate models --language en       # model wyrównania + modele śledzenia twarzy/dłoni (+ Whisper przy local)
 cutmate selftest --clip ~/Videos/take1.mp4
 ```
 
-`selftest` transcribes the first 30 s of your clip and prints, for example, `backend: local · device: cuda · compute: float16`.
+`selftest` transkrybuje pierwsze 30 s twojego klipu i wypisuje na przykład `backend: local · device: cuda · compute: float16`.
 
 ### NVIDIA / CUDA
 
-- You need only a working NVIDIA driver (`nvidia-smi` must run). You do **not** need a system CUDA toolkit: cuBLAS and cuDNN come from pip and cutmate loads them itself.
-- cutmate tries `float16` first. If that fails, for example when a 6 GB card runs out of memory, it retries with `int8_float16`, and only then falls back to the CPU with a `WARN` line.
-- If `selftest` shows `device: cpu` on an NVIDIA machine, look at `cutmate doctor` → `cuda.errors`, then run `setup.sh --gpu nvidia --local` again.
+- Potrzebujesz tylko działającego sterownika NVIDIA (`nvidia-smi` musi się uruchamiać). **Nie** potrzebujesz systemowego CUDA Toolkit: cuBLAS i cuDNN przychodzą z pip, a cutmate ładuje je sam.
+- cutmate najpierw próbuje `float16`. Jeśli to się nie uda, na przykład gdy karcie z 6 GB zabraknie pamięci, ponawia z `int8_float16`, a dopiero potem przechodzi na CPU z linią `WARN`.
+- Jeśli `selftest` pokazuje `device: cpu` na komputerze z NVIDIA, zajrzyj do `cutmate doctor` → `cuda.errors`, a potem uruchom ponownie `setup.sh --gpu nvidia --local`.
 
 ### Apple Silicon
 
-`setup.sh --gpu apple --local` installs `mlx-whisper`, and cutmate picks it automatically (model `mlx-community/whisper-large-v3-mlx`).
+`setup.sh --gpu apple --local` instaluje `mlx-whisper`, a cutmate wybiera go automatycznie (model `mlx-community/whisper-large-v3-mlx`).
 
-## 5. API keys: environment variables only
+## 5. Klucze API: tylko zmienne środowiskowe
 
-cutmate reads API keys **only** from environment variables. It never stores them in `config.json`: `cutmate config set` refuses any key it does not know, and it never echoes what you typed. Never paste a key into the chat.
+cutmate czyta klucze API **wyłącznie** ze zmiennych środowiskowych. Nigdy nie zapisuje ich w `config.json`: `cutmate config set` odrzuca każdy klucz konfiguracji, którego nie zna, i nigdy nie wyświetla tego, co wpisałeś. Nigdy nie wklejaj klucza na czat.
 
-| Backend | Variable | Where to get a key |
+| Backend | Zmienna | Gdzie zdobyć klucz |
 |---|---|---|
 | Groq | `GROQ_API_KEY` | https://console.groq.com/keys |
 | OpenAI | `OPENAI_API_KEY` | https://platform.openai.com/api-keys |
 | ElevenLabs | `ELEVENLABS_API_KEY` | https://elevenlabs.io/app/settings/api-keys |
 
-Set the variable yourself, then **restart Claude Code** so it inherits the variable.
+Ustaw zmienną sam, a potem **zrestartuj Claude Code**, żeby ją odziedziczył.
 
-**Linux / macOS** (add the line to `~/.bashrc`, `~/.zshrc` or your shell's profile):
+**Linux / macOS** (dodaj linię do `~/.bashrc`, `~/.zshrc` albo profilu swojej powłoki):
 
 ```bash
 export GROQ_API_KEY=your-key-here
 ```
 
-**Windows** (in your own PowerShell or cmd window; it applies to new processes):
+**Windows** (we własnym oknie PowerShell albo cmd; działa dla nowo uruchomionych procesów):
 
 ```powershell
 setx GROQ_API_KEY "your-key-here"
 ```
 
-Check that the key is visible without printing it: `cutmate doctor` → `"keys": {"GROQ_API_KEY": true, …}`.
+Sprawdź, czy klucz jest widoczny, bez wypisywania go: `cutmate doctor` → `"keys": {"GROQ_API_KEY": true, …}`.
 
-## 6. Music (optional) and HeyGen sign-in
+## 6. Muzyka (opcjonalnie) i logowanie do HeyGen
 
-| Source | Setup |
+| Źródło | Konfiguracja |
 |---|---|
-| `none` | Nothing to do |
-| `folder` | `cutmate config set music.source=folder music.folder=~/Music/beds`. The folder needs at least one `.mp3 .m4a .wav .ogg .flac .aac` file. |
-| `heygen` | A lo-fi catalogue through HyperFrames `media-use`. It needs the [HeyGen CLI](https://developers.heygen.com/cli) 0.3.0 or newer, and **you sign in yourself**. |
+| `none` | Nic do zrobienia |
+| `folder` | `cutmate config set music.source=folder music.folder=~/Music/beds`. W folderze musi być co najmniej jeden plik `.mp3 .m4a .wav .ogg .flac .aac`. |
+| `heygen` | Katalog utworów lo-fi przez `media-use` z HyperFrames. Wymaga [HeyGen CLI](https://developers.heygen.com/cli) w wersji 0.3.0 lub nowszej, a **logujesz się sam**. |
 
-To use HeyGen, install the CLI from the official instructions, then sign in from the chat or your own terminal:
+Żeby korzystać z HeyGen, zainstaluj CLI według oficjalnej instrukcji, a potem zaloguj się z czatu albo z własnego terminala:
 
 ```text
 ! heygen auth login --oauth
 ```
 
-Then check that you are signed in and switch to it:
+Potem sprawdź, czy jesteś zalogowany, i przełącz źródło:
 
 ```bash
 npx --yes hyperframes@0.8.157 media-use resolve --doctor
 cutmate config set music.source=heygen
 ```
 
-Claude never signs in on your behalf. If you are not signed in, an edit simply goes ahead without music. See [configuration.md](configuration.md#music) for volume and carve.
+Claude nigdy nie loguje się w twoim imieniu. Jeśli nie jesteś zalogowany, montaż po prostu idzie dalej bez muzyki. Głośność i przyciszanie (carve) opisuje [configuration.md](configuration.md#muzyka).
 
-## 7. Smoke test
+## 7. Render testowy
 
 ```bash
-cutmate smoke --clip ~/Videos/take1.mp4                  # 5 s render: title + captions
-cutmate smoke --clip ~/Videos/take1.mp4 --music bed.mp3  # with a music bed
+cutmate smoke --clip ~/Videos/take1.mp4                  # render 5 s: tytuł + napisy
+cutmate smoke --clip ~/Videos/take1.mp4 --music bed.mp3  # z podkładem muzycznym
 ```
 
-It prints `final:` (the MP4) and `frame:` (a PNG at 1.5 s). A good run ends with a finalize line like `final.mp4: 1080x1920 30/1 h264 + aac, 5.00s, -14.0 LUFS — OK`. `/cutmate:setup` treats `~/.cutmate/smoke/rec/out/final.mp4` as the sign that setup is finished.
+Wypisuje `final:` (plik MP4) i `frame:` (PNG z 1,5 s). Udany przebieg kończy się linią finalize w stylu `final.mp4: 1080x1920 30/1 h264 + aac, 5.00s, -14.0 LUFS — OK`. `/cutmate:setup` traktuje istnienie `~/.cutmate/smoke/rec/out/final.mp4` jako znak, że konfiguracja jest zakończona.
 
-## Troubleshooting with `cutmate doctor`
+## Rozwiązywanie problemów z `cutmate doctor`
 
-`cutmate doctor` prints a JSON health report and never fails. Read it field by field:
+`cutmate doctor` wypisuje raport stanu w JSON i nigdy nie kończy się błędem. Czytaj go pole po polu:
 
-| Field | Healthy value | If not |
+| Pole | Prawidłowa wartość | Jeśli nie |
 |---|---|---|
-| `python`, `venv` | 3.10+, the cutmate venv | Run `setup.sh` / `setup.ps1` again |
-| `ffmpeg` | `true` | Install ffmpeg (table above) and restart Claude Code |
-| `node` | `v22…` or newer | Install Node.js 22+ |
-| `packages.faster_whisper` / `mlx_whisper` | `true` for `local` | `setup.sh … --local` |
-| `packages.align` / `packages.track` | `true` | `setup.sh` again |
-| `cuda.devices`, `cuda.errors` | ≥ 1 device, no errors (NVIDIA) | Update the driver, `setup.sh --gpu nvidia --local` |
-| `models.whisper`, `align_pl` / `align_en`, `pose`, `hand` | `true` | `cutmate models --language <pl\|en>` (downloads resume) |
-| `keys` | `true` for your API backend | Set the variable and restart Claude Code |
+| `python`, `venv` | 3.10+, venv cutmate | Uruchom ponownie `setup.sh` / `setup.ps1` |
+| `ffmpeg` | `true` | Zainstaluj ffmpeg (tabela wyżej) i zrestartuj Claude Code |
+| `node` | `v22…` lub nowszy | Zainstaluj Node.js 22+ |
+| `packages.faster_whisper` / `mlx_whisper` | `true` dla `local` | `setup.sh … --local` |
+| `packages.align` / `packages.track` | `true` | Ponownie `setup.sh` |
+| `cuda.devices`, `cuda.errors` | ≥ 1 urządzenie, brak błędów (NVIDIA) | Zaktualizuj sterownik, `setup.sh --gpu nvidia --local` |
+| `models.whisper`, `align_pl` / `align_en`, `pose`, `hand` | `true` | `cutmate models --language <pl\|en>` (pobieranie się wznawia) |
+| `keys` | `true` dla twojego backendu API | Ustaw zmienną i zrestartuj Claude Code |
 | `carve` | `true` | `/plugin install hyperframes@hyperframes` |
-| `config` | `ok` | Run `/cutmate:setup` (it rewrites a broken config) |
-| `vendor` | `ok` | `cutmate vendor` (downloads GSAP, sha-checked) |
-| `plugin_root` | Your current plugin folder | The plugin moved or was updated: run `/cutmate:setup` again |
+| `config` | `ok` | Uruchom `/cutmate:setup` (nadpisze uszkodzoną konfigurację) |
+| `vendor` | `ok` | `cutmate vendor` (pobiera GSAP i sprawdza sumy sha) |
+| `plugin_root` | Twój aktualny folder pluginu | Plugin został przeniesiony albo zaktualizowany: uruchom ponownie `/cutmate:setup` |
 
-### Common problems
+### Częste problemy
 
-| Symptom | Fix |
+| Objaw | Rozwiązanie |
 |---|---|
-| `cutmate: npx not found (Node.js ≥ 22 needed)` | Install Node.js 22+, restart Claude Code |
-| `vendored library … not found` at build time | `cutmate vendor` |
+| `cutmate: npx not found (Node.js ≥ 22 needed)` | Zainstaluj Node.js 22+, zrestartuj Claude Code |
+| `vendored library … not found` podczas builda | `cutmate vendor` |
 | `alignment models not installed. Run /cutmate:setup.` | `cutmate models --language <l>` |
-| `selftest` shows `device: cpu` on NVIDIA | `cutmate doctor` → `cuda.errors`; `setup.sh --gpu nvidia --local` |
-| `WARN hyperframes check ran out of time` | A busy machine, not an error: the render goes on |
-| `Chrome not found` from `cutmate shot` | Install Google Chrome, or put a screenshot into `broll/` yourself |
-| A download timed out (`cutmate models`, the first `selftest`) | Run the same command again: downloads resume |
-| Windows: a tool installed with winget is still "missing" | Restart Claude Code, then run `/cutmate:setup` again |
+| `selftest` pokazuje `device: cpu` na NVIDIA | `cutmate doctor` → `cuda.errors`; `setup.sh --gpu nvidia --local` |
+| `WARN hyperframes check ran out of time` | Zajęty komputer, a nie błąd: render idzie dalej |
+| `Chrome not found` z `cutmate shot` | Zainstaluj Google Chrome albo sam wrzuć zrzut ekranu do `broll/` |
+| Przekroczony czas pobierania (`cutmate models`, pierwszy `selftest`) | Uruchom to samo polecenie ponownie: pobieranie się wznawia |
+| Windows: narzędzie zainstalowane przez winget nadal jest „missing” | Zrestartuj Claude Code, a potem uruchom ponownie `/cutmate:setup` |
 
-Still stuck? Open an issue with the output of `cutmate doctor`. It contains no API keys, only `true` / `false` for each key variable.
+Dalej nie działa? Otwórz issue z wynikiem `cutmate doctor`. Nie ma w nim kluczy API, tylko `true` / `false` dla każdej zmiennej z kluczem.

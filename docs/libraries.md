@@ -1,97 +1,97 @@
-# Libraries, models and licences
+# Biblioteki, modele i licencje
 
-This page lists everything cutmate uses: what it is, which version, its licence, and why cutmate needs it. cutmate itself is [MIT](../LICENSE). Each third-party component keeps its own licence.
+Ta strona wymienia wszystko, czego używa cutmate: co to jest, w jakiej wersji, na jakiej licencji i po co cutmate tego potrzebuje. Sam cutmate jest na licencji [MIT](../LICENSE). Każdy komponent zewnętrzny zachowuje własną licencję.
 
-Versions are the ones pinned in `pyproject.toml`, `assets/vendor/MANIFEST.json`, `core/cutmate/hf.py` and the model IDs in the code. Python package licences are as declared in each package's metadata.
+Wersje to te przypięte w `pyproject.toml`, `assets/vendor/MANIFEST.json`, `core/cutmate/hf.py` oraz identyfikatory modeli w kodzie. Licencje pakietów Pythona są podane tak, jak deklarują je metadane każdego pakietu.
 
-## JavaScript libraries (vendored, offline)
+## Biblioteki JavaScript (dołączone, offline)
 
-These files are loaded into the HyperFrames composition. They are pinned with a sha256 per file in [`assets/vendor/MANIFEST.json`](../assets/vendor/MANIFEST.json), and their licence texts are in [`assets/vendor/LICENSES/`](../assets/vendor/LICENSES/). Builds copy only the libraries a project uses, and they never fetch from a CDN.
+Te pliki są ładowane do kompozycji HyperFrames. Każdy plik jest przypięty sumą sha256 w [`assets/vendor/MANIFEST.json`](../assets/vendor/MANIFEST.json), a teksty licencji są w [`assets/vendor/LICENSES/`](../assets/vendor/LICENSES/). Build kopiuje tylko biblioteki, których projekt używa, i nigdy nie pobiera ich z CDN.
 
-| Library | Version | Licence | Shipped in repo | Why |
+| Biblioteka | Wersja | Licencja | W repo | Po co |
 |---|---|---|---|---|
-| [GSAP](https://gsap.com) + DrawSVG, MorphSVG, MotionPath, SplitText | 3.14.2 | GSAP Standard "no charge" license | **No** (fetched by `cutmate vendor`) | The timeline that every theme component animates on (one paused, seekable timeline) |
-| [three.js](https://threejs.org) + RoomEnvironment, TextGeometry, FontLoader, GLTFLoader, EffectComposer / RenderPass / UnrealBloomPass / OutputPass / ShaderPass / SavePass / MaskPass, Copy / LuminosityHighPass / Output shaders, BufferGeometryUtils, Droid Sans Bold and Helvetiker Bold typefaces | 0.181.2 | MIT | Yes | 3D effects: exploded-view, globe, burst-out, showcase-3d, energy-ball; bloom glow; 3D text (Droid Sans Bold covers Polish letters) |
-| [postprocessing](https://github.com/pmndrs/postprocessing) | 6.39.5 | Zlib | Yes | pmndrs post-processing passes, loaded only when an effect imports `postprocessing` (or calls `U.post`) |
-| [anime.js](https://animejs.com) | 4.5.0 | MIT | Yes | `kinetic-word` (hundreds of shapes flying into letterforms) and custom effects (`U.anime`) |
-| [lottie-web](https://github.com/airbnb/lottie-web) | 5.12.2 | MIT | Yes | Lottie animations in custom effects (`U.lottie`) |
-| [KaTeX](https://katex.org) + fonts | 0.19.0 | MIT | Yes | Math formulas in effects (`U.tex`) |
-| [Rough.js](https://roughjs.com) | 4.6.6 | MIT | Yes | Hand-drawn style for `flow` (`style: "rough"`) and `U.rough` |
-| [D3](https://d3js.org) | 7.9.0 | ISC | Yes | Available to custom effects (data, scales, shapes); loaded only when an effect uses it |
+| [GSAP](https://gsap.com) + DrawSVG, MorphSVG, MotionPath, SplitText | 3.14.2 | GSAP Standard "no charge" license | **Nie** (pobierany przez `cutmate vendor`) | Oś czasu, na której animuje się każdy komponent motywu (jedna zatrzymana, przewijalna oś czasu) |
+| [three.js](https://threejs.org) + RoomEnvironment, TextGeometry, FontLoader, GLTFLoader, EffectComposer / RenderPass / UnrealBloomPass / OutputPass / ShaderPass / SavePass / MaskPass, shadery Copy / LuminosityHighPass / Output, BufferGeometryUtils, kroje Droid Sans Bold i Helvetiker Bold | 0.181.2 | MIT | Tak | Efekty 3D: exploded-view, globe, burst-out, showcase-3d, energy-ball; poświata bloom; tekst 3D (Droid Sans Bold ma polskie znaki) |
+| [postprocessing](https://github.com/pmndrs/postprocessing) | 6.39.5 | Zlib | Tak | Przebiegi post-processingu od pmndrs, ładowane tylko wtedy, gdy efekt importuje `postprocessing` (albo wywołuje `U.post`) |
+| [anime.js](https://animejs.com) | 4.5.0 | MIT | Tak | `kinetic-word` (setki kształtów wlatujących w litery) i własne efekty (`U.anime`) |
+| [lottie-web](https://github.com/airbnb/lottie-web) | 5.12.2 | MIT | Tak | Animacje Lottie we własnych efektach (`U.lottie`) |
+| [KaTeX](https://katex.org) + fonty | 0.19.0 | MIT | Tak | Wzory matematyczne w efektach (`U.tex`) |
+| [Rough.js](https://roughjs.com) | 4.6.6 | MIT | Tak | Styl rysowany odręcznie dla `flow` (`style: "rough"`) i `U.rough` |
+| [D3](https://d3js.org) | 7.9.0 | ISC | Tak | Dostępne dla własnych efektów (dane, skale, kształty); ładowane tylko wtedy, gdy efekt go używa |
 
 ### GSAP
 
-GSAP's standard licence ([gsap.com/standard-license](https://gsap.com/standard-license)) lets you use GSAP for free, but it does not clearly allow redistributing its files in a third-party repository. So cutmate **does not ship GSAP**. `MANIFEST.json` marks it `"redistribute": false` and keeps only the file hashes and the licence text.
+Standardowa licencja GSAP ([gsap.com/standard-license](https://gsap.com/standard-license)) pozwala używać GSAP za darmo, ale nie pozwala jednoznacznie rozpowszechniać jego plików w cudzym repozytorium. Dlatego cutmate **nie zawiera GSAP**. `MANIFEST.json` oznacza go jako `"redistribute": false` i trzyma tylko sumy kontrolne plików i tekst licencji.
 
-`cutmate vendor` (run automatically by `install/setup.sh` and `install/setup.ps1`) downloads the five files from `https://cdn.jsdelivr.net/npm/gsap@3.14.2/` into `~/.cutmate/vendor/gsap@3.14.2/`. It checks each against its sha256 and writes nothing that fails the check. `cutmate doctor` → `vendor` reports whether it is present. `.gitignore` excludes `assets/vendor/gsap@*/`, so a maintainer's local copy is never committed.
+`cutmate vendor` (uruchamiane automatycznie przez `install/setup.sh` i `install/setup.ps1`) pobiera pięć plików z `https://cdn.jsdelivr.net/npm/gsap@3.14.2/` do `~/.cutmate/vendor/gsap@3.14.2/`. Sprawdza każdy z jego sumą sha256 i nie zapisuje niczego, co nie przejdzie kontroli. `cutmate doctor` → `vendor` pokazuje, czy GSAP jest na miejscu. `.gitignore` wyklucza `assets/vendor/gsap@*/`, więc lokalna kopia opiekuna projektu nigdy nie trafia do commita.
 
-## Rendering
+## Renderowanie
 
-| Tool | Version | Licence | Why |
+| Narzędzie | Wersja | Licencja | Po co |
 |---|---|---|---|
-| [HyperFrames](https://github.com/heygen-com/hyperframes) (npm CLI, run with `npx`) | 0.8.157 (pinned) | Apache-2.0 | Renders the HTML composition to MP4 in headless Chrome; also `check`, `snapshot`, `remove-background` (speaker cut-out for `bg` effects) and `media-use` (music beds and images) |
-| HyperFrames Claude Code plugin | From its marketplace | Apache-2.0 | Its audio skill's carve script ducks the music bed under the voice |
-| [Node.js](https://nodejs.org) | ≥ 22 | MIT | Runs HyperFrames |
-| [ffmpeg](https://ffmpeg.org) | System install | LGPL / GPL (depends on the build) | Decoding, cutting, loudness (`loudnorm`), frames, contact sheets, preview |
-| Google Chrome / Chromium / Edge | System install | Vendor licence | `cutmate shot` page screenshots only |
+| [HyperFrames](https://github.com/heygen-com/hyperframes) (CLI z npm, uruchamiane przez `npx`) | 0.8.157 (przypięta) | Apache-2.0 | Renderuje kompozycję HTML do MP4 w headless Chrome; do tego `check`, `snapshot`, `remove-background` (wycięcie mówiącego z tła dla efektów `bg`) i `media-use` (podkłady muzyczne i obrazy) |
+| Plugin HyperFrames do Claude Code | Z jego marketplace'u | Apache-2.0 | Skrypt carve z jego skilla audio ścisza podkład muzyczny pod głosem |
+| [Node.js](https://nodejs.org) | ≥ 22 | MIT | Uruchamia HyperFrames |
+| [ffmpeg](https://ffmpeg.org) | Instalacja systemowa | LGPL / GPL (zależnie od wersji) | Dekodowanie, cięcie, głośność (`loudnorm`), klatki, arkusze klatek, podgląd |
+| Google Chrome / Chromium / Edge | Instalacja systemowa | Licencja producenta | Tylko zrzuty stron przez `cutmate shot` |
 
-cutmate calls ffmpeg, Node.js and Chrome as external programs. It does not bundle or link them.
+cutmate wywołuje ffmpeg, Node.js i Chrome jako zewnętrzne programy. Nie dołącza ich ani nie linkuje.
 
-## Python packages
+## Pakiety Pythona
 
-Installed into `~/.cutmate/venv` by `install/setup.sh` / `install/setup.ps1`.
+Instalowane do `~/.cutmate/venv` przez `install/setup.sh` / `install/setup.ps1`.
 
-| Package | Constraint | Licence | Extra | Why |
+| Pakiet | Ograniczenie wersji | Licencja | Dodatek | Po co |
 |---|---|---|---|---|
-| numpy | ≥ 1.24 | BSD-3-Clause (plus bundled permissive licences) | core | Audio arrays: RMS scans, QA, alignment |
-| Pillow | ≥ 10.1 | MIT-CMU | core | Contact sheets, thumbnails, preview plates, colour extraction |
-| requests | ≥ 2.31 | Apache-2.0 | core | API backends (Groq, OpenAI, ElevenLabs) |
-| fontTools | ≥ 4.47 | MIT | core | Font checks: Polish glyph coverage, digit sheets |
-| faster-whisper (+ CTranslate2) | ≥ 1.2, < 2 | MIT | `faster` | Local Whisper large-v3 on NVIDIA GPU or CPU, with word timestamps |
-| mlx-whisper | ≥ 0.4.3 | MIT | `mlx` | Local Whisper large-v3 on Apple Silicon |
-| torch | ≥ 2.2 | BSD-style (see its package metadata) | `align` | Runs the wav2vec2 aligner (CPU wheel on Windows / Linux) |
-| transformers (+ huggingface_hub) | ≥ 4.40 | Apache-2.0 | `align` | Loads wav2vec2 and downloads models from the Hugging Face Hub |
-| mediapipe | ≥ 0.10.20 | Apache-2.0 | `track` | Face, hand, fingertip and pointing tracking |
-| nvidia-cublas-cu12, nvidia-cudnn-cu12 9.x | From pip | NVIDIA software licence | NVIDIA + `--local` | CUDA 12 runtime libraries for faster-whisper, so no system CUDA toolkit is needed |
-| pytest, responses | ≥ 8, ≥ 0.25 | MIT, Apache-2.0 | `dev` | Tests |
+| numpy | ≥ 1.24 | BSD-3-Clause (plus dołączone licencje permisywne) | core | Tablice audio: skany RMS, QA, wyrównanie |
+| Pillow | ≥ 10.1 | MIT-CMU | core | Arkusze klatek, miniatury, plansze podglądu, wyciąganie kolorów |
+| requests | ≥ 2.31 | Apache-2.0 | core | Backendy API (Groq, OpenAI, ElevenLabs) |
+| fontTools | ≥ 4.47 | MIT | core | Kontrole fontów: pokrycie polskich znaków, arkusze cyfr |
+| faster-whisper (+ CTranslate2) | ≥ 1.2, < 2 | MIT | `faster` | Lokalny Whisper large-v3 na GPU NVIDIA albo CPU, ze znacznikami czasu słów |
+| mlx-whisper | ≥ 0.4.3 | MIT | `mlx` | Lokalny Whisper large-v3 na Apple Silicon |
+| torch | ≥ 2.2 | W stylu BSD (zobacz metadane pakietu) | `align` | Uruchamia model wyrównujący wav2vec2 (wersja CPU na Windowsie / Linuksie) |
+| transformers (+ huggingface_hub) | ≥ 4.40 | Apache-2.0 | `align` | Ładuje wav2vec2 i pobiera modele z Hugging Face Hub |
+| mediapipe | ≥ 0.10.20 | Apache-2.0 | `track` | Śledzenie twarzy, dłoni, czubków palców i wskazywania |
+| nvidia-cublas-cu12, nvidia-cudnn-cu12 9.x | Z pip | Licencja oprogramowania NVIDIA | NVIDIA + `--local` | Biblioteki uruchomieniowe CUDA 12 dla faster-whisper, więc systemowy CUDA Toolkit nie jest potrzebny |
+| pytest, responses | ≥ 8, ≥ 0.25 | MIT, Apache-2.0 | `dev` | Testy |
 
-## Models
+## Modele
 
-| Model | Source | Licence | Used for | Size |
+| Model | Źródło | Licencja | Do czego | Rozmiar |
 |---|---|---|---|---|
-| Whisper large-v3, [`Systran/faster-whisper-large-v3`](https://huggingface.co/Systran/faster-whisper-large-v3) | OpenAI, converted to CTranslate2 | MIT | Local transcription (NVIDIA / CPU) | ≈ 3 GB |
-| Whisper large-v3, [`mlx-community/whisper-large-v3-mlx`](https://huggingface.co/mlx-community/whisper-large-v3-mlx) | OpenAI, converted to MLX | MIT | Local transcription (Apple Silicon) | ≈ 3 GB |
-| [`jonatasgrosman/wav2vec2-large-xlsr-53-polish`](https://huggingface.co/jonatasgrosman/wav2vec2-large-xlsr-53-polish) | Hugging Face | Apache-2.0 | Polish word alignment (captions) | ≈ 1 GB |
-| [`jonatasgrosman/wav2vec2-large-xlsr-53-english`](https://huggingface.co/jonatasgrosman/wav2vec2-large-xlsr-53-english) | Hugging Face | Apache-2.0 | English word alignment (captions) | ≈ 1 GB |
-| MediaPipe Pose Landmarker Lite (`pose_landmarker_lite.task`, float16) | Google (storage.googleapis.com), sha256-checked | Apache-2.0 | Face position, pointing | Tens of MB |
-| MediaPipe Hand Landmarker (`hand_landmarker.task`, float16) | Google, sha256-checked | Apache-2.0 | Palms, fingertips, open-palm detection | Tens of MB |
+| Whisper large-v3, [`Systran/faster-whisper-large-v3`](https://huggingface.co/Systran/faster-whisper-large-v3) | OpenAI, przekonwertowany do CTranslate2 | MIT | Lokalna transkrypcja (NVIDIA / CPU) | ≈ 3 GB |
+| Whisper large-v3, [`mlx-community/whisper-large-v3-mlx`](https://huggingface.co/mlx-community/whisper-large-v3-mlx) | OpenAI, przekonwertowany do MLX | MIT | Lokalna transkrypcja (Apple Silicon) | ≈ 3 GB |
+| [`jonatasgrosman/wav2vec2-large-xlsr-53-polish`](https://huggingface.co/jonatasgrosman/wav2vec2-large-xlsr-53-polish) | Hugging Face | Apache-2.0 | Wyrównanie słów po polsku (napisy) | ≈ 1 GB |
+| [`jonatasgrosman/wav2vec2-large-xlsr-53-english`](https://huggingface.co/jonatasgrosman/wav2vec2-large-xlsr-53-english) | Hugging Face | Apache-2.0 | Wyrównanie słów po angielsku (napisy) | ≈ 1 GB |
+| MediaPipe Pose Landmarker Lite (`pose_landmarker_lite.task`, float16) | Google (storage.googleapis.com), ze sprawdzeniem sha256 | Apache-2.0 | Pozycja twarzy, wskazywanie | Dziesiątki MB |
+| MediaPipe Hand Landmarker (`hand_landmarker.task`, float16) | Google, ze sprawdzeniem sha256 | Apache-2.0 | Dłonie, czubki palców, wykrywanie otwartej dłoni | Dziesiątki MB |
 
-`cutmate models` downloads them. The Hugging Face models go to the Hugging Face cache, and the MediaPipe models go to `~/.cutmate/models/`.
+Pobiera je `cutmate models`. Modele Hugging Face trafiają do cache Hugging Face, a modele MediaPipe do `~/.cutmate/models/`.
 
-### API transcription models
+### Modele transkrypcji przez API
 
-| Backend | Model | Terms |
+| Backend | Model | Warunki |
 |---|---|---|
-| Groq | `whisper-large-v3` | Groq's terms of service; your key, your account |
-| OpenAI | `whisper-1` | OpenAI's terms of service |
-| ElevenLabs | `scribe_v2` | ElevenLabs' terms of service |
+| Groq | `whisper-large-v3` | Regulamin Groq; twój klucz, twoje konto |
+| OpenAI | `whisper-1` | Regulamin OpenAI |
+| ElevenLabs | `scribe_v2` | Regulamin ElevenLabs |
 
-With an API backend, cutmate uploads the clip audio (re-encoded to mono 16 kHz MP3) to that provider. With `local`, audio never leaves your machine.
+Przy backendzie przez API cutmate wysyła dźwięk klipu (przekodowany do mono 16 kHz MP3) do danego dostawcy. Przy `local` dźwięk nigdy nie opuszcza twojego komputera.
 
-## Bundled assets
+## Dołączone zasoby
 
-| Asset | Source | Licence |
+| Zasób | Źródło | Licencja |
 |---|---|---|
-| Inter (Medium, ExtraBold, Black), the `clean` theme font | [rsms/inter](https://github.com/rsms/inter) v4.1 | SIL Open Font License 1.1 ([`themes/clean/fonts/OFL-inter.txt`](../themes/clean/fonts/OFL-inter.txt)) |
-| Sound effects: `whoosh`, `pop`, `click`, `impact`, `swell`, `ping` | [Kenney.nl](https://kenney.nl) interface, impact and sci-fi packs | CC0 1.0 ([`assets/sfx/LICENSES.md`](../assets/sfx/LICENSES.md)) |
-| Globe land dots and country labels (`globe/land.json`, `countries.json`) | [Natural Earth](https://www.naturalearthdata.com) 1:110m Admin 0, v5.1.2 | Public domain ([`SOURCE.txt`](../themes/clean/components/custom/globe/SOURCE.txt)) |
-| README banner art | Generated for this project | MIT, with the repo |
+| Inter (Medium, ExtraBold, Black), font motywu `clean` | [rsms/inter](https://github.com/rsms/inter) v4.1 | SIL Open Font License 1.1 ([`themes/clean/fonts/OFL-inter.txt`](../themes/clean/fonts/OFL-inter.txt)) |
+| Efekty dźwiękowe: `whoosh`, `pop`, `click`, `impact`, `swell`, `ping` | Paczki interface, impact i sci-fi od [Kenney.nl](https://kenney.nl) | CC0 1.0 ([`assets/sfx/LICENSES.md`](../assets/sfx/LICENSES.md)) |
+| Kropki lądów i etykiety krajów na globusie (`globe/land.json`, `countries.json`) | [Natural Earth](https://www.naturalearthdata.com) 1:110m Admin 0, v5.1.2 | Domena publiczna ([`SOURCE.txt`](../themes/clean/components/custom/globe/SOURCE.txt)) |
+| Grafika bannera w README | Wygenerowana dla tego projektu | MIT, razem z repo |
 
-Fonts you add to your own themes come only from Google Fonts under the OFL. `cutmate theme font` refuses anything else and saves the `OFL-<family>.txt` next to the font files.
+Fonty, które dodajesz do własnych motywów, pochodzą wyłącznie z Google Fonts na licencji OFL. `cutmate theme font` odrzuca wszystko inne i zapisuje `OFL-<family>.txt` obok plików fontu.
 
-## Optional tools you install yourself
+## Opcjonalne narzędzia, które instalujesz sam
 
-| Tool | Used by | Notes |
+| Narzędzie | Używane przez | Uwagi |
 |---|---|---|
-| [HeyGen CLI](https://developers.heygen.com/cli) ≥ 0.3.0 | Music beds (`music.source=heygen`), AI images | You install it and sign in yourself (`heygen auth login --oauth`) |
-| [yt-dlp](https://github.com/yt-dlp/yt-dlp) | `/cutmate:clone-style` with a link | Downloads one public video for style analysis, only after you say yes; never with cookies or a login |
+| [HeyGen CLI](https://developers.heygen.com/cli) ≥ 0.3.0 | Podkłady muzyczne (`music.source=heygen`), obrazy AI | Instalujesz je i logujesz się sam (`heygen auth login --oauth`) |
+| [yt-dlp](https://github.com/yt-dlp/yt-dlp) | `/cutmate:clone-style` z linkiem | Pobiera jeden publiczny film do analizy stylu, tylko po twojej zgodzie; nigdy z ciasteczkami ani logowaniem |

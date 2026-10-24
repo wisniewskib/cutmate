@@ -1,52 +1,52 @@
-# CLI reference
+# Dokumentacja CLI
 
-The `cutmate` command-line tool is the engine behind the skills. You normally never type it, because Claude runs it for you. It is still useful for scripting, debugging and building your own skills.
+Narzędzie wiersza poleceń `cutmate` to silnik, na którym działają skille. Normalnie nie musisz go wpisywać, bo Claude uruchamia je za ciebie. Przydaje się jednak do skryptów, debugowania i budowania własnych skilli.
 
-**Where it is:** `~/.cutmate/venv/bin/cutmate` (Linux / macOS) or `~/.cutmate/venv/Scripts/cutmate.exe` (Windows); see [installation.md](installation.md#3-the-python-environment). The skills locate it with this line, which works in bash, zsh and Claude Code's Git Bash on Windows:
+**Gdzie jest:** `~/.cutmate/venv/bin/cutmate` (Linux / macOS) albo `~/.cutmate/venv/Scripts/cutmate.exe` (Windows); zobacz [installation.md](installation.md#3-środowisko-pythona). Skille znajdują je tą linią, która działa w bash, zsh i w Git Bash z Claude Code na Windowsie:
 
 ```bash
 CM="$(ls "${CUTMATE_HOME:-$HOME/.cutmate}/venv/bin/cutmate" "${CUTMATE_HOME:-$HOME/.cutmate}/venv/Scripts/cutmate.exe" 2>/dev/null | head -1)"; [ -n "$CM" ] || CM="$(command -v cutmate)"
 "$CM" doctor
 ```
 
-**Conventions**
+**Konwencje**
 
-- `<rec>` is a recording folder; `<out>` is its `out/` folder (for example `~/Videos/short/out`).
-- Commands that take `--language` or `--backend` fall back to the config (`cutmate config show`). Commands that take `--theme` fall back to the config `theme`.
-- Errors print one line, `cutmate: <cause and fix>`, to stderr and exit with code **2**. `render`, `finalize` and `smoke` exit with **1** when the output fails its spec check.
-- Output is UTF-8 on every OS. Quote paths that contain spaces.
+- `<rec>` to folder z nagraniami; `<out>` to jego folder `out/` (na przykład `~/Videos/short/out`).
+- Polecenia, które przyjmują `--language` albo `--backend`, bez nich biorą wartość z konfiguracji (`cutmate config show`). Polecenia, które przyjmują `--theme`, bez niej biorą `theme` z konfiguracji.
+- Błędy wypisują jedną linię `cutmate: <przyczyna i sposób naprawy>` na stderr i kończą się kodem **2**. `render`, `finalize` i `smoke` kończą się kodem **1**, gdy wynik nie przejdzie kontroli specyfikacji.
+- Wyjście jest w UTF-8 na każdym systemie. Ścieżki ze spacjami bierz w cudzysłów.
 
-## Summary
+## Podsumowanie
 
-| Command | Purpose |
+| Polecenie | Do czego służy |
 |---|---|
-| [`transcribe`](#transcribe) | Transcribe every clip in a recording folder |
-| [`formats`](#formats) | Aspect ratio of each clip (rotation-aware) |
-| [`sheet`](#sheet) | Contact sheet of frames |
-| [`probe`](#probe) | Re-transcribe one short window (hidden retakes) |
-| [`rms`](#rms) | Loudness scan in short bins (speech blobs) |
-| [`cut`](#cut) | Cut the A-roll from an EDL |
-| [`align`](#align) | Word timings for the A-roll |
-| [`track`](#track) | Face and hand positions over time |
-| [`build`](#build) | `plan.json` → HyperFrames project |
-| [`preview`](#preview) | Fast 480p preview + `chapters.txt` (long-form checkpoint) |
-| [`render`](#render) | Check, render and finalize the built project |
-| [`finalize`](#finalize) | Loudness fix and spec check of a render |
-| [`qa`](#qa) | QA of a finished video |
-| [`requests`](#requests) | Match `requests.md` against the plan |
-| [`shot`](#shot) | Screenshot a web page for b-roll |
-| [`thumb`](#thumb) | Thumbnail from a frame + title |
-| [`save-effect`](#save-effect) | Keep a custom effect in a theme |
-| [`theme …`](#theme) | Theme drafts: new, list, use, save, check, font, digits, colors |
-| [`theme-check`](#theme-check) | Render every component of a theme (without the lint / stamp of `theme check`) |
-| [`config show` / `config set`](#config) | Show or change the config |
-| [`doctor`](#doctor) | Health report (JSON) |
-| [`models`](#models) | Download the local models |
-| [`vendor`](#vendor) | Fetch GSAP (sha-checked) |
-| [`selftest`](#selftest) | Transcription test on your own clip |
-| [`smoke`](#smoke) | 5 s smoke render |
+| [`transcribe`](#transcribe) | Transkrybuje każdy klip w folderze z nagraniami |
+| [`formats`](#formats) | Proporcje każdego klipu (z uwzględnieniem obrotu) |
+| [`sheet`](#sheet) | Arkusz klatek (contact sheet) |
+| [`probe`](#probe) | Ponowna transkrypcja jednego krótkiego okna (ukryte powtórki) |
+| [`rms`](#rms) | Skan głośności w krótkich przedziałach (plamy mowy) |
+| [`cut`](#cut) | Wycina A-roll według EDL |
+| [`align`](#align) | Czasy słów dla A-rollu |
+| [`track`](#track) | Pozycje twarzy i dłoni w czasie |
+| [`build`](#build) | `plan.json` → projekt HyperFrames |
+| [`preview`](#preview) | Szybki podgląd 480p + `chapters.txt` (punkt kontrolny długich filmów) |
+| [`render`](#render) | Sprawdza, renderuje i finalizuje zbudowany projekt |
+| [`finalize`](#finalize) | Korekta głośności i kontrola specyfikacji renderu |
+| [`qa`](#qa) | QA gotowego filmu |
+| [`requests`](#requests) | Dopasowuje `requests.md` do planu |
+| [`shot`](#shot) | Zrzut strony internetowej na b-roll |
+| [`thumb`](#thumb) | Miniatura z klatki + tytułu |
+| [`save-effect`](#save-effect) | Zachowuje własny efekt w motywie |
+| [`theme …`](#theme) | Szkice motywów: new, list, use, save, check, font, digits, colors |
+| [`theme-check`](#theme-check) | Renderuje każdy komponent motywu (bez lintu / oznaczenia z `theme check`) |
+| [`config show` / `config set`](#config) | Pokazuje albo zmienia konfigurację |
+| [`doctor`](#doctor) | Raport stanu (JSON) |
+| [`models`](#models) | Pobiera modele lokalne |
+| [`vendor`](#vendor) | Pobiera GSAP (ze sprawdzeniem sum sha) |
+| [`selftest`](#selftest) | Test transkrypcji na twoim klipie |
+| [`smoke`](#smoke) | 5-sekundowy render testowy |
 
-## Recording and takes
+## Nagrania i ujęcia
 
 ### transcribe
 
@@ -54,14 +54,14 @@ CM="$(ls "${CUTMATE_HOME:-$HOME/.cutmate}/venv/bin/cutmate" "${CUTMATE_HOME:-$HO
 cutmate transcribe <rec> [--prompt "Claude, Caveman, GitHub"] [--backend local|groq|openai|elevenlabs] [--language pl|en] [--force]
 ```
 
-Transcribes every video file in `<rec>` with word timestamps. Results go to `<rec>/out/work/<clip file name>/`: `transcript.json`, `silences.json` and `<stem>.wav`. Lines starting `SUSPECT long word` mark windows that probably hide a stumble or a retake.
+Transkrybuje każdy plik wideo w `<rec>` ze znacznikami czasu słów. Wyniki trafiają do `<rec>/out/work/<clip file name>/`: `transcript.json`, `silences.json` i `<stem>.wav`. Linie zaczynające się od `SUSPECT long word` oznaczają okna, w których prawdopodobnie kryje się zająknięcie albo powtórka.
 
-| Flag | Meaning |
+| Flaga | Znaczenie |
 |---|---|
-| `--prompt` | Proper names and spelling hints for the model |
-| `--backend` | Override the config backend |
-| `--language` | Override the config language |
-| `--force` | Re-transcribe clips that already have a transcript |
+| `--prompt` | Nazwy własne i wskazówki pisowni dla modelu |
+| `--backend` | Nadpisuje backend z konfiguracji |
+| `--language` | Nadpisuje język z konfiguracji |
+| `--force` | Ponownie transkrybuje klipy, które już mają transkrypcję |
 
 ### formats
 
@@ -69,7 +69,7 @@ Transcribes every video file in `<rec>` with word timestamps. Results go to `<re
 cutmate formats <rec>
 ```
 
-Prints `<clip>: <width>x<height> <9:16|16:9>` per clip (rotation-aware), then `format: 9:16`, `format: 16:9` or `format: mixed`.
+Wypisuje `<clip>: <width>x<height> <9:16|16:9>` dla każdego klipu (z uwzględnieniem obrotu), a potem `format: 9:16`, `format: 16:9` albo `format: mixed`.
 
 ### sheet
 
@@ -77,14 +77,14 @@ Prints `<clip>: <width>x<height> <9:16|16:9>` per clip (rotation-aware), then `f
 cutmate sheet <video> -o <png> [--start 0] [--end <s>] [--step 0.5] [--cols 6]
 ```
 
-Writes a contact sheet of frames with time labels and prints the path(s). More than 48 frames are split into `name_01.png`, `name_02.png`, …
+Zapisuje arkusz klatek z etykietami czasu i wypisuje ścieżkę (lub ścieżki). Ponad 48 klatek jest dzielone na `name_01.png`, `name_02.png`, …
 
-| Flag | Default | Meaning |
+| Flaga | Domyślnie | Znaczenie |
 |---|---|---|
-| `-o`, `--out` | required | Output PNG |
-| `--start` / `--end` | 0 / end of video | Time range in seconds |
-| `--step` | 0.5 | Seconds between frames (> 0) |
-| `--cols` | 6 | Columns (≥ 1) |
+| `-o`, `--out` | wymagana | Wyjściowy PNG |
+| `--start` / `--end` | 0 / koniec filmu | Zakres czasu w sekundach |
+| `--step` | 0.5 | Sekundy między klatkami (> 0) |
+| `--cols` | 6 | Liczba kolumn (≥ 1) |
 
 ### probe
 
@@ -92,7 +92,7 @@ Writes a contact sheet of frames with time labels and prints the path(s). More t
 cutmate probe <wav> --start <s> --end <s> [--prompt "Um, uh, er, hmm."] [--backend …] [--language …]
 ```
 
-Re-transcribes one short window (about 1 s) of a clip's WAV and prints `word@start-end` for each word, with times global to the WAV. Use it to expose false starts that Whisper merged into one long word.
+Ponownie transkrybuje jedno krótkie okno (około 1 s) pliku WAV klipu i wypisuje `word@start-end` dla każdego słowa, z czasami liczonymi od początku pliku WAV. Użyj go, żeby wyłapać falstarty, które Whisper skleił w jedno długie słowo.
 
 ### rms
 
@@ -100,9 +100,9 @@ Re-transcribes one short window (about 1 s) of a clip's WAV and prints `word@sta
 cutmate rms <wav> --start <s> --end <s> [--bin 0.05]
 ```
 
-Prints the RMS level (dB) per bin with a bar, then `blobs: [a-b] …`, the speech blobs. Two blobs inside one "word", or a short spike after a word, point to a retake, a stumble or a mouth click.
+Wypisuje poziom RMS (dB) w każdym przedziale z paskiem, a potem `blobs: [a-b] …`, czyli plamy mowy. Dwie plamy w jednym „słowie” albo krótki skok po słowie wskazują na powtórkę, zająknięcie albo mlaśnięcie.
 
-## Cut, align, track
+## Cięcie, wyrównanie, śledzenie
 
 ### cut
 
@@ -110,7 +110,7 @@ Prints the RMS level (dB) per bin with a bar, then `blobs: [a-b] …`, the speec
 cutmate cut <out>/edl.json
 ```
 
-Cuts `out/aroll.mp4` from the EDL. Segments are encoded one by one (memory-safe for 4K), cuts snap to the frame grid, every segment is levelled to the median segment loudness, and short audio fades go on every cut. It also writes `out/work/edl_timed.json`.
+Wycina `out/aroll.mp4` według EDL. Fragmenty są kodowane po kolei (bezpiecznie dla pamięci nawet przy 4K), cięcia są dociągane do siatki klatek, głośność każdego fragmentu jest wyrównywana do mediany głośności fragmentów, a na każdym cięciu pojawiają się krótkie przejścia audio. Zapisuje też `out/work/edl_timed.json`.
 
 ### align
 
@@ -118,7 +118,7 @@ Cuts `out/aroll.mp4` from the EDL. Segments are encoded one by one (memory-safe 
 cutmate align <out>/edl.json [--language pl|en]
 ```
 
-Forced-aligns the EDL text against `aroll.mp4` with wav2vec2 and writes `out/work/aligned_words.json`. Words marked `(estimated)` mean a segment's text does not match its audio. Run `cut` first.
+Wymusza wyrównanie tekstu z EDL do `aroll.mp4` przy użyciu wav2vec2 i zapisuje `out/work/aligned_words.json`. Słowa oznaczone `(estimated)` oznaczają, że tekst fragmentu nie zgadza się z jego dźwiękiem. Najpierw uruchom `cut`.
 
 ### track
 
@@ -126,9 +126,9 @@ Forced-aligns the EDL text against `aroll.mp4` with wav2vec2 and writes `out/wor
 cutmate track <out> [--force]
 ```
 
-Tracks the face, hands, fingertips and pointing over time with MediaPipe and writes `out/work/tracks.json`. It prints the path and the sample count per track. The work is skipped when `tracks.json` is newer than `aroll.mp4`; `--force` redoes it (needed once for projects tracked before fingertip tracks existed).
+Śledzi w czasie twarz, dłonie, czubki palców i wskazywanie przy użyciu MediaPipe i zapisuje `out/work/tracks.json`. Wypisuje ścieżkę i liczbę próbek dla każdego śladu. Praca jest pomijana, gdy `tracks.json` jest nowszy niż `aroll.mp4`; `--force` robi ją od nowa (potrzebne raz dla projektów śledzonych, zanim pojawiły się ślady czubków palców).
 
-## Build and render
+## Build i render
 
 ### build
 
@@ -136,7 +136,7 @@ Tracks the face, hands, fingertips and pointing over time with MediaPipe and wri
 cutmate build <out> [--theme <name>] [--language pl|en]
 ```
 
-Turns `plan.json` (plus `edl.json`, the aligned words and the tracks) into a HyperFrames project in `out/composition/`. It also writes `captions.srt` and `chapters.txt` when they apply. It prints the warnings (`WARN density`, `WARN wow …`, `WARN panel gap` …), `layout: classic|split-panel`, one `panel:` line per panel item, `project: <path>` and `checkpoints: t1,t2,…` (times worth snapshotting). Bad anchors fail with the segment's word list.
+Zamienia `plan.json` (plus `edl.json`, wyrównane słowa i ślady) w projekt HyperFrames w `out/composition/`. Gdy to ma zastosowanie, zapisuje też `captions.srt` i `chapters.txt`. Wypisuje ostrzeżenia (`WARN density`, `WARN wow …`, `WARN panel gap` …), `layout: classic|split-panel`, po jednej linii `panel:` na element panelu, `project: <path>` i `checkpoints: t1,t2,…` (czasy, w których warto zrobić zrzuty). Błędne kotwice kończą się błędem z listą słów danego fragmentu.
 
 ### preview
 
@@ -144,7 +144,7 @@ Turns `plan.json` (plus `edl.json`, the aligned words and the tracks) into a Hyp
 cutmate preview <out> [--theme <name>] [--language pl|en]
 ```
 
-Writes a fast 480p `out/preview.mp4` (the cut plus chapter plates) and `out/chapters.txt`, then prints the chapters. It is the long-form checkpoint before the slow full render.
+Zapisuje szybki podgląd 480p `out/preview.mp4` (cięcie plus plansze rozdziałów) i `out/chapters.txt`, a potem wypisuje rozdziały. To punkt kontrolny długich filmów przed powolnym pełnym renderem.
 
 ### render
 
@@ -152,7 +152,7 @@ Writes a fast 480p `out/preview.mp4` (the cut plus chapter plates) and `out/chap
 cutmate render <out>
 ```
 
-Runs `hyperframes check`, then `hyperframes render` (progress streamed to the terminal and to `out/work/render.log`), then `finalize`. It writes `out/final.mp4` and `check_*.png` frames at the build's checkpoints. A 9:16 short takes about 1–2 minutes; 16:9 takes about 45–60 minutes per 15 minutes of video.
+Uruchamia `hyperframes check`, potem `hyperframes render` (postęp widać w terminalu i w `out/work/render.log`), a potem `finalize`. Zapisuje `out/final.mp4` i klatki `check_*.png` w punktach kontrolnych z builda. Short 9:16 zajmuje około 1–2 minut; 16:9 około 45–60 minut na każde 15 minut filmu.
 
 ### finalize
 
@@ -160,7 +160,7 @@ Runs `hyperframes check`, then `hyperframes render` (progress streamed to the te
 cutmate finalize <src.mp4> <dst.mp4> [--format 9:16|16:9] [--check 1.5,4.0]
 ```
 
-Brings the full mix to −14 LUFS and checks the spec: 1080×1920 or 1920×1080, 30 fps, H.264 + AAC. It prints `<file>: WxH fps codecs, duration, LUFS — OK` or `SPEC MISMATCH`, and writes a `check_<t>.png` frame for every `--check` time.
+Sprowadza cały miks do −14 LUFS i sprawdza specyfikację: 1080×1920 albo 1920×1080, 30 kl./s, H.264 + AAC. Wypisuje `<file>: WxH fps codecs, duration, LUFS — OK` albo `SPEC MISMATCH` i zapisuje klatkę `check_<t>.png` dla każdego czasu z `--check`.
 
 ### qa
 
@@ -168,9 +168,9 @@ Brings the full mix to −14 LUFS and checks the spec: 1080×1920 or 1920×1080,
 cutmate qa <out> [--no-asr] [--backend …] [--language …]
 ```
 
-Re-transcribes the cut A-roll and flags repeated words and trailing "…" (missed false starts). It also compares the mix with the voice: `LOUD` means SFX or music more than 3 dB over the voice, and `QUIET` means a segment more than 4 dB under the voice median. `--no-asr` runs only the mix check.
+Ponownie transkrybuje pocięty A-roll i oznacza powtórzone słowa oraz końcowe „…” (przeoczone falstarty). Porównuje też miks z głosem: `LOUD` oznacza efekty dźwiękowe albo muzykę głośniejsze od głosu o ponad 3 dB, a `QUIET` fragment cichszy od mediany głosu o ponad 4 dB. `--no-asr` uruchamia tylko kontrolę miksu.
 
-## Requests, b-roll, thumbnails, effects
+## Prośby, b-roll, miniatury, efekty
 
 ### requests
 
@@ -178,7 +178,7 @@ Re-transcribes the cut A-roll and flags repeated words and trailing "…" (misse
 cutmate requests <out>
 ```
 
-Matches every line of `out/requests.md` against the plan and prints `OK`, `MISSING`, `BAD` or `NOTE` per request (surprises are prefixed `SURPRISE`), then `requests: N ok, M missing, K bad`. Needs `work/aligned_words.json`, `work/edl_timed.json` and `plan.json`. The line format is in [usage.md](usage.md#requests-in-chat-or-spoken-in-the-recording).
+Dopasowuje każdą linię z `out/requests.md` do planu i dla każdej prośby wypisuje `OK`, `MISSING`, `BAD` albo `NOTE` (niespodzianki mają przedrostek `SURPRISE`), a potem `requests: N ok, M missing, K bad`. Wymaga `work/aligned_words.json`, `work/edl_timed.json` i `plan.json`. Format linii opisuje [usage.md](usage.md#prośby-na-czacie-albo-powiedziane-w-nagraniu).
 
 ### shot
 
@@ -186,15 +186,15 @@ Matches every line of `out/requests.md` against the plan and prints `OK`, `MISSI
 cutmate shot "<url>" -o <png> [--width 1000] [--height 700] [--light]
 ```
 
-Screenshots a web page (or a local HTML file) with headless Chrome / Chromium / Edge. The page renders in dark mode unless you pass `--light`.
+Robi zrzut strony internetowej (albo lokalnego pliku HTML) przez headless Chrome / Chromium / Edge. Strona renderuje się w trybie ciemnym, chyba że podasz `--light`.
 
 ### thumb
 
 ```bash
-cutmate thumb <out> --at <s> --title "SAME KONKRETY" [--hook "Does it still work?"] [--theme <name>] [--side left|right]
+cutmate thumb <out> --at <s> --title "SAME KONKRETY" [--hook "Czy to nadal działa?"] [--theme <name>] [--side left|right]
 ```
 
-Builds `out/thumbnail.png` and `out/thumbnail.jpg` from the frame at `--at` seconds of the cut (taken from `aroll.mp4`, so there are no burned captions). Shorts get 1080×1920, 16:9 videos get 1280×720. The title wraps to at most 3 lines and the hook to 2. In 16:9, `--side` (default `right`) puts the text box on that side, so pick a frame with the face on the other side.
+Tworzy `out/thumbnail.png` i `out/thumbnail.jpg` z klatki w sekundzie `--at` gotowego cięcia (pobranej z `aroll.mp4`, więc bez wypalonych napisów). Shorty dostają 1080×1920, filmy 16:9 1280×720. Tytuł łamie się na najwyżej 3 linie, a hak na 2. W 16:9 `--side` (domyślnie `right`) ustawia ramkę z tekstem po tej stronie, więc wybierz klatkę z twarzą po drugiej stronie.
 
 ### save-effect
 
@@ -202,9 +202,9 @@ Builds `out/thumbnail.png` and `out/thumbnail.jpg` from the frame at `--at` seco
 cutmate save-effect <out> <name> [--theme <name>] [--description "…"] [--force]
 ```
 
-Lints `out/custom/<name>.html` and copies it (plus its `out/custom/<name>/` asset folder) into `~/.cutmate/themes/<theme>/components/custom/`, recording it in that folder's `index.json`. `--force` replaces an effect of the same name. Effect names are lowercase letters, digits and dashes.
+Lintuje `out/custom/<name>.html` i kopiuje go (razem z folderem zasobów `out/custom/<name>/`) do `~/.cutmate/themes/<theme>/components/custom/`, zapisując go w `index.json` tego folderu. `--force` zastępuje efekt o tej samej nazwie. Nazwy efektów to małe litery, cyfry i myślniki.
 
-## Themes
+## Motywy
 
 ### theme
 
@@ -219,16 +219,16 @@ cutmate theme digits <name>
 cutmate theme colors <image> [<image> ...] [--n 8]
 ```
 
-| Subcommand | What it does |
+| Podpolecenie | Co robi |
 |---|---|
-| `new` | Starts a draft in `~/.cutmate/themes/.drafts/<name>/`, a copy of `--from` (default `clean`). It prints JSON with `name`, `path` and the `direction`. `--mode random` rolls a direction (and can suggest a name); `--seed` makes the roll repeatable; `--avoid` (repeatable) steers away from earlier drafts. It warns when a saved theme already has that name. |
-| `list` | One tab-separated line per theme: `marker`, `name`, `kind` (bundled / user / draft), `checked`, `path` |
-| `use` | Makes a saved theme the default (the config `theme`) |
-| `save` | Moves a checked draft into `~/.cutmate/themes/`. `--force` overwrites, keeping the old version in `themes/.backup/` |
-| `check` | Lints the theme, renders every component in both formats, writes `check/contact.png` and the sheets, and stamps it as checked. This is the gate before `save`. `--clip` uses your footage as the A-roll instead of the test pattern (`--language` defaults to `pl` here); `--saved` checks the saved theme even when a draft has the same name. |
-| `font` | Downloads an OFL Google Font into a **draft** (`text`, `display` or `num` for a digit font), with its licence |
-| `digits` | Renders the theme's numbers in its display / digit font next to look-alike letters (5 vs S, 0 vs O) and prints the PNG path |
-| `colors` | Prints the dominant colours of images as `#hex  NN%` (`--n` colours, default 8) |
+| `new` | Zakłada szkic w `~/.cutmate/themes/.drafts/<name>/` jako kopię `--from` (domyślnie `clean`). Wypisuje JSON z `name`, `path` i `direction`. `--mode random` losuje kierunek (i może zaproponować nazwę); `--seed` sprawia, że losowanie da się powtórzyć; `--avoid` (można podać wiele razy) odsuwa losowanie od wcześniejszych szkiców. Ostrzega, gdy zapisany motyw ma już taką nazwę. |
+| `list` | Jedna linia na motyw, pola rozdzielone tabulatorem: `marker`, `name`, `kind` (bundled / user / draft), `checked`, `path` |
+| `use` | Ustawia zapisany motyw jako domyślny (`theme` w konfiguracji) |
+| `save` | Przenosi sprawdzony szkic do `~/.cutmate/themes/`. `--force` nadpisuje, a starą wersję zostawia w `themes/.backup/` |
+| `check` | Lintuje motyw, renderuje każdy komponent w obu formatach, zapisuje `check/contact.png` i arkusze, a potem oznacza motyw jako sprawdzony. To bramka przed `save`. `--clip` używa twojego nagrania jako A-rollu zamiast obrazu testowego (`--language` ma tu domyślnie `pl`); `--saved` sprawdza zapisany motyw nawet wtedy, gdy istnieje szkic o tej samej nazwie. |
+| `font` | Pobiera font Google na licencji OFL do **szkicu** (`text`, `display` albo `num` dla fontu cyfr), razem z jego licencją |
+| `digits` | Renderuje liczby motywu w jego foncie nagłówków / cyfr obok podobnych liter (5 i S, 0 i O) i wypisuje ścieżkę do PNG |
+| `colors` | Wypisuje dominujące kolory obrazów jako `#hex  NN%` (`--n` kolorów, domyślnie 8) |
 
 ### theme-check
 
@@ -236,9 +236,9 @@ cutmate theme colors <image> [<image> ...] [--n 8]
 cutmate theme-check [--theme <name>] [--language pl|en] [--format 9:16|16:9|all]
 ```
 
-Renders every component of a theme and prints a contact sheet path per format (`check passed (9:16) — contact sheet: …`). Unlike `theme check`, it does not lint, write `contact.png` or stamp the theme.
+Renderuje każdy komponent motywu i wypisuje ścieżkę do arkusza klatek dla każdego formatu (`check passed (9:16) — contact sheet: …`). W odróżnieniu od `theme check` nie lintuje, nie zapisuje `contact.png` i nie oznacza motywu jako sprawdzonego.
 
-## Config and environment
+## Konfiguracja i środowisko
 
 ### config
 
@@ -247,7 +247,7 @@ cutmate config show
 cutmate config set KEY=VALUE [KEY=VALUE ...]
 ```
 
-`show` prints the effective config as JSON. `set` validates and saves, then prints the file path and the new config. All keys are listed in [configuration.md](configuration.md).
+`show` wypisuje obowiązującą konfigurację jako JSON. `set` sprawdza wartości i zapisuje, a potem wypisuje ścieżkę pliku i nową konfigurację. Wszystkie klucze są opisane w [configuration.md](configuration.md).
 
 ### doctor
 
@@ -255,7 +255,7 @@ cutmate config set KEY=VALUE [KEY=VALUE ...]
 cutmate doctor
 ```
 
-Prints a JSON health report: Python, venv, ffmpeg, Node.js, packages, CUDA, models, API keys (present or not, never the values), carve, config, vendor and plugin root. It never fails. See [installation.md](installation.md#troubleshooting-with-cutmate-doctor).
+Wypisuje raport stanu w JSON: Python, venv, ffmpeg, Node.js, pakiety, CUDA, modele, klucze API (czy są ustawione, nigdy ich wartości), carve, konfiguracja, vendor i folder pluginu. Nigdy nie kończy się błędem. Zobacz [installation.md](installation.md#rozwiązywanie-problemów-z-cutmate-doctor).
 
 ### models
 
@@ -263,7 +263,7 @@ Prints a JSON health report: Python, venv, ffmpeg, Node.js, packages, CUDA, mode
 cutmate models [--language pl|en] [--backend local|groq|openai|elevenlabs]
 ```
 
-Downloads the wav2vec2 alignment model for the language, Whisper large-v3 when the backend is `local`, and the MediaPipe pose and hand models. Downloads resume when you run it again.
+Pobiera model wyrównania wav2vec2 dla danego języka, Whisper large-v3, gdy backend to `local`, oraz modele MediaPipe do pozy i dłoni. Po ponownym uruchomieniu pobieranie się wznawia.
 
 ### vendor
 
@@ -271,7 +271,7 @@ Downloads the wav2vec2 alignment model for the language, Whisper large-v3 when t
 cutmate vendor
 ```
 
-Downloads the libraries cutmate may not redistribute (GSAP) from jsDelivr into `~/.cutmate/vendor/`, checks each file against the sha256 in `assets/vendor/MANIFEST.json`, and writes nothing that fails the check. It is idempotent, and prints `gsap@3.14.2: ok` or `fetched …`.
+Pobiera z jsDelivr do `~/.cutmate/vendor/` biblioteki, których cutmate nie może rozpowszechniać (GSAP), sprawdza każdy plik z sumą sha256 w `assets/vendor/MANIFEST.json` i nie zapisuje niczego, co nie przejdzie kontroli. Jest idempotentne i wypisuje `gsap@3.14.2: ok` albo `fetched …`.
 
 ### selftest
 
@@ -279,7 +279,7 @@ Downloads the libraries cutmate may not redistribute (GSAP) from jsDelivr into `
 cutmate selftest --clip <video> [--backend …] [--language …]
 ```
 
-Transcribes the first 30 s of your clip and prints `backend: … · device: … · compute: …`, the word count and timing, and the first words with timestamps. `--clip` is required unless a bundled sample for the language exists.
+Transkrybuje pierwsze 30 s twojego klipu i wypisuje `backend: … · device: … · compute: …`, liczbę słów i czas trwania oraz pierwsze słowa ze znacznikami czasu. `--clip` jest wymagane, chyba że istnieje wbudowana próbka dla danego języka.
 
 ### smoke
 
@@ -287,4 +287,4 @@ Transcribes the first 30 s of your clip and prints `backend: … · device: … 
 cutmate smoke [--clip <video>] [--music <audio>] [--format 9:16|16:9] [--workdir <dir>]
 ```
 
-Runs a 5-second end-to-end render (a title plus captions, and an optional music bed) in `~/.cutmate/smoke/` or `--workdir`. It prints `final:` and `frame:` (a PNG at 1.5 s). Without `--clip` it uses a plain coloured background. The clip must be at least 2 s long.
+Robi 5-sekundowy render od początku do końca (tytuł plus napisy i opcjonalny podkład muzyczny) w `~/.cutmate/smoke/` albo w `--workdir`. Wypisuje `final:` i `frame:` (PNG z 1,5 s). Bez `--clip` używa jednolitego kolorowego tła. Klip musi mieć co najmniej 2 s.
