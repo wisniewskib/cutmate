@@ -25,9 +25,9 @@ cutmate to open-source'owy plugin do Claude Code. Wskazujesz mu folder z surowym
 - **Efekty na życzenie**, na czacie albo powiedziane na głos w nagraniu („tu daj kosmiczne tło”). Gdy nic wbudowanego nie pasuje, Claude pisze nowy efekt. Te, które ci się spodobają, możesz zapisać w swoim motywie.
 - **Efekty sterowane gestem.** MediaPipe śledzi twarz i dłonie, więc efekt może pojawić się na otwartej dłoni albo w miejscu, które wskazujesz palcem.
 - **Motywy:** neutralny motyw `clean`, twoje własne kolory i fonty, „zaskocz mnie” (losowy, odważny wygląd) albo klon stylu filmu, który ci się podoba. Klon potrafi też skopiować układ ze stałym panelem u góry.
-- **Fact-check, QA i miniatura.** Każde twierdzenie jest sprawdzane w źródle przed cięciem. Po renderze cutmate szuka przeoczonych powtórek i sprawdza poziomy w miksie. Miniatura powstaje z klatki i tytułu.
+- **Fact-check, QA i miniatura.** Gdy fact-check jest włączony (`steps.factcheck`), Claude sprawdza twierdzenia możliwe do zweryfikowania, a build automatycznie oznacza tylko niektóre liczby (liczniki, wartości `stat-card`, podsumowanie `checklist`), których nie potwierdza `factcheck.md`. Po renderze cutmate szuka przeoczonych powtórek i sprawdza poziomy w miksie. Miniatura powstaje z klatki i tytułu.
 - **Transkrypcja lokalna albo przez API:** Whisper large-v3 na twoim GPU (NVIDIA CUDA lub Apple Silicon) albo Groq, OpenAI czy ElevenLabs.
-- **Rendery offline.** Każda biblioteka JavaScript ma przypiętą wersję i sprawdzaną sumę sha, więc build i render nigdy nie sięgają do CDN.
+- **Rendery offline.** Każda biblioteka JavaScript ma przypiętą wersję i sprawdzaną sumę sha, a zasoby kompozycji są lokalne, więc render nie sięga do CDN. Sieć jest potrzebna tylko przy pierwszym uruchomieniu narzędzi (`npx hyperframes`, `@hyperframes/core` dla muzyki, GSAP przez `cutmate vendor`); potem rendery działają offline.
 
 ## Szybki start
 
@@ -52,7 +52,7 @@ claude --plugin-dir ./cutmate
 /cutmate:setup
 ```
 
-**3. Zmontuj film.** Wrzuć surowe nagrania do jednego folderu. cutmate nigdy ich nie zmienia; wszystko, co tworzy, trafia do `<folder>/out/`.
+**3. Zmontuj film.** Wrzuć surowe nagrania do jednego folderu. cutmate nigdy ich nie zmienia; wszystko, co generuje, trafia do `<folder>/out/`. Folder `broll/` to wejścia (twoje pliki oraz pobrane zrzuty stron i obrazy); cutmate nigdy nie nadpisuje w nim istniejących plików.
 
 ```text
 /cutmate:edit ~/Videos/my-short

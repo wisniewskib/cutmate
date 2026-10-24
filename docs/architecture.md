@@ -1,6 +1,6 @@
 # Architektura
 
-Ta strona wyjaśnia, jak zbudowany jest cutmate: kto o czym decyduje, gdzie leżą pliki, jakie są dwa kontrakty między Claude'em a silnikiem (`edl.json` i `plan.json`) i jak rendery pozostają offline i deterministyczne.
+Ta strona wyjaśnia, jak zbudowany jest cutmate: kto o czym decyduje, gdzie leżą pliki, jakie są dwa kontrakty między Claude'em a silnikiem (`edl.json` i `plan.json`) i jak rendery pozostają deterministyczne i (po pierwszym pobraniu narzędzi) działają offline.
 
 ## Główna idea: Claude decyduje, CLI wykonuje
 
@@ -11,7 +11,7 @@ cutmate składa się z dwóch połówek:
 | **Skille** (`skills/*/SKILL.md`) | Instrukcje, którymi kieruje się Claude Code | Ocena montażowa: czytanie klatek, wybór ujęć, fact-checking, mapowanie próśb, planowanie grafik, sprawdzanie zrzutów, rozmowa z tobą |
 | **Silnik** (`core/cutmate/`, CLI `cutmate`) | Python 3.10+ | Wszystko, co musi być dokładne i powtarzalne: transkrypcja, cięcie, głośność, wyrównanie, śledzenie, budowanie i renderowanie kompozycji, walidacja, QA |
 
-Obie połówki komunikują się przez **pliki w `out/`**, nigdy przez ukryty stan. Każdy krok zapisuje plik, następny go czyta, a `/cutmate:edit` wznawia pracę od pierwszego brakującego. Ponieważ każda decyzja jest czytelnym plikiem (`takes.md`, `edl.json`, `plan.json`, `requests.md`), możesz przejrzeć montaż albo zmienić go ręcznie.
+Obie połówki komunikują się przez **pliki w `out/`**, nigdy przez ukryty stan. Klipy źródłowe nie są modyfikowane, a `broll/` służy wyłącznie jako wejście (nowe pliki dostają unikalne nazwy, istniejące nie są nadpisywane). Każdy krok zapisuje plik, następny go czyta, a `/cutmate:edit` wznawia pracę od pierwszego brakującego. Ponieważ każda decyzja jest czytelnym plikiem (`takes.md`, `edl.json`, `plan.json`, `requests.md`), możesz przejrzeć montaż albo zmienić go ręcznie.
 
 Silnik jest surowy. Waliduje każdy plan i odrzuca błędne kotwice, nakładające się budżety, zakazany kod w efektach, brakujące biblioteki i nieaktualne ślady, zawsze z jednolinijkowym komunikatem, który mówi, jak to naprawić. Skille są napisane tak, żeby Claude naprawił każdy błąd i przemyślał każde `WARN`, zanim cokolwiek zobaczysz.
 
@@ -186,7 +186,7 @@ Rendery przewijają do klatek niezależnie, często równolegle, więc każda kl
 
 ## Biblioteki offline
 
-**Build i render nigdy nie pobierają biblioteki z sieci.** Każdy plik JavaScript i CSS, który kompozycja może załadować, jest przypięty w `assets/vendor/MANIFEST.json` razem z wersją, adresem źródła, licencją i **sumą sha256 każdego pliku**.
+**Zasoby ładowane przez kompozycję są lokalne (vendorowane), więc render nie sięga do CDN.** Każdy plik JavaScript i CSS, który kompozycja może załadować, jest przypięty w `assets/vendor/MANIFEST.json` razem z wersją, adresem źródła, licencją i **sumą sha256 każdego pliku**.
 
 | Biblioteka | Wersja | W repo? |
 |---|---|---|
@@ -200,6 +200,8 @@ Rendery przewijają do klatek niezależnie, często równolegle, więc każda kl
 | **GSAP** (+ DrawSVG, MorphSVG, MotionPath, SplitText) | 3.14.2 | **Nie**: `"redistribute": false` |
 
 Licencja GSAP nie pozwala jednoznacznie na rozpowszechnianie, więc repo zawiera tylko tekst jej licencji i sumy kontrolne. `cutmate vendor` pobiera pliki z jsDelivr do `~/.cutmate/vendor/gsap@3.14.2/`, sprawdza każdy z manifestem i nie zapisuje niczego, co nie przejdzie kontroli. `setup.sh` / `setup.ps1` uruchamiają je automatycznie, a `cutmate doctor` → `vendor` pokazuje stan. `build` rozwiązuje każdą bibliotekę potrzebną projektowi **przed zapisaniem jakiegokolwiek pliku**, więc brakujący GSAP kończy się czystym błędem z „run `cutmate vendor`”.
+
+Sieć bywa potrzebna przy pierwszym uruchomieniu narzędzi, nie przy samym ładowaniu zasobów: `npx hyperframes@0.8.157` musi najpierw trafić do cache npm, `@hyperframes/core@0.8.157` jest instalowane przez `npm i` w projekcie, gdy build robi voice carve podkładu muzycznego (`core/cutmate/music.py`), a GSAP pobiera `cutmate vendor`. Gdy to wszystko jest już na miejscu, rendery działają offline.
 
 Podczas builda do `composition/assets/vendor/` kopiowane są tylko te biblioteki, których projekt faktycznie używa. Dla opiekunów projektu: `tools/vendor_libs.py` pobiera wszystko od nowa, generuje ponownie manifest i licencje oraz odbudowuje dane globusa z Natural Earth.
 

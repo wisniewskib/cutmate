@@ -25,12 +25,12 @@ cutmate config set language=en music.volume=0.3       # ustawia jedną lub więc
 | `transcription` | `local`, `groq`, `openai`, `elevenlabs` | `local` | Backend transkrypcji dla `transcribe`, `probe`, `qa`, `selftest` |
 | `language` | `pl`, `en` | `pl` | Język filmu: transkrypcja, model wyrównania, wbudowane etykiety |
 | `theme` | Nazwa motywu (litery, cyfry, `_`, `-`) | `clean` | Motyw domyślny; musi istnieć w `~/.cutmate/themes/` albo być wbudowany |
-| `steps.factcheck` | `true`, `false` | `true` | Sprawdza każde twierdzenie przed cięciem; build ostrzega o niepotwierdzonych liczbach |
+| `steps.factcheck` | `true`, `false` | `true` | Claude sprawdza twierdzenia możliwe do zweryfikowania przed cięciem; build ostrzega tylko o części niepotwierdzonych liczb |
 | `steps.qa` | `true`, `false` | `true` | Uruchamia `cutmate qa` po renderze |
 | `steps.thumbnail` | `true`, `false` | `true` | Tworzy `thumbnail.png` / `.jpg` |
 | `music.source` | `heygen`, `folder`, `none` | `none` | Skąd pochodzi podkład muzyczny |
 | `music.folder` | Ścieżka do folderu (albo `""` / `null`, żeby wyczyścić) | `null` | Używany, gdy `music.source=folder`; ścieżka jest zapisywana jako bezwzględna |
-| `music.volume` | Liczba od 0 do 2 | `0.45` | Poziom podkładu względem głosu |
+| `music.volume` | Liczba od 0 do 2 | `0.45` | Poziom podkładu względem głosu (bez voice carve build go zmniejsza o połowę, zobacz [Muzyka](#muzyka)) |
 | `captions.9:16` | `burn`, `srt`, `both`, `none` | `burn` | Tryb napisów dla shortów |
 | `captions.16:9` | `burn`, `srt`, `both`, `none` | `srt` | Tryb napisów dla długich filmów |
 
@@ -90,8 +90,8 @@ cutmate config set music.source=none
 **Jak miksowany jest podkład:**
 
 - Jest zapętlany albo przycinany do długości filmu, sprowadzany do −14 LUFS (tak samo jak głos) i dostaje 0,8 s narastania na początku oraz do 1,8 s wyciszenia na końcu.
-- Leży pod głosem na poziomie `music.volume` (domyślnie 0.45).
-- Gdy zainstalowany jest skill audio z pluginu HyperFrames, podkład przechodzi **carve**: ścisza się pod mową (ducking). `cutmate doctor` pokazuje wtedy `"carve": true`. Bez niego podkład gra na stałym poziomie, a build wypisuje linię `WARN music:`.
+- Leży pod głosem na poziomie `music.volume` (domyślnie 0.45). Gdy voice carve jest niedostępny, build **zmniejsza tę wartość o połowę** (domyślnie do 0.225) i wypisuje `WARN music: no voice carve — bed volume halved to …`.
+- Gdy zainstalowany jest skill audio z pluginu HyperFrames, podkład przechodzi **carve**: ścisza się pod mową (ducking). `cutmate doctor` pokazuje wtedy `"carve": true`. Bez niego podkład gra na stałym poziomie (po zmniejszeniu głośności o połowę, jak wyżej), a build wypisuje linię `WARN music:`.
 - Po renderze `finalize` jeszcze raz sprowadza cały miks do −14 LUFS.
 
 Dla pojedynczego filmu Claude może ustawić konkretny plik w `plan.json`: `"music": {"src": "/abs/path/bed.mp3"}`, opcjonalnie z `"volume"`, które nadpisuje konfigurację. Przy HeyGen bez zalogowania montaż idzie dalej bez muzyki i informuje o tym w `EDIT_NOTES.md`; Claude nigdy nie loguje się za ciebie.
@@ -104,7 +104,7 @@ cutmate config set steps.factcheck=false steps.qa=true steps.thumbnail=true
 
 | Krok | Włączony | Wyłączony |
 |---|---|---|
-| `factcheck` | Claude weryfikuje każde twierdzenie przez wyszukiwanie w sieci i stronę źródłową, i zapisuje `factcheck.md`. Werdykt ❌ albo ⚠️ wstrzymuje montaż. | Bez `factcheck.md`; build pomija ostrzeżenia o liczbach |
+| `factcheck` | Claude weryfikuje twierdzenia możliwe do sprawdzenia przez wyszukiwanie w sieci i stronę źródłową, i zapisuje `factcheck.md`. Werdykt ❌ albo ⚠️ wstrzymuje montaż. | Bez `factcheck.md`; build pomija ostrzeżenia o liczbach |
 | `qa` | `cutmate qa` ponownie transkrybuje cięcie, żeby znaleźć przeoczone powtórki, i oznacza muzykę albo efekty dźwiękowe głośniejsze od głosu oraz zbyt ciche fragmenty | Bez kontroli QA |
 | `thumbnail` | `thumbnail.png` i `thumbnail.jpg` z wybranej klatki plus tytuł i hak | Bez miniatury |
 

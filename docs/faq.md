@@ -18,7 +18,7 @@ Tak. Obsługiwane są Windows, macOS i Linux. Na Windowsie Claude Code uruchamia
 To zależy od twojego komputera i filmu. Orientacyjnie short 9:16 renderuje się około 1–2 minut, a film 16:9 około 45–60 minut na każde 15 minut materiału. Do tego dochodzi transkrypcja i kroki, w których Claude przegląda materiał. Efekty `bg` (wycinanie mówiącego z tła) zajmują na CPU około 17× swojej długości.
 
 **Czy cutmate rusza moje oryginalne nagrania?**
-Nigdy. Wszystko, co tworzy, trafia do `<folder>/out/`.
+Nigdy. Klipy źródłowe pozostają nietknięte, a wszystko, co cutmate generuje, trafia do `<folder>/out/`. Do `broll/` Claude dopisuje tylko pobrane wejścia (zrzuty stron, obrazy) i nigdy nie nadpisuje w nim istniejących plików.
 
 ## Prywatność i klucze
 
@@ -49,7 +49,7 @@ Odpowiedz ze znacznikiem czasu i tym, czego chcesz („1:12 użyj innego ujęcia
 `music.source` ma domyślnie wartość `none`. Ustaw folder (`cutmate config set music.source=folder music.folder=…`) albo użyj HeyGen po zalogowaniu. Jeśli wybrałeś HeyGen, ale nie jesteś zalogowany, montaż idzie dalej bez muzyki i informuje o tym w `EDIT_NOTES.md`.
 
 **Muzyka jest za głośna albo za cicha.**
-`cutmate config set music.volume=0.3` (0–2, domyślnie 0.45). Zainstaluj plugin HyperFrames, żeby podkład ściszał się pod głosem (`cutmate doctor` → `carve: true`).
+`cutmate config set music.volume=0.3` (0–2, domyślnie 0.45; bez voice carve build zmniejsza ją o połowę, domyślnie do 0.225). Zainstaluj plugin HyperFrames, żeby podkład ściszał się pod głosem (`cutmate doctor` → `carve: true`).
 
 **Czy mogę dostać plik `.srt` także dla shorta?**
 Tak: `cutmate config set captions.9:16=both`. Zobacz [configuration.md](configuration.md#napisy-w-zależności-od-formatu).

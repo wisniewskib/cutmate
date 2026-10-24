@@ -8,7 +8,7 @@ Ten przewodnik prowadzi cię od folderu surowych nagrań do gotowego filmu i pok
 - Wrzuć **wszystkie ujęcia jednego filmu do jednego folderu**: klipy z telefonu (`.mov`, `.mp4`, …) albo pliki z aparatu, w dowolnej kolejności. Powtórki, falstarty i gadanie do kamery między ujęciami są w porządku. Wycięcie ich to zadanie cutmate.
 - Opcjonalnie: wrzuć b-roll (zrzuty ekranu, obrazy, logotypy, klipy) do `<folder>/broll/`.
 
-cutmate **nigdy nie zmienia twoich plików źródłowych**. Wszystko trafia do `<folder>/out/`.
+cutmate **nigdy nie zmienia twoich plików źródłowych**. Wszystko, co generuje, trafia do `<folder>/out/`. Folder `broll/` zawiera wejścia: twoje pliki oraz to, co Claude pobierze lub zrobi na potrzeby montażu (zrzuty stron, obrazy). Istniejących plików w `broll/` nigdy nie nadpisuje; nowy plik dostaje unikalną nazwę (z przyrostkiem `-2`, `-3`).
 
 ## Rozpoczęcie montażu
 
@@ -32,7 +32,7 @@ Format wynika z klipów: same pionowe oznaczają **short 9:16**, same poziome **
 | 2. Oglądanie | Robi arkusze klatek i **czyta je**: odwracanie wzroku, czytanie z kartki, skoki kadru, wskazywanie palcem | `sheets/*.png` |
 | 2b. Konspekt (16:9) | Rozdziały z tytułami, klipami i zakresami czasu | `outline.md` |
 | 3. Wybór ujęć | Ponownie transkrybuje podejrzane okna (`probe`), skanuje głośność (`rms`), porównuje każde ujęcie każdej powtarzanej kwestii i zapisuje uzasadnienie każdego wyboru | `takes.md` |
-| 4. Fact-check | Sprawdza każdą liczbę, cenę, datę, wersję i każde twierdzenie typu „pierwszy / jedyny / darmowy” przez wyszukiwanie w sieci i stronę źródłową | `factcheck.md` |
+| 4. Fact-check | Gdy `steps.factcheck` jest włączone, Claude sprawdza liczby, ceny, daty, wersje i twierdzenia typu „pierwszy / jedyny / darmowy” przez wyszukiwanie w sieci i stronę źródłową | `factcheck.md` |
 | 5. Cięcie | Tnie na granicach ciszy, dociąga cięcia do siatki klatek, wyrównuje głośność każdego fragmentu i dodaje krótkie przejścia audio | `edl.json`, `aroll.mp4` |
 | 6. Wyrównanie | Czasy słów dla napisów (wymuszone wyrównanie wav2vec2) | `work/aligned_words.json` |
 | 7. Śledzenie | Pozycje twarzy, dłoni i wskazywania w czasie, gdy efekt ich potrzebuje | `work/tracks.json` |
@@ -129,7 +129,7 @@ Od tej chwili każdy film z tym motywem może go używać. Zobacz [effects.md](e
 
 ## Pliki wynikowe
 
-Wszystko ląduje w `<folder>/out/`:
+Wszystko, co cutmate generuje, ląduje w `<folder>/out/`:
 
 | Plik | Co to jest |
 |---|---|

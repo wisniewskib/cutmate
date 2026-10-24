@@ -6,7 +6,7 @@ Wersje to te przypięte w `pyproject.toml`, `assets/vendor/MANIFEST.json`, `core
 
 ## Biblioteki JavaScript (dołączone, offline)
 
-Te pliki są ładowane do kompozycji HyperFrames. Każdy plik jest przypięty sumą sha256 w [`assets/vendor/MANIFEST.json`](../assets/vendor/MANIFEST.json), a teksty licencji są w [`assets/vendor/LICENSES/`](../assets/vendor/LICENSES/). Build kopiuje tylko biblioteki, których projekt używa, i nigdy nie pobiera ich z CDN.
+Te pliki są ładowane do kompozycji HyperFrames. Każdy plik jest przypięty sumą sha256 w [`assets/vendor/MANIFEST.json`](../assets/vendor/MANIFEST.json), a teksty licencji są w [`assets/vendor/LICENSES/`](../assets/vendor/LICENSES/). Build kopiuje tylko biblioteki, których projekt używa, i nie ładuje ich z CDN. Sieć bywa potrzebna tylko przy pierwszym uruchomieniu narzędzi (`npx hyperframes`, `@hyperframes/core` dla muzyki, GSAP przez `cutmate vendor`); potem rendery działają offline.
 
 | Biblioteka | Wersja | Licencja | W repo | Po co |
 |---|---|---|---|---|

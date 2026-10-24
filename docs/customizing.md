@@ -39,7 +39,7 @@ Jeśli się nie uruchamia, powiedz mi, żebym uruchomił /cutmate:setup, i zako�
 
 ## 1. Ustawienia dla tego filmu
 
-- Sprawdź `"$CM" config show`. Jeśli `language` nie jest `pl`, uruchom `"$CM" config set language=pl`.
+- Język tego montażu to polski: powiedz o tym w prośbie do `/cutmate:edit` („język: polski”, tylko dla tego montażu) zamiast zmieniać konfigurację. `config set` to trwała, globalna zmiana, która dotyczy wszystkich kolejnych montaży.
 - Motyw: zawsze `neon-pill` (przekaż go do cutmate:edit jako „użyj motywu neon-pill”). Jeśli `"$CM" theme list`
   nie ma `neon-pill`, powiedz o tym i użyj motywu z konfiguracji.
 - Napisy: wypalone dla 9:16 (domyślne w konfiguracji). Nigdy nie zmieniaj innych kluczy konfiguracji.
@@ -49,7 +49,7 @@ Jeśli się nie uruchamia, powiedz mi, żebym uruchomił /cutmate:setup, i zako�
 - Nazwy do podpowiedzi transkrypcji: Claude Code, Anthropic, GitHub, MCP oraz każdy produkt wymieniony w nazwie folderu.
 - **Bez niespodzianek**: tylko efekty, o które proszę, i standardowe komponenty.
 - Explainery: tak. Każda wypowiedziana liczba dostaje `stat-card`, a każdy wymieniony produkt swoją prawdziwą stronę przez
-  `"$CM" shot "<url>" -o "<folder>/broll/<name>.png" --light`.
+  `"$CM" shot "<url>" -o "<folder>/broll/<name>.png" --light` (nowa nazwa pliku; nigdy nie nadpisuj istniejącego pliku w `broll/`).
 - Efekty WOW: najwyżej jeden na short, `kinetic-word` na NAJWAŻNIEJSZEJ liczbie filmu. Nigdy `burst-out`.
 - Hak: najmocniejsza kwestia na początku, najwyżej 3 s. Koniec na moim CTA („Napisz NARZĘDZIA w komentarzu, a wyślę ci listę.”).
   Jeśli żadne ujęcie nie zawiera CTA, powiedz mi o tym przed cięciem — nie wymyślaj go.
@@ -63,9 +63,9 @@ jak zwykle (zatrzymania przy fact-checku, „zrozumiałem tak”).
 
 ## 4. Po renderze
 
-- Skopiuj `<folder>/out/final.mp4` do `<folder>/<folder name>-final.mp4` (nigdy nie nadpisuj klipu źródłowego).
+- Nie kopiuj `final.mp4` poza `out/`: zostaw go tam, gdzie powstał.
 - Napisz `<folder>/out/POST.md`: tytuł (≤ 60 znaków), 2-linijkowy opis i 5 hashtagów, wyłącznie na podstawie transkrypcji.
-- Podaj mi w trzech liniach ścieżkę do filmu, miniatury i POST.md.
+- Podaj mi w trzech liniach ścieżkę do filmu (`<folder>/out/final.mp4`), miniatury i POST.md.
 ```
 
 Potem w Claude Code:
@@ -77,7 +77,7 @@ Potem w Claude Code:
 **Dlaczego to działa:**
 
 - Skille cutmate czytają twoje prośby tak samo, niezależnie od tego, czy przychodzą z czatu, czy z innego skilla. Wszystko z sekcji 2 trafia do `requests.md` i punktu kontrolnego „zrozumiałem tak”, więc dalej możesz to zobaczyć i skreślić.
-- Twoje zasady tylko zawężają wybory, które cutmate zostawia Claude'owi: jakie efekty, ile, hak, motyw. Gwarancje samego cutmate nadal obowiązują, w tym fact-checking, nietykanie klipów źródłowych, limity WOW i zasady gęstości.
+- Twoje zasady tylko zawężają wybory, które cutmate zostawia Claude'owi: jakie efekty, ile, hak, motyw. Gwarancje samego cutmate nadal obowiązują: nietykanie klipów źródłowych, limity WOW i zasady gęstości. Fact-check (gdy włączony) nadal wykonuje Claude, a build ostrzega tylko o części liczb.
 - Linia z CLI jest taka sama jak w skillach cutmate, więc działa na wszystkich trzech systemach.
 
 ### Wskazówki do własnego skilla
