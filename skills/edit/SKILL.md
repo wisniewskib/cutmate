@@ -5,7 +5,7 @@ description: Edit a talking-head short (9:16) or a YouTube long-form video (16:9
 
 # /cutmate:edit <folder>
 
-Talk to the user in their language (config `language`). Never modify source clips. Everything goes to `<folder>/out/`.
+Talk to the user in their language (config `language`; a language the user names in the chat for this video wins: pass `--language <lang>` to every `$CM` command that takes it and never run `config set` for it — that is a permanent, global change). Never modify source clips. All generated output goes to `<folder>/out/`; `<folder>/broll/` holds inputs only (the user's files and fetched screenshots / images) — never overwrite an existing file there: pick a new unique name (suffix `-2`, `-3`) first.
 
 Set the CLI once per session: `CM="$(ls "${CUTMATE_HOME:-$HOME/.cutmate}/venv/bin/cutmate" "${CUTMATE_HOME:-$HOME/.cutmate}/venv/Scripts/cutmate.exe" 2>/dev/null | head -1)"; [ -n "$CM" ] || CM="$(command -v cutmate)"`; if it doesn't run, tell
 the user to run `/cutmate:setup` and stop. Read the config with `$CM config show` (transcription, language, theme,
@@ -121,7 +121,7 @@ They are tested, seek-safe, offline (vendored libraries; a build error `vendored
   (needs tracks.json); `"params": {…}` land at the top level of `P` in the effect.
 - `{"type": "bg", "from", "to", "media": "broll/…"}` or `"effect": "<name>"`. Media = a file in `broll/`, or an AI image:
   `npx --yes hyperframes@0.8.157 media-use resolve --type image --intent "<what>" --project <folder>/out/composition` when signed in
-  (copy it to `broll/`). `bg` removes the background from the A-roll: ~17× the duration on CPU. Total `bg` > 30 s → build WARN: ask the user before building.
+  (copy it to `broll/` under a new name, never over an existing file). `bg` removes the background from the A-roll: ~17× the duration on CPU. Total `bg` > 30 s → build WARN: ask the user before building.
 - `{"type": "side", "from", "to", "media"|"effect", "speaker": "right"|"left"}` — speaker on one half, graphic on the other (16:9 only).
 - `face` per segment is filled automatically from tracks.json when missing.
 
@@ -296,7 +296,7 @@ Follow `frame.md`. Write `out/plan.json`:
   tak" list is shown only with zero density warnings, or with each remaining one explained in one line.
   Split-panel layout: the panel itself meets the density rule (panel items and scenes count as cover) — a `WARN
   density` there means a hole in the panel (`WARN panel gap`): fill it with a panel item, not a band graphic (§5b).
-- B-roll: files in `<folder>/broll/`; for a web page the speaker talks about: `$CM shot "<url>" -o "<folder>/broll/<name>.png"`
+- B-roll: files in `<folder>/broll/`; for a web page the speaker talks about: `$CM shot "<url>" -o "<folder>/broll/<name>.png"` (if `<name>.png` already exists in `broll/`, use `<name>-2.png`, `-3` … — never overwrite)
   and READ the PNG (cookie banners, login walls → pick another page or crop).
 - Music: config `music.source` = `folder` → automatic (first audio file in config `music.folder`); `heygen` → check
   sign-in with `npx --yes hyperframes@0.8.157 media-use resolve --doctor`; if not signed in, use no music and note it
@@ -325,7 +325,7 @@ Only when the theme's `layout.mode` is `split-panel` and the video is 9:16 (Layo
 - **What goes in the panel — illustrate what is SAID, phrase by phrase** (templates and params in §1c):
   - a number → `stat-card` (`"layout": "hero"` for THE number of the video, `card` for the others) or a `checklist`
     `summary` when the number is a result of a check (e.g. 50 % links broken);
-  - a product / site / tool named → its real page: `$CM shot "<url>" -o "<folder>/broll/<name>.png" --width 1000 --height 880 --light`
+  - a product / site / tool named → its real page: `$CM shot "<url>" -o "<folder>/broll/<name>.png" --width 1000 --height 880 --light` (a new `<name>`, never over an existing file in `broll/`)
     (the panel box is 1000 × (round(1920 × ratio) − 80) px — `--height 880` at ratio 0.5, 688 at 0.40, 1072 at 0.60),
     READ the PNG (cookie banner, login wall, empty page → another URL, or crop) and use it as `"media": "broll/<name>.png"`;
     or a `ui-mock` `browser` (its URL, a typed search, result rows, one circled) / `app` (its screen, a typed filter,
@@ -344,7 +344,7 @@ Only when the theme's `layout.mode` is `split-panel` and the video is 9:16 (Layo
   Sources, in this order, never blocking and never sign in (never ask for a login, never suggest creating an account):
   (1) a file the user gave in `<folder>/broll/`; (2) only when `npx --yes hyperframes@0.8.157 media-use resolve --doctor`
   already says signed in: `npx --yes hyperframes@0.8.157 media-use resolve --type image --intent "<scene, in the theme's style, e.g. pixel-art globe at night, 9:16>" --project "<folder>/out/composition"`
-  → copy the file to `<folder>/broll/`; (3) a full-frame stock explainer as the scene (`stat-card` `"layout": "hero"`
+  → copy the file to `<folder>/broll/` under a name that does not exist yet (`-2`, `-3`; never overwrite); (3) a full-frame stock explainer as the scene (`stat-card` `"layout": "hero"`
   or `headline`), which takes the theme's tokens; (4) no scene. Log the source used per scene in EDIT_NOTES.md.
   A moment from the WOW pack table (§1c) takes its WOW scene before these sources — `kinetic-word` on THE number or
   the launch word, `topic-change` on "przejdźmy do" — within the WOW caps (a scene counts).
