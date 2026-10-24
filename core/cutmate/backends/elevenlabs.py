@@ -21,7 +21,7 @@ class ElevenLabsBackend:
         key = os.environ.get(KEY_ENV)
         if not key:
             raise BackendError(f"{KEY_ENV} is not set. Set it in your shell profile and restart Claude Code "
-                               f"(docs/installation.md → API keys), or run /cutmate:setup to pick another backend.")
+                               f"(docs/installation.md → Klucze API), or run /cutmate:setup to pick another backend.")
         up = encode_for_upload(wav, self.limit_bytes, self.name)
         data = {"model_id": self.model, "language_code": language, "timestamps_granularity": "word",
                 "tag_audio_events": "false"}
