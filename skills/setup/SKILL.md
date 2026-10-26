@@ -94,7 +94,7 @@ for NVIDIA local). On yes:
 It takes minutes: Bash timeout 600000 or run_in_background: true; on timeout re-run — downloads resume. Then set the CLI again (line above) and run
 `$CM doctor`. Report problems in one line each. `vendor` not `ok` → `"$CM" vendor` (setup.sh / setup.ps1 already tried it;
 a download failure there is only a warning). `carve: false` → tell the user to install the HyperFrames plugin
-(`/plugin install hyperframes@hyperframes`) — it carves the music under the voice.
+(`/plugin install hyperframes@cutmate`) — it carves the music under the voice.
 
 ## 5. Backend and language
 

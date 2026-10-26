@@ -5,5 +5,5 @@
   "author": { "name": "Bartosz Wiśniewski" },
   "license": "MIT",
   "keywords": ["video", "editing", "shorts", "hyperframes", "whisper"],
-  "dependencies": ["hyperframes@hyperframes"]
+  "dependencies": ["hyperframes"]
 }

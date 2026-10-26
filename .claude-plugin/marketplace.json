@@ -1,9 +1,23 @@
 {
   "name": "cutmate",
   "description": "cutmate — plugin do montażu wideo z AI dla Claude Code",
-  "owner": { "name": "Bartosz Wiśniewski" },
-  "allowCrossMarketplaceDependenciesOn": ["hyperframes"],
+  "owner": {
+    "name": "Bartosz Wiśniewski"
+  },
   "plugins": [
-    { "name": "cutmate", "source": ".", "description": "Montaż filmów, w których mówisz do kamery, z pomocą Claude" }
+    {
+      "name": "cutmate",
+      "source": ".",
+      "description": "Montaż filmów, w których mówisz do kamery, z pomocą Claude"
+    },
+    {
+      "name": "hyperframes",
+      "source": {
+        "source": "url",
+        "url": "https://github.com/heygen-com/hyperframes.git",
+        "ref": "v0.8.157"
+      },
+      "description": "HyperFrames (HeyGen, Apache-2.0): render HTML do wideo. Wymagany przez cutmate, instaluje się razem z nim."
+    }
   ]
 }

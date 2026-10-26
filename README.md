@@ -31,10 +31,9 @@ cutmate to open-source'owy plugin do Claude Code. Wskazujesz mu folder z surowym
 
 ## Szybki start
 
-**1. Zainstaluj plugin w Claude Code.** cutmate zależy od pluginu HyperFrames, więc dodaj oba marketplace'y, a potem zainstaluj:
+**1. Zainstaluj plugin w Claude Code.** Dodaj marketplace i zainstaluj cutmate. Plugin HyperFrames, od którego zależy, zainstaluje się razem z nim:
 
 ```text
-/plugin marketplace add heygen-com/hyperframes
 /plugin marketplace add wisniewskib/cutmate
 /plugin install cutmate@cutmate
 ```

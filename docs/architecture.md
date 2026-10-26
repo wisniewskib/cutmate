@@ -57,7 +57,7 @@ flowchart TB
 ```text
 cutmate/
 ├── .claude-plugin/
-│   ├── plugin.json            # manifest pluginu (nazwa, wersja, zależność od hyperframes@hyperframes)
+│   ├── plugin.json            # manifest pluginu (nazwa, wersja, zależność od hyperframes)
 │   └── marketplace.json       # to repo jest swoim własnym marketplace'em
 ├── skills/
 │   ├── setup/SKILL.md         # /cutmate:setup

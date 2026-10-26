@@ -6,15 +6,14 @@ Wersja w skrócie: zainstaluj plugin, a potem uruchom `/cutmate:setup`. Kreator 
 
 ## 1. Instalacja pluginu
 
-cutmate deklaruje zależność od pluginu HyperFrames (`hyperframes@hyperframes`). Dodaj oba marketplace'y w Claude Code, a potem zainstaluj cutmate:
+Wystarczy jeden marketplace. W Claude Code (w aplikacji desktopowej `/plugin` otwiera okno pluginów) dodaj marketplace i zainstaluj cutmate:
 
 ```text
-/plugin marketplace add heygen-com/hyperframes
 /plugin marketplace add wisniewskib/cutmate
 /plugin install cutmate@cutmate
 ```
 
-Jeśli plugin HyperFrames nie zainstalował się razem z cutmate, doinstaluj go: `/plugin install hyperframes@hyperframes`. cutmate potrzebuje jego skilla audio, żeby przyciszać muzykę pod głosem („carve”). Bez niego podkład muzyczny po prostu gra na stałym poziomie.
+Marketplace cutmate zawiera też plugin HyperFrames (`hyperframes@cutmate`, przypięty do wersji, z którą cutmate jest testowany), więc instaluje się on automatycznie jako zależność. Jeśli się nie zainstalował, doinstaluj go: `/plugin install hyperframes@cutmate`. cutmate potrzebuje jego skilla audio, żeby przyciszać muzykę pod głosem („carve”). Bez niego podkład muzyczny po prostu gra na stałym poziomie.
 
 ### Z lokalnego klona (rozwój albo brak marketplace'u)
 
@@ -211,7 +210,7 @@ Wypisuje `final:` (plik MP4) i `frame:` (PNG z 1,5 s). Udany przebieg kończy si
 | `cuda.devices`, `cuda.errors` | ≥ 1 urządzenie, brak błędów (NVIDIA) | Zaktualizuj sterownik, `setup.sh --gpu nvidia --local` |
 | `models.whisper`, `align_pl` / `align_en`, `pose`, `hand` | `true` | `cutmate models --language <pl\|en>` (pobieranie się wznawia) |
 | `keys` | `true` dla twojego backendu API | Ustaw zmienną i zrestartuj Claude Code |
-| `carve` | `true` | `/plugin install hyperframes@hyperframes` |
+| `carve` | `true` | `/plugin install hyperframes@cutmate` |
 | `config` | `ok` | Uruchom `/cutmate:setup` (nadpisze uszkodzoną konfigurację) |
 | `vendor` | `ok` | `cutmate vendor` (pobiera GSAP i sprawdza sumy sha) |
 | `plugin_root` | Twój aktualny folder pluginu | Plugin został przeniesiony albo zaktualizowany: uruchom ponownie `/cutmate:setup` |

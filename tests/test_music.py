@@ -42,6 +42,28 @@ def test_carve_script_picks_newest_version(tmp_path, monkeypatch):
     assert "/0.8.157/" in music._carve_script()
 
 
+def test_carve_script_found_under_cutmate_marketplace(tmp_path, monkeypatch):
+    # one-marketplace install: HyperFrames comes from cutmate's own marketplace
+    f = tmp_path / ".claude/plugins/cache/cutmate/hyperframes/0.8.157/skills/hyperframes-audio/scripts/carve.mjs"
+    f.parent.mkdir(parents=True)
+    f.write_text("")
+    monkeypatch.setenv("HOME", str(tmp_path))
+    assert music._carve_script() == str(f)
+
+
+def test_carve_script_prefers_pinned_version_and_new_layout(tmp_path, monkeypatch):
+    cache = tmp_path / ".claude/plugins/cache"
+    newer = cache / "hyperframes/hyperframes/9.9.9/skills/media-use/audio/scripts/carve.mjs"
+    pinned = cache / f"cutmate/hyperframes/{music.HF_VERSION}/skills/media-use/audio/scripts/carve.mjs"
+    for f in (newer, pinned):
+        f.parent.mkdir(parents=True)
+        f.write_text("")
+    monkeypatch.setenv("HOME", str(tmp_path))
+    assert music._carve_script() == str(pinned)
+    pinned.unlink()
+    assert music._carve_script() == str(newer)
+
+
 def test_carve_installs_pinned_core(tmp_path, monkeypatch):
     calls = []
     monkeypatch.setattr(music, "_carve_script", lambda: "carve.mjs")
